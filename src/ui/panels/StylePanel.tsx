@@ -130,6 +130,28 @@ export function StylePanel() {
         </div>
       )}
 
+      {structure.modelCount > 1 && (
+        <div className="panel-section">
+          <div className="section-label"><span>Ensemble</span></div>
+          <Field
+            label="Model"
+            value={`${structure.modelNum} of ${structure.modelCount}`}
+          >
+            <Slider
+              value={structure.modelNum}
+              min={1}
+              max={structure.modelCount}
+              step={1}
+              onChange={(v) => void viewer.setModel(activeSlot, v)}
+            />
+          </Field>
+          <p style={{ fontSize: 10.5, color: 'var(--text-faint)', lineHeight: 1.5 }}>
+            NMR depositions contain several models of the same molecule. One is
+            shown at a time; the camera stays put as you step through them.
+          </p>
+        </div>
+      )}
+
       <ComponentList slot={activeSlot} />
 
       <div className="panel-section">

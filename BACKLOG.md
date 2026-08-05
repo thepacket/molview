@@ -106,14 +106,13 @@ small, short keys, omit defaults).
 
 ## 2. Smaller wins
 
-- **Named lighting presets** ("soft", "flat", "silhouette") instead of four raw
-  sliders. Nearly free.
-- **Colour by symmetry operator**, so assembly copies are distinguishable from
-  one another — small change, noted as a limitation today.
-- **NMR ensembles**: all models are parsed but only model 1 is shown. Cycling or
-  overlaying them is cheap.
-- **Featured-list download sizes**: `3J3Q` is a 113 MB download with no warning
-  on the button.
+- **Overlay two structures in one pane**: superposition already puts panes in a
+  shared frame, but drawing both in a single viewport would make the comparison
+  direct rather than side-by-side.
+- **Per-chain alignment choice**: superposition picks the longest polymer chain
+  in each pane; the chains should be selectable.
+- **Ensemble overlay**: models can be stepped through one at a time, but drawing
+  several at once is the usual way to read NMR spread.
 - **Two structures in one pane**: superposition puts panes in a shared frame,
   but overlaying both in a single viewport would make the comparison direct.
 - **Per-chain alignment choice**: superposition currently picks the longest
@@ -133,8 +132,10 @@ small, short keys, omit defaults).
 - **Structural superposition** (`1462ed5`) — sequence-guided alignment (Gotoh,
   BLOSUM62) plus Kabsch fitting with iterative pruning, applied as a per-pane
   scene transform so coordinates are never rewritten.
-- **Nucleotide base slabs** — bases fitted in their own ring plane, so a double
-  helix reads as one instead of as two bare tubes.
+- **Nucleotide base slabs** (`2928528`) — bases fitted in their own ring plane,
+  so a double helix reads as one instead of as two bare tubes.
+- **Smaller wins** (`d5f2e7a`) — lighting presets, colour by symmetry operator,
+  download-size warnings, and NMR model selection.
 
 ---
 

@@ -20,6 +20,8 @@ export interface LoadRequest {
   entryId: string;
   /** Raw file contents for locally opened structures. */
   file?: { buffer: ArrayBuffer; name: string };
+  /** Which model of an NMR ensemble to build; defaults to the first. */
+  modelNum?: number;
 }
 
 export interface CancelRequest {
@@ -86,7 +88,9 @@ async function handleLoad(req: LoadRequest): Promise<void> {
 
     post({ type: 'progress', requestId: req.requestId, stage: 'Building', loaded: 0, total: 0 });
     const title = block.category('struct').field('title').str(0) || req.entryId;
-    const structure = buildStructure(block, req.entryId.toUpperCase(), title);
+    const structure = buildStructure(block, req.entryId.toUpperCase(), title, {
+      modelNum: req.modelNum,
+    });
 
     if (controller.signal.aborted) return;
 

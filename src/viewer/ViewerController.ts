@@ -136,12 +136,16 @@ export class ViewerController {
   // Loading
   // -------------------------------------------------------------------------
 
-  async load(slot: number, entryId: string, file?: File): Promise<void> {
+  async load(
+    slot: number, entryId: string, file?: File, modelNum?: number,
+  ): Promise<void> {
     const store = useStore.getState();
     const id = entryId.trim().toUpperCase();
     if (!id && !file) return;
 
     this.data[slot].loadHandle?.cancel();
+    const keepCamera = modelNum !== undefined
+      && store.slots[slot].entryId === entryId.trim().toUpperCase();
 
     store.patchSlot(slot, {
       entryId: id,
@@ -191,7 +195,7 @@ export class ViewerController {
         progressLoaded: p.loaded,
         progressTotal: p.total,
       });
-    }, fileData);
+    }, fileData, modelNum);
 
     this.data[slot].loadHandle = handle;
 
@@ -231,8 +235,9 @@ export class ViewerController {
       this.rebuild(slot);
       // Frame after the rebuild, not inside it: a store subscriber may already
       // have built this slot's geometry, and that path must never move a
-      // camera the user is driving.
-      this.frameSlot(slot);
+      // camera the user is driving. Switching between models of one ensemble
+      // keeps the current view, since the members are already superposed.
+      if (!keepCamera) this.frameSlot(slot);
     } catch (err) {
       if (useStore.getState().slots[slot].entryId !== id) return;
       useStore.getState().patchSlot(slot, {
@@ -589,6 +594,16 @@ export class ViewerController {
       if (err instanceof AlignmentError) return err.message;
       return err instanceof Error ? err.message : String(err);
     }
+  }
+
+  /**
+   * Rebuilds a pane from a different model of an NMR ensemble. The coordinates
+   * are refetched, but the browser has them cached, so this is quick.
+   */
+  async setModel(slot: number, modelNum: number): Promise<void> {
+    const entryId = useStore.getState().slots[slot].entryId;
+    if (!entryId) return;
+    await this.load(slot, entryId, undefined, modelNum);
   }
 
   clearSuperposition(slot: number): void {
