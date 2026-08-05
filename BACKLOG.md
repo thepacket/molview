@@ -104,15 +104,7 @@ small, short keys, omit defaults).
 
 ---
 
-## 2. Nucleotide slab/ladder representation
-
-Currently the weakest visual: `1BNA` renders as two featureless tubes. Base
-slabs make nucleic acids legible. Mesh generation like the cartoon builder, so
-it reuses machinery that exists.
-
----
-
-## 3. Smaller wins
+## 2. Smaller wins
 
 - **Named lighting presets** ("soft", "flat", "silhouette") instead of four raw
   sliders. Nearly free.
@@ -138,9 +130,11 @@ it reuses machinery that exists.
   draw components, replacing the per-pane global representation.
 - **Measurements, contacts and labels** (`6ccf946`) — runtime font atlas and a
   blended label pass, distances/angles/torsions, and geometric hydrogen bonds.
-- **Structural superposition** — sequence-guided alignment (Gotoh, BLOSUM62)
-  plus Kabsch fitting with iterative pruning, applied as a per-pane scene
-  transform so coordinates are never rewritten.
+- **Structural superposition** (`1462ed5`) — sequence-guided alignment (Gotoh,
+  BLOSUM62) plus Kabsch fitting with iterative pruning, applied as a per-pane
+  scene transform so coordinates are never rewritten.
+- **Nucleotide base slabs** — bases fitted in their own ring plane, so a double
+  helix reads as one instead of as two bare tubes.
 
 ---
 

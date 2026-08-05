@@ -10,7 +10,7 @@ import type { BondList } from '../mol/bonds';
 import { identityTransform, type Assembly } from '../mol/assembly';
 import { Style, type ResolvedScene } from '../mol/components';
 import { VDW_RADII } from '../mol/elements';
-import { MolKind, SS, type Structure } from '../mol/structure';
+import { MolKind, SS, atomNameOf, type Structure } from '../mol/structure';
 
 /**
  * Settings that apply to the whole pane rather than to one component. Which
@@ -508,8 +508,161 @@ function buildCartoon(
     flush();
   }
 
+  // Nucleic acids read as featureless tubes without their bases; the slab is
+  // what makes a double helix look like one. Backbone-trace style stays bare.
+  {
+    for (let r = 0; r < s.residueCount; r++) {
+      if (residueStyle[r] !== Style.Cartoon) continue;
+      if (s.resKind[r] !== MolKind.Nucleic) continue;
+      if (!chainVisible(s, s.resChain[r], allowedAsyms)) continue;
+      addBaseSlab(vertices, indices, s, r, atomColor);
+    }
+  }
+
   if (indices.length === 0) return null;
   return { vertices: Float32Array.from(vertices), indices: Uint32Array.from(indices) };
+}
+
+const PURINE_RING = ['N9', 'C8', 'N7', 'C5', 'C6', 'N1', 'C2', 'N3', 'C4'];
+const PYRIMIDINE_RING = ['N1', 'C2', 'N3', 'C4', 'C5', 'C6'];
+const SLAB_HALF_THICKNESS = 0.2;
+
+/**
+ * A flat box covering the base ring, plus a stub joining it to the sugar.
+ * The box is fitted in the ring's own plane rather than assumed, so modified
+ * and non-planar bases still get a sensible slab.
+ */
+function addBaseSlab(
+  vertices: number[], indices: number[],
+  s: Structure, residue: number, atomColor: Uint32Array,
+): void {
+  const start = s.resAtomStart[residue];
+  const end = s.resAtomStart[residue + 1];
+
+  const byName = new Map<string, number>();
+  for (let a = start; a < end; a++) byName.set(atomNameOf(s, a).toUpperCase(), a);
+
+  const purine = byName.has('N9');
+  const ringNames = purine ? PURINE_RING : PYRIMIDINE_RING;
+  const ring: number[] = [];
+  for (const name of ringNames) {
+    const a = byName.get(name);
+    if (a !== undefined) ring.push(a);
+  }
+  if (ring.length < 4) return;
+
+  // Newell's method: a plane normal that tolerates a slightly puckered ring.
+  let nx = 0, ny = 0, nz = 0;
+  let cx = 0, cy = 0, cz = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    nx += (s.y[a] - s.y[b]) * (s.z[a] + s.z[b]);
+    ny += (s.z[a] - s.z[b]) * (s.x[a] + s.x[b]);
+    nz += (s.x[a] - s.x[b]) * (s.y[a] + s.y[b]);
+    cx += s.x[a]; cy += s.y[a]; cz += s.z[a];
+  }
+  const nlen = Math.hypot(nx, ny, nz);
+  if (nlen < 1e-5) return;
+  nx /= nlen; ny /= nlen; nz /= nlen;
+  cx /= ring.length; cy /= ring.length; cz /= ring.length;
+
+  // In-plane frame, seeded from the first ring bond.
+  let ux = s.x[ring[1]] - s.x[ring[0]];
+  let uy = s.y[ring[1]] - s.y[ring[0]];
+  let uz = s.z[ring[1]] - s.z[ring[0]];
+  const dotU = ux * nx + uy * ny + uz * nz;
+  ux -= nx * dotU; uy -= ny * dotU; uz -= nz * dotU;
+  const ulen = Math.hypot(ux, uy, uz);
+  if (ulen < 1e-5) return;
+  ux /= ulen; uy /= ulen; uz /= ulen;
+
+  const vx = ny * uz - nz * uy;
+  const vy = nz * ux - nx * uz;
+  const vz = nx * uy - ny * ux;
+
+  // Fit the box to the ring's extent in that frame.
+  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+  const anchorName = purine ? 'N9' : 'N1';
+  const attach = byName.get(anchorName) ?? ring[0];
+  const consider = (a: number) => {
+    const dx = s.x[a] - cx, dy = s.y[a] - cy, dz = s.z[a] - cz;
+    const du = dx * ux + dy * uy + dz * uz;
+    const dv = dx * vx + dy * vy + dz * vz;
+    if (du < minU) minU = du; if (du > maxU) maxU = du;
+    if (dv < minV) minV = dv; if (dv > maxV) maxV = dv;
+  };
+  for (const a of ring) consider(a);
+  consider(attach);
+
+  const pad = 0.35;
+  minU -= pad; maxU += pad; minV -= pad; maxV += pad;
+
+  const color = atomColor[attach] || atomColor[ring[0]];
+  const cr = ((color >> 16) & 0xff) / 255;
+  const cg = ((color >> 8) & 0xff) / 255;
+  const cb = (color & 0xff) / 255;
+
+  const corner = (u: number, v: number, w: number, out: number[]) => {
+    out[0] = cx + ux * u + vx * v + nx * w;
+    out[1] = cy + uy * u + vy * v + ny * w;
+    out[2] = cz + uz * u + vz * v + nz * w;
+  };
+
+  const p = [0, 0, 0];
+  const base = vertices.length / CARTOON_STRIDE;
+
+  // Six faces, each with its own normal, so the slab has crisp edges.
+  const faces: [number, number, number][][] = [];
+  const signs = [-1, 1];
+  for (const w of signs) {
+    faces.push([
+      [minU, minV, w * SLAB_HALF_THICKNESS], [maxU, minV, w * SLAB_HALF_THICKNESS],
+      [maxU, maxV, w * SLAB_HALF_THICKNESS], [minU, maxV, w * SLAB_HALF_THICKNESS],
+    ]);
+  }
+  for (const u of [minU, maxU]) {
+    faces.push([
+      [u, minV, -SLAB_HALF_THICKNESS], [u, maxV, -SLAB_HALF_THICKNESS],
+      [u, maxV, SLAB_HALF_THICKNESS], [u, minV, SLAB_HALF_THICKNESS],
+    ]);
+  }
+  for (const v of [minV, maxV]) {
+    faces.push([
+      [minU, v, -SLAB_HALF_THICKNESS], [maxU, v, -SLAB_HALF_THICKNESS],
+      [maxU, v, SLAB_HALF_THICKNESS], [minU, v, SLAB_HALF_THICKNESS],
+    ]);
+  }
+
+  let emitted = 0;
+  for (const face of faces) {
+    const quad: number[][] = [];
+    for (const [u, v, w] of face) {
+      corner(u, v, w, p);
+      quad.push([p[0], p[1], p[2]]);
+    }
+    // Face normal from the quad itself; direction is fixed up below.
+    const e1 = [quad[1][0] - quad[0][0], quad[1][1] - quad[0][1], quad[1][2] - quad[0][2]];
+    const e2 = [quad[2][0] - quad[0][0], quad[2][1] - quad[0][1], quad[2][2] - quad[0][2]];
+    let fnx = e1[1] * e2[2] - e1[2] * e2[1];
+    let fny = e1[2] * e2[0] - e1[0] * e2[2];
+    let fnz = e1[0] * e2[1] - e1[1] * e2[0];
+    const flen = Math.hypot(fnx, fny, fnz) || 1;
+    fnx /= flen; fny /= flen; fnz /= flen;
+
+    // Point normals outward from the slab centre.
+    const mx = (quad[0][0] + quad[2][0]) / 2 - cx;
+    const my = (quad[0][1] + quad[2][1]) / 2 - cy;
+    const mz = (quad[0][2] + quad[2][2]) / 2 - cz;
+    if (fnx * mx + fny * my + fnz * mz < 0) { fnx = -fnx; fny = -fny; fnz = -fnz; }
+
+    for (const vert of quad) {
+      vertices.push(vert[0], vert[1], vert[2], fnx, fny, fnz, cr, cg, cb);
+    }
+    const o = base + emitted * 4;
+    indices.push(o, o + 1, o + 2, o, o + 2, o + 3);
+    emitted++;
+  }
 }
 
 function profileFor(
