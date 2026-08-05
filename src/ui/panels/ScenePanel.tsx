@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { LAYOUT_SLOT_COUNT, useStore, type LayoutMode } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
-import { Segmented, Select, Tip, Toggle } from '../controls';
+import { Field, Segmented, Select, Tip, Toggle } from '../controls';
 
 const LAYOUTS: { value: LayoutMode; label: React.ReactNode; title: string }[] = [
   { value: 'single', label: <Square size={12} />, title: 'Single pane' },
@@ -141,6 +141,8 @@ function SuperposeSection() {
   const activeSlot = useStore((s) => s.activeSlot);
   const layout = useStore((s) => s.layout);
   const [reference, setReference] = useState(0);
+  const [mobileChain, setMobileChain] = useState('');
+  const [referenceChain, setReferenceChain] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const count = LAYOUT_SLOT_COUNT[layout];
@@ -166,6 +168,16 @@ function SuperposeSection() {
     ? reference
     : Number(options[0].value);
 
+  // "Longest" is the default because it is almost always the chain of interest,
+  // but a hetero-oligomer needs the pairing spelled out.
+  const chainOptions = (slot: number) => [
+    { value: '', label: 'Longest chain' },
+    ...viewer.alignableChains(slot).map((c) => ({
+      value: c.authId,
+      label: `Chain ${c.authId} — ${c.residues.length} residues`,
+    })),
+  ];
+
   return (
     <div className="panel-section">
       <div className="section-label"><span>Superposition</span></div>
@@ -184,14 +196,37 @@ function SuperposeSection() {
             ariaLabel="Superposition reference"
             value={String(referenceSlot)}
             options={options}
-            onChange={(v) => setReference(Number(v))}
+            onChange={(v) => { setReference(Number(v)); setReferenceChain(''); }}
           />
+
+          <div className="chain-pair">
+            <Field label={`Pane ${activeSlot + 1} chain`}>
+              <Select
+                ariaLabel="Mobile chain"
+                value={mobileChain}
+                options={chainOptions(activeSlot)}
+                onChange={setMobileChain}
+              />
+            </Field>
+            <Field label={`Pane ${referenceSlot + 1} chain`}>
+              <Select
+                ariaLabel="Reference chain"
+                value={referenceChain}
+                options={chainOptions(referenceSlot)}
+                onChange={setReferenceChain}
+              />
+            </Field>
+          </div>
+
           <button
             type="button"
             className="btn primary small"
             style={{ width: '100%', marginTop: 7 }}
             onClick={() => {
-              const result = viewer.superpose(activeSlot, referenceSlot);
+              const result = viewer.superpose(
+                activeSlot, referenceSlot,
+                mobileChain || undefined, referenceChain || undefined,
+              );
               setError(typeof result === 'string' ? result : null);
             }}
           >

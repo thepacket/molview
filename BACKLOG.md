@@ -10,8 +10,6 @@ already exists are documented at the end of [README.md](README.md) instead.
 - **Overlay two structures in one pane**: superposition already puts panes in a
   shared frame, but drawing both in a single viewport would make the comparison
   direct rather than side-by-side.
-- **Per-chain alignment choice**: superposition picks the longest polymer chain
-  in each pane; the chains should be selectable.
 - **Ensemble overlay**: models can be stepped through one at a time, but drawing
   several at once is the usual way to read NMR spread.
 - **Projects with local files**: a pane opened from disk has no id to refetch,
@@ -19,10 +17,6 @@ already exists are documented at the end of [README.md](README.md) instead.
   opt-in is the open question.
 - **Shareable URLs**: the project serialiser is the hard part and it exists now;
   what is missing is a compact encoding that fits in a link.
-- **Two structures in one pane**: superposition puts panes in a shared frame,
-  but overlaying both in a single viewport would make the comparison direct.
-- **Per-chain alignment choice**: superposition currently picks the longest
-  polymer chain in each pane; the chains should be selectable.
 
 ---
 
@@ -42,6 +36,8 @@ already exists are documented at the end of [README.md](README.md) instead.
   so a double helix reads as one instead of as two bare tubes.
 - **Smaller wins** (`d5f2e7a`, `b82880a`) — lighting presets, colour by symmetry
   operator, download-size warnings, and NMR model selection.
+- **Per-chain alignment choice** — chain selectors on both sides of a
+  superposition, defaulting to the longest.
 - **Projects** — save/load in IndexedDB, export/import as `.molview.json`.
   Sessions round-trip exactly; measurements are stored as readable atom
   references rather than array indices.

@@ -1584,3 +1584,14 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.chain-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.chain-pair .field {
+  margin-bottom: 0;
+}
