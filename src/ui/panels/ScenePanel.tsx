@@ -1,12 +1,12 @@
 /** Pane management: what is loaded where, and how the panes relate. */
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import {
   Columns2, FolderOpen, Grid2x2, Link2, Link2Off, Rows2, Square, Trash2,
 } from 'lucide-react';
 import { LAYOUT_SLOT_COUNT, useStore, type LayoutMode } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
-import { Segmented, Tip, Toggle } from '../controls';
+import { Segmented, Select, Tip, Toggle } from '../controls';
 
 const LAYOUTS: { value: LayoutMode; label: React.ReactNode; title: string }[] = [
   { value: 'single', label: <Square size={12} />, title: 'Single pane' },
@@ -91,6 +91,8 @@ export function ScenePanel() {
         })}
       </div>
 
+      <SuperposeSection />
+
       <div className="panel-section">
         <div className="section-label"><span>Local file</span></div>
         <p style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 8, lineHeight: 1.5 }}>
@@ -128,4 +130,99 @@ function statusLabel(status: string): string {
     case 'ready': return 'ready';
     default: return 'empty';
   }
+}
+
+/**
+ * Superposition: align one pane's structure onto another's frame. This is what
+ * makes multi-pane comparison quantitative rather than just visual.
+ */
+function SuperposeSection() {
+  const slots = useStore((s) => s.slots);
+  const activeSlot = useStore((s) => s.activeSlot);
+  const layout = useStore((s) => s.layout);
+  const [reference, setReference] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+
+  const count = LAYOUT_SLOT_COUNT[layout];
+  const loaded = Array.from({ length: count }, (_, i) => i)
+    .filter((i) => slots[i].status === 'ready');
+
+  if (loaded.length < 2) {
+    return (
+      <div className="panel-section">
+        <div className="section-label"><span>Superposition</span></div>
+        <p style={{ fontSize: 11, color: 'var(--text-faint)', lineHeight: 1.5 }}>
+          Load structures into two panes to align them.
+        </p>
+      </div>
+    );
+  }
+
+  const mobile = slots[activeSlot];
+  const options = loaded
+    .filter((i) => i !== activeSlot)
+    .map((i) => ({ value: String(i), label: `Pane ${i + 1} — ${slots[i].entryId}` }));
+  const referenceSlot = options.some((o) => o.value === String(reference))
+    ? reference
+    : Number(options[0].value);
+
+  return (
+    <div className="panel-section">
+      <div className="section-label"><span>Superposition</span></div>
+
+      {mobile.status !== 'ready' ? (
+        <p style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+          Pane {activeSlot + 1} is empty.
+        </p>
+      ) : (
+        <>
+          <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginBottom: 7, lineHeight: 1.5 }}>
+            Aligns pane {activeSlot + 1} ({mobile.entryId}) onto a reference by sequence,
+            then fits the matched Cα atoms.
+          </p>
+          <Select
+            ariaLabel="Superposition reference"
+            value={String(referenceSlot)}
+            options={options}
+            onChange={(v) => setReference(Number(v))}
+          />
+          <button
+            type="button"
+            className="btn primary small"
+            style={{ width: '100%', marginTop: 7 }}
+            onClick={() => {
+              const result = viewer.superpose(activeSlot, referenceSlot);
+              setError(typeof result === 'string' ? result : null);
+            }}
+          >
+            Align pane {activeSlot + 1} to pane {referenceSlot + 1}
+          </button>
+
+          {error && (
+            <p style={{ fontSize: 10.5, color: 'var(--error)', marginTop: 6 }}>{error}</p>
+          )}
+
+          {mobile.superposedOnto !== null && mobile.superposeRmsd !== null && (
+            <div className="measurement" style={{ marginTop: 8 }}>
+              <div className="measurement-head">
+                <span className="measurement-value">{mobile.superposeRmsd.toFixed(2)} A</span>
+                <span className="measurement-kind">rmsd</span>
+              </div>
+              <div className="measurement-atoms">
+                {mobile.superposePairs} matched Ca, aligned to pane {mobile.superposedOnto + 1}
+              </div>
+              <button
+                type="button"
+                className="btn ghost small"
+                style={{ width: '100%', marginTop: 6 }}
+                onClick={() => viewer.clearSuperposition(activeSlot)}
+              >
+                Reset to original frame
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 }

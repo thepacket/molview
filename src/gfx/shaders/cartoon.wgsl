@@ -20,8 +20,8 @@ struct VSOut {
 @vertex
 fn vs(v: Vertex, @builtin(instance_index) ii: u32) -> VSOut {
   let model = transforms[ii];
-  let world = (model * vec4f(v.position, 1.0)).xyz;
-  let worldNormal = (model * vec4f(v.normal, 0.0)).xyz;
+  let world = (cam.scene * model * vec4f(v.position, 1.0)).xyz;
+  let worldNormal = (cam.scene * model * vec4f(v.normal, 0.0)).xyz;
   let viewPos = cam.view * vec4f(world, 1.0);
 
   var out: VSOut;

@@ -104,28 +104,7 @@ small, short keys, omit defaults).
 
 ---
 
-## 2. Measurements and labels
-
-Distances between picked atoms, H-bonds, clashes. The geometry is
-straightforward; the blocker is that **the engine has no text rendering**. That
-means an SDF font atlas and a billboard pass — worth building once, because
-residue labels, distance readouts and colour-key legends all ride on it.
-
----
-
-## 3. Structural superposition
-
-Sequence-guided alignment (Needleman–Wunsch over the one-letter sequences the
-sequence track already builds) plus Kabsch superposition, with an RMSD readout.
-Both halves are self-contained CPU work with no new data or GPU changes.
-
-This is what the four-pane layout is *for* — right now comparison stops at
-linked cameras, which is visual rather than rigorous. Also unlocks overlaying
-two structures in a single pane.
-
----
-
-## 4. Nucleotide slab/ladder representation
+## 2. Nucleotide slab/ladder representation
 
 Currently the weakest visual: `1BNA` renders as two featureless tubes. Base
 slabs make nucleic acids legible. Mesh generation like the cartoon builder, so
@@ -133,7 +112,7 @@ it reuses machinery that exists.
 
 ---
 
-## 5. Smaller wins
+## 3. Smaller wins
 
 - **Named lighting presets** ("soft", "flat", "silhouette") instead of four raw
   sliders. Nearly free.
@@ -143,6 +122,10 @@ it reuses machinery that exists.
   overlaying them is cheap.
 - **Featured-list download sizes**: `3J3Q` is a 113 MB download with no warning
   on the button.
+- **Two structures in one pane**: superposition puts panes in a shared frame,
+  but overlaying both in a single viewport would make the comparison direct.
+- **Per-chain alignment choice**: superposition currently picks the longest
+  polymer chain in each pane; the chains should be selectable.
 
 ---
 
@@ -153,6 +136,11 @@ it reuses machinery that exists.
   sixty matrices.
 - **Selection model** (`f1801fc`) — an atom-specification language and ordered
   draw components, replacing the per-pane global representation.
+- **Measurements, contacts and labels** (`6ccf946`) — runtime font atlas and a
+  blended label pass, distances/angles/torsions, and geometric hydrogen bonds.
+- **Structural superposition** — sequence-guided alignment (Gotoh, BLOSUM62)
+  plus Kabsch fitting with iterative pruning, applied as a per-pane scene
+  transform so coordinates are never rewritten.
 
 ---
 

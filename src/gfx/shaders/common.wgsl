@@ -16,6 +16,8 @@ struct Camera {
   ao: vec4f,
   // x = front clip distance in view space, y = device pixel ratio, w = clip enabled
   clip: vec4f,
+  // Rigid transform applied to everything in this pane, for superposition.
+  scene: mat4x4f,
 };
 
 @group(0) @binding(0) var<uniform> cam: Camera;

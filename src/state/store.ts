@@ -70,6 +70,10 @@ export interface SlotState {
   showHydrogenBonds: boolean;
   hydrogenBondCount: number;
   showLabels: boolean;
+  /** Set when this pane has been superposed onto another. */
+  superposedOnto: number | null;
+  superposeRmsd: number | null;
+  superposePairs: number | null;
 }
 
 function emptySlot(): SlotState {
@@ -100,6 +104,9 @@ function emptySlot(): SlotState {
     showHydrogenBonds: false,
     hydrogenBondCount: 0,
     showLabels: true,
+    superposedOnto: null,
+    superposeRmsd: null,
+    superposePairs: null,
   };
 }
 

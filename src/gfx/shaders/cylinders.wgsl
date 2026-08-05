@@ -47,8 +47,8 @@ fn vs(v: Vertex, @builtin(instance_index) ii: u32) -> VSOut {
   let localWorld = start + xAxis * local.x + yAxis * local.y + zAxis * local.z;
   let localNormal = xAxis * v.normal.x + yAxis * v.normal.y + zAxis * v.normal.z;
 
-  let world = (model * vec4f(localWorld, 1.0)).xyz;
-  let worldNormal = (model * vec4f(localNormal, 0.0)).xyz;
+  let world = (cam.scene * model * vec4f(localWorld, 1.0)).xyz;
+  let worldNormal = (cam.scene * model * vec4f(localNormal, 0.0)).xyz;
 
   let viewPos = cam.view * vec4f(world, 1.0);
 

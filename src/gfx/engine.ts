@@ -22,7 +22,8 @@ import compositeWgsl from './shaders/composite.wgsl?raw';
 import labelsWgsl from './shaders/labels.wgsl?raw';
 
 export const MAX_SLOTS = 4;
-const UNIFORM_BYTES = 352;
+const IDENTITY_MATRIX = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+const UNIFORM_BYTES = 416;
 const CYLINDER_SIDES = 10;
 
 export interface ViewportRect {
@@ -89,6 +90,9 @@ interface Slot {
   labelBuffer: GPUBuffer | null;
   labelBind: GPUBindGroup | null;
   labelCount: number;
+  /** Rigid transform placing this pane's structure in a shared frame. */
+  sceneTransform: Float32Array;
+  sceneInverse: Float32Array;
   /** Measurement and hydrogen-bond sticks, independent of the scene geometry. */
   overlayBuffer: GPUBuffer | null;
   overlayBind: GPUBindGroup | null;
@@ -526,6 +530,8 @@ export class Engine {
         overlayBuffer: null,
         overlayBind: null,
         overlayCount: 0,
+        sceneTransform: IDENTITY_MATRIX.slice(),
+        sceneInverse: IDENTITY_MATRIX.slice(),
       });
     }
   }
@@ -541,6 +547,30 @@ export class Engine {
   setVisualSettings(slot: number, visual: SlotVisualSettings): void {
     this.slots[slot].visual = visual;
     this.slots[slot].camera.orthographicMode = visual.orthographic;
+  }
+
+  /**
+   * Places a pane's structure in another pane's frame. The matrix must be a
+   * rigid motion; the inverse is taken by transposing the rotation, which is
+   * also what keeps picking correct without a general matrix inverse.
+   */
+  setSceneTransform(slot: number, matrix: Float32Array): void {
+    const s = this.slots[slot];
+    s.sceneTransform.set(matrix);
+
+    const inv = s.sceneInverse;
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) inv[c * 4 + r] = matrix[r * 4 + c];
+    }
+    inv[3] = 0; inv[7] = 0; inv[11] = 0; inv[15] = 1;
+    const tx = matrix[12], ty = matrix[13], tz = matrix[14];
+    inv[12] = -(inv[0] * tx + inv[4] * ty + inv[8] * tz);
+    inv[13] = -(inv[1] * tx + inv[5] * ty + inv[9] * tz);
+    inv[14] = -(inv[2] * tx + inv[6] * ty + inv[10] * tz);
+  }
+
+  getSceneTransform(slot: number): Float32Array {
+    return this.slots[slot].sceneTransform;
   }
 
   setStructure(slot: number, structure: Structure | null): void {
@@ -721,6 +751,8 @@ export class Engine {
     uniformData[86] = 0;
     uniformData[87] = visual.clipNear > 0 ? 1 : 0;
 
+    uniformData.set(slot.sceneTransform, 88);
+
     this.device.queue.writeBuffer(slot.uniformBuffer, 0, uniformData as unknown as BufferSource);
   }
 
@@ -888,7 +920,18 @@ export class Engine {
     // Unproject two points and build the world-space ray between them.
     const near = unproject(camera, ndcX, ndcY, 0);
     const far = unproject(camera, ndcX, ndcY, 1);
-    const dx = far[0] - near[0], dy = far[1] - near[1], dz = far[2] - near[2];
+    // Atoms are stored in the structure's own frame, so undo any superposition
+    // transform before testing against them.
+    const inv = s.sceneInverse;
+    const nx = inv[0] * near[0] + inv[4] * near[1] + inv[8] * near[2] + inv[12];
+    const ny = inv[1] * near[0] + inv[5] * near[1] + inv[9] * near[2] + inv[13];
+    const nz = inv[2] * near[0] + inv[6] * near[1] + inv[10] * near[2] + inv[14];
+    const fx = inv[0] * far[0] + inv[4] * far[1] + inv[8] * far[2] + inv[12];
+    const fy = inv[1] * far[0] + inv[5] * far[1] + inv[9] * far[2] + inv[13];
+    const fz = inv[2] * far[0] + inv[6] * far[1] + inv[10] * far[2] + inv[14];
+    near[0] = nx; near[1] = ny; near[2] = nz;
+
+    const dx = fx - near[0], dy = fy - near[1], dz = fz - near[2];
     const len = Math.hypot(dx, dy, dz) || 1;
     const rx = dx / len, ry = dy / len, rz = dz / len;
 

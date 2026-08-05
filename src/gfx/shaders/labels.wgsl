@@ -31,7 +31,7 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut
   let corner = corners[vi];
 
   var out: VSOut;
-  let clip = cam.viewProj * label.world;
+  let clip = cam.viewProj * cam.scene * label.world;
   if (clip.w <= 0.0) {
     // Behind the camera: collapse the quad so it contributes nothing.
     out.position = vec4f(2.0, 2.0, 0.0, 1.0);

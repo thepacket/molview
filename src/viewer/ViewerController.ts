@@ -20,6 +20,9 @@ import {
   measurementAnchor, type HydrogenBond,
 } from '../mol/measure';
 import { buildLabelInstances, type LabelRequest } from '../gfx/text';
+import {
+  AlignmentError, alignableChains, superposeChains, type AlignableChain,
+} from '../mol/align';
 import { fetchEntryDetail } from '../rcsb/api';
 import { useStore, visibleSlotCount, type SlotState } from '../state/store';
 
@@ -38,6 +41,7 @@ interface SlotData {
 
 const EMPTY_BONDS: BondList = { indices: new Uint32Array(0), count: 0 };
 const EMPTY_F32 = new Float32Array(0);
+const IDENTITY = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 /** Above this, whole-structure bond perception is not worth the stall. */
 const BOND_PERCEPTION_LIMIT = 250_000;
 /** copies x atoms above which assembly 1 is offered but not auto-selected. */
@@ -154,6 +158,9 @@ export class ViewerController {
       measurements: [],
       pendingAtoms: [],
       hydrogenBondCount: 0,
+      superposedOnto: null,
+      superposeRmsd: null,
+      superposePairs: null,
       representation: {
         ...store.slots[slot].representation,
         hiddenChains: new Set<string>(),
@@ -198,6 +205,7 @@ export class ViewerController {
         ligandBonds: result.ligandBonds,
       };
       this.engine.setStructure(slot, result.structure);
+      this.engine.setSceneTransform(slot, IDENTITY);
 
       const s = result.structure;
       useStore.getState().patchSlot(slot, {
@@ -517,6 +525,78 @@ export class ViewerController {
       slot,
       labels.length > 0 ? buildLabelInstances(this.engine.fontAtlasRef, labels) : EMPTY_F32,
     );
+    this.invalidate();
+  }
+
+  // -------------------------------------------------------------------------
+  // Superposition
+  // -------------------------------------------------------------------------
+
+  /** Chains in a pane that can take part in an alignment. */
+  alignableChains(slot: number): AlignableChain[] {
+    const structure = this.data[slot].structure;
+    return structure ? alignableChains(structure) : [];
+  }
+
+  /**
+   * Superposes the mobile pane onto the reference pane's frame. Only the mobile
+   * pane moves, and the transform is applied at draw time rather than to the
+   * coordinates, so the structure's own numbering stays intact.
+   */
+  superpose(
+    mobileSlot: number, referenceSlot: number,
+    mobileChainId?: string, referenceChainId?: string,
+  ): { rmsd: number; pairs: number } | string {
+    const mobile = this.data[mobileSlot].structure;
+    const reference = this.data[referenceSlot].structure;
+    if (!mobile || !reference) return 'Both panes need a loaded structure';
+    if (mobileSlot === referenceSlot) return 'Pick two different panes';
+
+    const mobileChains = alignableChains(mobile);
+    const referenceChains = alignableChains(reference);
+    if (mobileChains.length === 0 || referenceChains.length === 0) {
+      return 'One of the structures has no polymer chain to align';
+    }
+
+    const longest = (list: AlignableChain[]) =>
+      list.reduce((a, b) => (b.residues.length > a.residues.length ? b : a));
+    const mc = mobileChains.find((c) => c.authId === mobileChainId) ?? longest(mobileChains);
+    const rc = referenceChains.find((c) => c.authId === referenceChainId)
+      ?? longest(referenceChains);
+
+    try {
+      const result = superposeChains(reference, rc, mobile, mc);
+      if (!Number.isFinite(result.rmsd)) return 'Alignment produced too few matched residues';
+
+      // The reference pane defines the shared frame, so it is reset to identity.
+      this.engine.setSceneTransform(referenceSlot, IDENTITY);
+      this.engine.setSceneTransform(mobileSlot, result.transform);
+
+      useStore.getState().patchSlot(mobileSlot, {
+        superposedOnto: referenceSlot,
+        superposeRmsd: result.rmsd,
+        superposePairs: result.pairsUsed,
+      });
+      useStore.getState().patchSlot(referenceSlot, {
+        superposedOnto: null, superposeRmsd: null, superposePairs: null,
+      });
+
+      // Both panes now share a frame, so give them the same camera.
+      this.syncCameras(referenceSlot);
+      this.invalidate();
+      return { rmsd: result.rmsd, pairs: result.pairsUsed };
+    } catch (err) {
+      if (err instanceof AlignmentError) return err.message;
+      return err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  clearSuperposition(slot: number): void {
+    this.engine.setSceneTransform(slot, IDENTITY);
+    useStore.getState().patchSlot(slot, {
+      superposedOnto: null, superposeRmsd: null, superposePairs: null,
+    });
+    this.frameSlot(slot, true);
     this.invalidate();
   }
 

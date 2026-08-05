@@ -28,7 +28,7 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut
   let model = transforms[ii / n];
 
   // Assembly operators are rigid, so the radius carries over unchanged.
-  let center = (model * vec4f(inst.centerRadius.xyz, 1.0)).xyz;
+  let center = (cam.scene * model * vec4f(inst.centerRadius.xyz, 1.0)).xyz;
   let radius = inst.centerRadius.w;
   let centerView = (cam.view * vec4f(center, 1.0)).xyz;
 
