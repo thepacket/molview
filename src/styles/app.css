@@ -1461,3 +1461,42 @@ textarea {
   z-index: 40;
   pointer-events: none;
 }
+
+/* --- measurements ---------------------------------------------------------- */
+
+.measurement {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 7px;
+  margin-bottom: 5px;
+  background: var(--bg-input);
+}
+
+.measurement-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.measurement-value {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.measurement-kind {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-right: auto;
+}
+
+.measurement-atoms {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-dim);
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}

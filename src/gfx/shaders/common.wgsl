@@ -14,7 +14,7 @@ struct Camera {
   background: vec4f,
   // radius, intensity, bias, outlineStrength
   ao: vec4f,
-  // x = front clip distance in view space, w = enabled
+  // x = front clip distance in view space, y = device pixel ratio, w = clip enabled
   clip: vec4f,
 };
 

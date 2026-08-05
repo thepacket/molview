@@ -12,6 +12,7 @@ import {
 } from '../rcsb/api';
 import { DEFAULT_REPRESENTATION, type Representation } from '../gfx/geometry';
 import type { Component } from '../mol/components';
+import type { Measurement, MeasurementKind } from '../mol/measure';
 import { DEFAULT_VISUAL_SETTINGS, MAX_SLOTS, type SlotVisualSettings } from '../gfx/engine';
 import type { ColorScheme } from '../mol/coloring';
 
@@ -60,6 +61,15 @@ export interface SlotState {
   selectedResidue: number | null;
   selectionLabel: string | null;
   spinning: boolean;
+  /** Completed measurements drawn in the pane. */
+  measurements: Measurement[];
+  /** Atoms clicked so far towards the next measurement. */
+  pendingAtoms: number[];
+  /** null means clicking selects rather than measures. */
+  measureMode: MeasurementKind | null;
+  showHydrogenBonds: boolean;
+  hydrogenBondCount: number;
+  showLabels: boolean;
 }
 
 function emptySlot(): SlotState {
@@ -84,10 +94,16 @@ function emptySlot(): SlotState {
     selectedResidue: null,
     selectionLabel: null,
     spinning: false,
+    measurements: [],
+    pendingAtoms: [],
+    measureMode: null,
+    showHydrogenBonds: false,
+    hydrogenBondCount: 0,
+    showLabels: true,
   };
 }
 
-export type PanelId = 'browse' | 'entry' | 'style' | 'sequence' | 'scene';
+export type PanelId = 'browse' | 'entry' | 'style' | 'sequence' | 'measure' | 'scene';
 
 export interface SearchState {
   filters: SearchFilters;

@@ -9,14 +9,17 @@
  */
 
 import { Camera } from './camera';
-import { CARTOON_STRIDE, type SceneGeometry } from './geometry';
+import { CARTOON_STRIDE, CYLINDER_STRIDE, type SceneGeometry } from './geometry';
 import type { Structure } from '../mol/structure';
+
+import { LABEL_STRIDE, createFontAtlas, type FontAtlas } from './text';
 
 import commonWgsl from './shaders/common.wgsl?raw';
 import spheresWgsl from './shaders/spheres.wgsl?raw';
 import cylindersWgsl from './shaders/cylinders.wgsl?raw';
 import cartoonWgsl from './shaders/cartoon.wgsl?raw';
 import compositeWgsl from './shaders/composite.wgsl?raw';
+import labelsWgsl from './shaders/labels.wgsl?raw';
 
 export const MAX_SLOTS = 4;
 const UNIFORM_BYTES = 352;
@@ -82,6 +85,14 @@ interface Slot {
   visual: SlotVisualSettings;
   rect: ViewportRect;
   active: boolean;
+  /** Screen-space text drawn over this pane, rebuilt when it changes. */
+  labelBuffer: GPUBuffer | null;
+  labelBind: GPUBindGroup | null;
+  labelCount: number;
+  /** Measurement and hydrogen-bond sticks, independent of the scene geometry. */
+  overlayBuffer: GPUBuffer | null;
+  overlayBind: GPUBindGroup | null;
+  overlayCount: number;
 }
 
 export interface PickResult {
@@ -102,6 +113,9 @@ export class Engine {
   private cylinderPipeline!: GPURenderPipeline;
   private cartoonPipeline!: GPURenderPipeline;
   private compositePipeline!: GPURenderPipeline;
+  private labelPipeline!: GPURenderPipeline;
+  private labelLayout!: GPUBindGroupLayout;
+  private fontAtlas!: FontAtlas;
 
   private cameraLayout!: GPUBindGroupLayout;
   private gbufferLayout!: GPUBindGroupLayout;
@@ -116,6 +130,8 @@ export class Engine {
   private depthTexture: GPUTexture | null = null;
 
   private cylinderMesh!: { vertices: GPUBuffer; indices: GPUBuffer; indexCount: number };
+  /** Single identity matrix, shared by every overlay draw. */
+  private identityTransformBuffer!: GPUBuffer;
 
   private slots: Slot[] = [];
   private width = 1;
@@ -170,9 +186,14 @@ export class Engine {
       alphaMode: 'opaque',
     });
 
+    this.fontAtlas = createFontAtlas(this.device);
     this.createLayouts();
     this.createPipelines();
     this.createCylinderMesh();
+    this.identityTransformBuffer = this.createBuffer(
+      Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
+      GPUBufferUsage.STORAGE,
+    );
     this.createSlots();
   }
 
@@ -180,6 +201,11 @@ export class Engine {
 
   get canvasElement(): HTMLCanvasElement | null {
     return this.canvas ?? null;
+  }
+
+  /** Glyph metrics, needed by callers laying out label instances. */
+  get fontAtlasRef(): FontAtlas {
+    return this.fontAtlas;
   }
 
   private createLayouts(): void {
@@ -203,6 +229,15 @@ export class Engine {
     this.transformLayout = this.device.createBindGroupLayout({
       label: 'transforms',
       entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: storage }],
+    });
+
+    this.labelLayout = this.device.createBindGroupLayout({
+      label: 'labels',
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: storage },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+      ],
     });
 
     this.gbufferLayout = this.device.createBindGroupLayout({
@@ -316,6 +351,114 @@ export class Engine {
       },
       primitive: { topology: 'triangle-list' },
     });
+
+    const labelModule = this.module(labelsWgsl, 'labels');
+    this.labelPipeline = this.device.createRenderPipeline({
+      label: 'labels',
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [this.cameraLayout, this.labelLayout],
+      }),
+      vertex: { module: labelModule, entryPoint: 'vs' },
+      fragment: {
+        module: labelModule,
+        entryPoint: 'fs',
+        targets: [{
+          format: this.format,
+          blend: {
+            color: {
+              srcFactor: 'src-alpha',
+              dstFactor: 'one-minus-src-alpha',
+              operation: 'add',
+            },
+            alpha: {
+              srcFactor: 'one',
+              dstFactor: 'one-minus-src-alpha',
+              operation: 'add',
+            },
+          },
+        }],
+      },
+      primitive: { topology: 'triangle-strip' },
+    });
+  }
+
+  /**
+   * Overlay sticks drawn with the cylinder pipeline but owned separately from
+   * the scene geometry, so adding a measurement does not rebuild the molecule.
+   */
+  setOverlay(slot: number, cylinders: Float32Array): void {
+    const s = this.slots[slot];
+    const count = Math.floor(cylinders.length / CYLINDER_STRIDE);
+
+    if (count === 0) {
+      s.overlayBuffer?.destroy();
+      s.overlayBuffer = null;
+      s.overlayBind = null;
+      s.overlayCount = 0;
+      return;
+    }
+
+    const bytes = count * CYLINDER_STRIDE * 4;
+    if (!s.overlayBuffer || s.overlayBuffer.size < bytes) {
+      s.overlayBuffer?.destroy();
+      s.overlayBuffer = this.device.createBuffer({
+        label: `overlay-${slot}`,
+        size: Math.max(bytes, 4096),
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      s.overlayBind = this.device.createBindGroup({
+        layout: this.instanceLayout,
+        entries: [
+          { binding: 0, resource: { buffer: s.overlayBuffer } },
+          { binding: 1, resource: { buffer: this.identityTransformBuffer } },
+        ],
+      });
+    }
+
+    this.device.queue.writeBuffer(
+      s.overlayBuffer, 0,
+      cylinders.buffer as ArrayBuffer, cylinders.byteOffset, bytes,
+    );
+    s.overlayCount = count;
+  }
+
+  /** Replaces a pane's label instances; pass an empty array to clear them. */
+  setLabels(slot: number, instances: Float32Array): void {
+    const s = this.slots[slot];
+    const count = Math.floor(instances.length / LABEL_STRIDE);
+
+    if (count === 0) {
+      s.labelBuffer?.destroy();
+      s.labelBuffer = null;
+      s.labelBind = null;
+      s.labelCount = 0;
+      return;
+    }
+
+    const bytes = count * LABEL_STRIDE * 4;
+    // Reuse the buffer while it is big enough; labels change on every hover.
+    if (!s.labelBuffer || s.labelBuffer.size < bytes) {
+      s.labelBuffer?.destroy();
+      s.labelBuffer = this.device.createBuffer({
+        label: `labels-${slot}`,
+        size: Math.max(bytes, 4096),
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      s.labelBind = this.device.createBindGroup({
+        layout: this.labelLayout,
+        entries: [
+          { binding: 0, resource: { buffer: s.labelBuffer } },
+          { binding: 1, resource: this.fontAtlas.view },
+          { binding: 2, resource: this.fontAtlas.sampler },
+        ],
+      });
+    }
+
+    this.device.queue.writeBuffer(
+      s.labelBuffer, 0,
+      instances.buffer as ArrayBuffer, instances.byteOffset, bytes,
+    );
+    s.labelCount = count;
   }
 
   private createCylinderMesh(): void {
@@ -377,6 +520,12 @@ export class Engine {
         visual: { ...DEFAULT_VISUAL_SETTINGS },
         rect: { x: 0, y: 0, width: 1, height: 1 },
         active: false,
+        labelBuffer: null,
+        labelBind: null,
+        labelCount: 0,
+        overlayBuffer: null,
+        overlayBind: null,
+        overlayCount: 0,
       });
     }
   }
@@ -566,7 +715,9 @@ export class Engine {
     // of the structure so the slider sweeps through the molecule itself rather
     // than through empty space.
     uniformData[84] = camera.distance - camera.sceneRadius + visual.clipNear;
-    uniformData[85] = 0;
+    // Labels lay themselves out in CSS pixels; the shader works in framebuffer
+    // pixels, so it needs the ratio to keep text a constant apparent size.
+    uniformData[85] = this.pixelRatio;
     uniformData[86] = 0;
     uniformData[87] = visual.clipNear > 0 ? 1 : 0;
 
@@ -581,7 +732,10 @@ export class Engine {
     const start = performance.now();
     const px = this.pixelRatio;
 
-    const visible = this.slots.filter((s) => s.active && s.rect.width > 0 && s.rect.height > 0);
+    const visible = this.slots.filter(
+      (s) => (s.active || s.overlayCount > 0 || s.labelCount > 0)
+        && s.rect.width > 0 && s.rect.height > 0,
+    );
     for (const slot of visible) this.writeUniforms(slot);
 
     const encoder = this.device.createCommandEncoder();
@@ -649,6 +803,14 @@ export class Engine {
           geometryPass.draw(4, group.sphereCount * group.transformCount);
         }
       }
+
+      if (slot.overlayCount > 0 && slot.overlayBind) {
+        geometryPass.setPipeline(this.cylinderPipeline);
+        geometryPass.setBindGroup(1, slot.overlayBind);
+        geometryPass.setVertexBuffer(0, this.cylinderMesh.vertices);
+        geometryPass.setIndexBuffer(this.cylinderMesh.indices, 'uint32');
+        geometryPass.drawIndexed(this.cylinderMesh.indexCount, slot.overlayCount);
+      }
     }
     geometryPass.end();
 
@@ -676,6 +838,24 @@ export class Engine {
       compositePass.setScissorRect(vx, vy, vw, vh);
       compositePass.setBindGroup(0, slot.bindGroup);
       compositePass.draw(3);
+    }
+
+    // Text goes on last, blended over the resolved image.
+    for (const slot of visible) {
+      if (slot.labelCount === 0 || !slot.labelBind) continue;
+      const { rect } = slot;
+      const vx = Math.floor(rect.x * px);
+      const vy = Math.floor(rect.y * px);
+      const vw = Math.min(Math.max(1, Math.floor(rect.width * px)), this.width - vx);
+      const vh = Math.min(Math.max(1, Math.floor(rect.height * px)), this.height - vy);
+      if (vw <= 0 || vh <= 0) continue;
+
+      compositePass.setPipeline(this.labelPipeline);
+      compositePass.setViewport(vx, vy, vw, vh, 0, 1);
+      compositePass.setScissorRect(vx, vy, vw, vh);
+      compositePass.setBindGroup(0, slot.bindGroup);
+      compositePass.setBindGroup(1, slot.labelBind);
+      compositePass.draw(4, slot.labelCount);
     }
     compositePass.end();
 
@@ -783,11 +963,14 @@ export class Engine {
   destroy(): void {
     for (const s of this.slots) {
       this.releaseGroups(s);
+      s.labelBuffer?.destroy();
+      s.overlayBuffer?.destroy();
       s.uniformBuffer.destroy();
     }
     this.albedoTexture?.destroy();
     this.normalTexture?.destroy();
     this.depthTexture?.destroy();
+    this.fontAtlas?.texture.destroy();
     this.device?.destroy();
   }
 }

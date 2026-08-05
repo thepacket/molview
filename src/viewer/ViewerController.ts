@@ -15,6 +15,11 @@ import {
 } from '../mol/components';
 import { MolKind, resNameOf, atomNameOf, type Structure } from '../mol/structure';
 import { loadStructure, type LoadHandle } from '../mol/loader';
+import {
+  atomsNeeded, createMeasurement, describeAtom, findHydrogenBonds,
+  measurementAnchor, type HydrogenBond,
+} from '../mol/measure';
+import { buildLabelInstances, type LabelRequest } from '../gfx/text';
 import { fetchEntryDetail } from '../rcsb/api';
 import { useStore, visibleSlotCount, type SlotState } from '../state/store';
 
@@ -23,12 +28,16 @@ interface SlotData {
   ligandBonds: BondList;
   allBonds: BondList | null;
   geometry: SceneGeometry | null;
+  /** Last resolved component layers, reused by the contact search. */
+  resolved: ResolvedScene | null;
+  hydrogenBonds: HydrogenBond[];
   loadHandle: LoadHandle | null;
   /** Snapshot of the settings the current geometry was built from. */
   builtSignature: string;
 }
 
 const EMPTY_BONDS: BondList = { indices: new Uint32Array(0), count: 0 };
+const EMPTY_F32 = new Float32Array(0);
 /** Above this, whole-structure bond perception is not worth the stall. */
 const BOND_PERCEPTION_LIMIT = 250_000;
 /** copies x atoms above which assembly 1 is offered but not auto-selected. */
@@ -57,6 +66,8 @@ function emptySlotData(): SlotData {
     ligandBonds: EMPTY_BONDS,
     allBonds: null,
     geometry: null,
+    resolved: null,
+    hydrogenBonds: [],
     loadHandle: null,
     builtSignature: '',
   };
@@ -140,6 +151,9 @@ export class ViewerController {
       selectedResidue: null,
       selectionLabel: null,
       hoverLabel: null,
+      measurements: [],
+      pendingAtoms: [],
+      hydrogenBondCount: 0,
       representation: {
         ...store.slots[slot].representation,
         hiddenChains: new Set<string>(),
@@ -309,6 +323,7 @@ export class ViewerController {
     );
 
     data.geometry = geometry;
+    data.resolved = resolved;
     data.builtSignature = signature;
     this.engine.setGeometry(slot, geometry);
 
@@ -324,6 +339,14 @@ export class ViewerController {
       },
     });
 
+    // Contacts depend on what is visible, so they follow the layers.
+    if (useStore.getState().slots[slot].showHydrogenBonds) {
+      const bonds = findHydrogenBonds(structure, { mask: this.drawnAtomMask(slot) });
+      this.data[slot].hydrogenBonds = bonds;
+      useStore.getState().patchSlot(slot, { hydrogenBondCount: bonds.length });
+    }
+    this.refreshOverlay(slot);
+
     this.invalidate();
   }
 
@@ -333,6 +356,167 @@ export class ViewerController {
       this.engine.setVisualSettings(i, slots[i].visual);
       if (this.data[i].structure) this.rebuild(i);
     }
+    this.invalidate();
+  }
+
+
+  // -------------------------------------------------------------------------
+  // Measurements, hydrogen bonds and labels
+  // -------------------------------------------------------------------------
+
+  /** Feeds a clicked atom into the pending measurement, completing it if full. */
+  private addMeasurementAtom(slot: number, atom: number): void {
+    const store = useStore.getState();
+    const state = store.slots[slot];
+    const structure = this.data[slot].structure;
+    const kind = state.measureMode;
+    if (!kind || !structure) return;
+
+    // Clicking the same atom twice in a row removes it, so a misclick is
+    // undoable without abandoning the whole measurement.
+    const pending = state.pendingAtoms.includes(atom)
+      ? state.pendingAtoms.filter((a) => a !== atom)
+      : [...state.pendingAtoms, atom];
+
+    if (pending.length < atomsNeeded(kind)) {
+      store.patchSlot(slot, { pendingAtoms: pending });
+      this.refreshOverlay(slot);
+      return;
+    }
+
+    const measurement = createMeasurement(structure, kind, pending);
+    store.patchSlot(slot, {
+      measurements: [...state.measurements, measurement],
+      pendingAtoms: [],
+    });
+    this.refreshOverlay(slot);
+  }
+
+  clearMeasurements(slot: number): void {
+    useStore.getState().patchSlot(slot, { measurements: [], pendingAtoms: [] });
+    this.refreshOverlay(slot);
+  }
+
+  removeMeasurement(slot: number, id: string): void {
+    const state = useStore.getState().slots[slot];
+    useStore.getState().patchSlot(slot, {
+      measurements: state.measurements.filter((m) => m.id !== id),
+    });
+    this.refreshOverlay(slot);
+  }
+
+  setMeasureMode(slot: number, kind: SlotState['measureMode']): void {
+    useStore.getState().patchSlot(slot, { measureMode: kind, pendingAtoms: [] });
+    this.refreshOverlay(slot);
+  }
+
+  toggleHydrogenBonds(slot: number, enabled: boolean): void {
+    const structure = this.data[slot].structure;
+    if (!structure) return;
+
+    if (!enabled) {
+      this.data[slot].hydrogenBonds = [];
+      useStore.getState().patchSlot(slot, { showHydrogenBonds: false, hydrogenBondCount: 0 });
+      this.refreshOverlay(slot);
+      return;
+    }
+
+    const bonds = findHydrogenBonds(structure, { mask: this.drawnAtomMask(slot) });
+    this.data[slot].hydrogenBonds = bonds;
+    useStore.getState().patchSlot(slot, {
+      showHydrogenBonds: true,
+      hydrogenBondCount: bonds.length,
+    });
+    this.refreshOverlay(slot);
+  }
+
+  /**
+   * Atoms with a visible style. Contacts to hidden waters are noise, and a
+   * bond drawn to something the user cannot see reads as a rendering error.
+   */
+  private drawnAtomMask(slot: number): Uint8Array | null {
+    const resolved = this.data[slot].resolved;
+    if (!resolved) return null;
+    const mask = new Uint8Array(resolved.atomStyle.length);
+    for (let a = 0; a < mask.length; a++) mask[a] = resolved.atomStyle[a] === Style.None ? 0 : 1;
+    return mask;
+  }
+
+  /** Rebuilds the overlay sticks and the label instances for a pane. */
+  refreshOverlay(slot: number): void {
+    const structure = this.data[slot].structure;
+    if (!structure) {
+      this.engine.setOverlay(slot, EMPTY_F32);
+      this.engine.setLabels(slot, EMPTY_F32);
+      this.invalidate();
+      return;
+    }
+
+    const state = useStore.getState().slots[slot];
+    const hbonds = state.showHydrogenBonds ? this.data[slot].hydrogenBonds : [];
+
+    const sticks: number[] = [];
+    const pushStick = (
+      a: number, b: number, radius: number, color: [number, number, number],
+    ) => {
+      sticks.push(
+        structure.x[a], structure.y[a], structure.z[a], radius,
+        structure.x[b], structure.y[b], structure.z[b], 0,
+        color[0], color[1], color[2], 0,
+      );
+    };
+
+    for (const bond of hbonds) {
+      pushStick(bond.donor, bond.acceptor, 0.05, [0.45, 0.85, 0.98]);
+    }
+    for (const m of state.measurements) {
+      for (let i = 0; i + 1 < m.atoms.length; i++) {
+        pushStick(m.atoms[i], m.atoms[i + 1], 0.08, [1.0, 0.82, 0.3]);
+      }
+    }
+    for (let i = 0; i + 1 < state.pendingAtoms.length; i++) {
+      pushStick(state.pendingAtoms[i], state.pendingAtoms[i + 1], 0.08, [1.0, 0.55, 0.35]);
+    }
+
+    this.engine.setOverlay(slot, Float32Array.from(sticks));
+
+    // ---- labels ----
+    const labels: LabelRequest[] = [];
+    if (state.showLabels) {
+      const background: [number, number, number, number] = [0.05, 0.07, 0.1, 0.82];
+
+      for (const m of state.measurements) {
+        const [x, y, z] = measurementAnchor(structure, m);
+        labels.push({
+          text: m.label, x, y, z, color: [1, 0.85, 0.4, 1], background, fontSize: 13,
+        });
+      }
+
+      for (const atom of state.pendingAtoms) {
+        labels.push({
+          text: describeAtom(structure, atom),
+          x: structure.x[atom], y: structure.y[atom], z: structure.z[atom],
+          color: [1, 0.7, 0.45, 1], background, offsetY: -14, fontSize: 11,
+        });
+      }
+
+      if (state.selectedResidue !== null && state.selectionLabel) {
+        const r = state.selectedResidue;
+        const anchor = structure.resAnchor[r] >= 0
+          ? structure.resAnchor[r]
+          : structure.resAtomStart[r];
+        labels.push({
+          text: state.selectionLabel,
+          x: structure.x[anchor], y: structure.y[anchor], z: structure.z[anchor],
+          color: [0.6, 0.92, 1, 1], background, offsetY: -16, fontSize: 12,
+        });
+      }
+    }
+
+    this.engine.setLabels(
+      slot,
+      labels.length > 0 ? buildLabelInstances(this.engine.fontAtlasRef, labels) : EMPTY_F32,
+    );
     this.invalidate();
   }
 
@@ -527,10 +711,16 @@ export class ViewerController {
       const [lx, ly] = this.localCoords(slot, event.clientX, event.clientY);
       const hit = this.engine.pick(slot, lx, ly);
       const structure = this.data[slot].structure;
-      useStore.getState().patchSlot(slot, {
-        selectedResidue: hit ? hit.residueIndex : null,
-        selectionLabel: hit && structure ? describePick(structure, hit) : null,
-      });
+
+      if (useStore.getState().slots[slot].measureMode && hit) {
+        this.addMeasurementAtom(slot, hit.atomIndex);
+      } else {
+        useStore.getState().patchSlot(slot, {
+          selectedResidue: hit ? hit.residueIndex : null,
+          selectionLabel: hit && structure ? describePick(structure, hit) : null,
+        });
+        this.refreshOverlay(slot);
+      }
       this.invalidate();
     }
   }

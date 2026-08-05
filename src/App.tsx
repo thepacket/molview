@@ -8,6 +8,7 @@ import { ViewportGrid } from './ui/ViewportGrid';
 import { BrowsePanel } from './ui/panels/BrowsePanel';
 import { EntryPanel } from './ui/panels/EntryPanel';
 import { ScenePanel } from './ui/panels/ScenePanel';
+import { MeasurePanel } from './ui/panels/MeasurePanel';
 import { SequencePanel } from './ui/panels/SequencePanel';
 import { StylePanel } from './ui/panels/StylePanel';
 import { LAYOUT_SLOT_COUNT, useStore } from './state/store';
@@ -39,6 +40,7 @@ export default function App() {
                 {panel === 'browse' && <BrowsePanel />}
                 {panel === 'style' && <StylePanel />}
                 {panel === 'sequence' && <SequencePanel />}
+                {panel === 'measure' && <MeasurePanel />}
                 {panel === 'scene' && <ScenePanel />}
                 {panel === 'entry' && <EntryPanel />}
               </div>

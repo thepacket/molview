@@ -1,4 +1,4 @@
-import { AlignLeft, LayoutGrid, Palette, Search } from 'lucide-react';
+import { AlignLeft, LayoutGrid, Palette, Ruler, Search } from 'lucide-react';
 import { useStore, type PanelId } from '../state/store';
 import { Tip } from './controls';
 
@@ -8,6 +8,7 @@ const ITEMS: { id: PanelId; icon: React.ReactNode; label: string; shortcut: stri
   { id: 'browse', icon: <Search size={16} />, label: 'Browse the PDB', shortcut: '⌘F' },
   { id: 'style', icon: <Palette size={16} />, label: 'Representation', shortcut: '' },
   { id: 'sequence', icon: <AlignLeft size={16} />, label: 'Sequence', shortcut: '' },
+  { id: 'measure', icon: <Ruler size={16} />, label: 'Measure', shortcut: '' },
   { id: 'scene', icon: <LayoutGrid size={16} />, label: 'Panes and layout', shortcut: '' },
 ];
 
@@ -41,5 +42,6 @@ export const PANEL_TITLES: Record<PanelId, string> = {
   entry: 'Definition',
   style: 'Representation',
   sequence: 'Sequence',
+  measure: 'Measure',
   scene: 'Panes',
 };
