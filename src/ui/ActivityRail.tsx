@@ -1,4 +1,4 @@
-import { AlignLeft, LayoutGrid, Palette, Ruler, Search } from 'lucide-react';
+import { AlignLeft, FolderOpen, LayoutGrid, Palette, Ruler, Search } from 'lucide-react';
 import { useStore, type PanelId } from '../state/store';
 import { Tip } from './controls';
 
@@ -10,6 +10,7 @@ const ITEMS: { id: PanelId; icon: React.ReactNode; label: string; shortcut: stri
   { id: 'sequence', icon: <AlignLeft size={16} />, label: 'Sequence', shortcut: '' },
   { id: 'measure', icon: <Ruler size={16} />, label: 'Measure', shortcut: '' },
   { id: 'scene', icon: <LayoutGrid size={16} />, label: 'Panes and layout', shortcut: '' },
+  { id: 'project', icon: <FolderOpen size={16} />, label: 'Projects', shortcut: '' },
 ];
 
 export function ActivityRail() {
@@ -44,4 +45,5 @@ export const PANEL_TITLES: Record<PanelId, string> = {
   sequence: 'Sequence',
   measure: 'Measure',
   scene: 'Panes',
+  project: 'Projects',
 };

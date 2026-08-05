@@ -181,6 +181,12 @@ export function CommandPalette() {
               Open sequence
             </Command.Item>
             <Command.Item
+              value="projects save load export import"
+              onSelect={() => run(() => store.setPanel('project'))}
+            >
+              Open projects
+            </Command.Item>
+            <Command.Item
               value="clear pane"
               onSelect={() => run(() => viewer.unload(activeSlot))}
             >

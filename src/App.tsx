@@ -9,6 +9,7 @@ import { BrowsePanel } from './ui/panels/BrowsePanel';
 import { EntryPanel } from './ui/panels/EntryPanel';
 import { ScenePanel } from './ui/panels/ScenePanel';
 import { MeasurePanel } from './ui/panels/MeasurePanel';
+import { ProjectPanel } from './ui/panels/ProjectPanel';
 import { SequencePanel } from './ui/panels/SequencePanel';
 import { StylePanel } from './ui/panels/StylePanel';
 import { LAYOUT_SLOT_COUNT, useStore } from './state/store';
@@ -42,6 +43,7 @@ export default function App() {
                 {panel === 'sequence' && <SequencePanel />}
                 {panel === 'measure' && <MeasurePanel />}
                 {panel === 'scene' && <ScenePanel />}
+                {panel === 'project' && <ProjectPanel />}
                 {panel === 'entry' && <EntryPanel />}
               </div>
             </aside>

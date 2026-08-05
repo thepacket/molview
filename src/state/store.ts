@@ -110,7 +110,8 @@ function emptySlot(): SlotState {
   };
 }
 
-export type PanelId = 'browse' | 'entry' | 'style' | 'sequence' | 'measure' | 'scene';
+export type PanelId =
+  | 'browse' | 'entry' | 'style' | 'sequence' | 'measure' | 'scene' | 'project';
 
 export interface SearchState {
   filters: SearchFilters;
