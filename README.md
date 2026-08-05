@@ -58,6 +58,19 @@ ball-and-stick, licorice and spacefill. Colour by chain, element, secondary
 structure, residue type, B-factor/pLDDT, hydrophobicity, entity, or an N→C
 rainbow — per component or inherited from the pane.
 
+Nucleic acid bases are drawn as slabs fitted in their own ring plane, so a
+double helix reads as one rather than as two bare tubes. Assembly copies can be
+tinted by symmetry operator, which is what makes an icosahedral capsid's facets
+and 5-fold vertices visible instead of undifferentiated mush. Shading comes as
+named presets — Studio, Soft, Flat, Plain — with the ambient-occlusion, outline
+and fog sliders still there underneath.
+
+**NMR ensembles.** Every model at once as backbone traces, which is the usual
+way to read the spread, or one at a time with the camera held still as you step
+through them. Each model becomes its own chain, so ribbons never run from one
+into the next, bond perception cannot join superposed models to each other, and
+`model 3` selects a single member.
+
 **Selections** use a compact atom-specification grammar:
 
 | | |
@@ -112,7 +125,11 @@ loading entries, building representations from selections, measuring, colouring,
 switching assemblies, superposing panes. Replies come back as one JSON object
 carrying prose plus a list of actions; each action is re-validated against live
 state before it runs, so a wrong chain id becomes a stated rejection rather than
-a silent no-op.
+a silent no-op. Eighteen action types cover loading, layout, components,
+colour, assemblies, focus, lighting, background, hydrogen bonds, measurement,
+superposition, overlay and ensembles. Every one is a reversible local view
+change, so they run without a confirmation step. **Clear** discards the rolling
+history as well as the visible transcript, and aborts a request in flight.
 
 Where the model supports structured outputs — Claude and GPT do — the reply
 shape is enforced by the API and the prompt does not restate the schema, which
@@ -152,10 +169,12 @@ src/
   rcsb/        GraphQL + Search clients, MessagePack, BinaryCIF, mmCIF text parser
   mol/         Structure model, element data, bond perception, colour schemes,
                selections, components, measurements, alignment, loading worker
-  gfx/         WebGPU engine, camera, geometry generation, WGSL shaders
+  gfx/         WebGPU engine, camera, geometry generation, WGSL shaders, text
+  ai/          Action vocabulary and executor, prompt, OpenRouter client,
+               reply parser, Markdown/KaTeX renderer
   viewer/      Controller bridging React state to GPU resources
-  ui/          Application shell, panels, command palette
-  state/       Zustand store, project serialisation, IndexedDB
+  ui/          Application shell, panels, command palette, assistant
+  state/       Zustand store, project serialisation, IndexedDB, share links
 ```
 
 **The structure model** is structure-of-arrays: flat typed arrays for
@@ -187,6 +206,20 @@ Occlusion radius, outline thresholds and fog density are normalised against
 scene size, so the same settings look the same on a 20 Å ligand and a 1000 Å
 capsid.
 
+**Labels** are a separate pass after the resolve, blended straight onto the
+swap chain so they never touch the G-buffer. The font atlas is rasterised at
+runtime with Canvas 2D — no font ships, and the metrics match whatever
+monospace face the platform actually has. An opaque block reserved in the atlas
+lets the background pills go through the same pipeline as the glyphs.
+
+**Assistant replies** are rendered with `marked` + KaTeX + DOMPurify. Two
+orderings matter: math is lifted out before Markdown parsing, because emphasis
+rules will otherwise chew through `\frac{a}{b}`; and KaTeX runs *after*
+sanitisation, writing into the already-cleaned DOM, since sanitising KaTeX's own
+output would strip the markup it depends on. Model HTML is dropped and non-http
+links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
+330 kB out of the initial bundle.
+
 ## Interaction
 
 | | |
@@ -210,8 +243,8 @@ capsid.
 - Secondary structure comes from the file's `struct_conf` / `struct_sheet_range`
   records. When a file carries none, a Cα-geometry heuristic stands in; it is
   not DSSP and will differ at the edges of helices and strands.
-- Only the first model of an NMR ensemble is shown, and only the dominant
-  alternate conformation.
+- Only the dominant alternate conformation is read; altloc B and beyond are
+  discarded.
 - Whole-structure bond perception is skipped above 250,000 atoms, so
   ball-and-stick on very large structures falls back to ligand connectivity.
   Cartoon and spacefill are unaffected.
@@ -222,7 +255,6 @@ capsid.
   approximations, not DSSP, an energetic H-bond analysis, or a structure-based
   aligner. They are good enough to look at and to reason from; they are not
   what you would cite.
-- NMR ensembles can be drawn whole or stepped through one model at a time.
 - A pane opened from a local file has no id to refetch, so a project must embed
   its bytes to restore it. That is an opt-in, capped at 25 MB per file, and
   never included in a shareable link.
