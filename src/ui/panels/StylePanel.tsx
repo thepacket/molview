@@ -7,11 +7,30 @@ import { MolKind } from '../../mol/structure';
 
 import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
-import { Field, Select, Slider, Toggle, Tip } from '../controls';
+import { Field, Segmented, Select, Slider, Toggle, Tip } from '../controls';
 import { ComponentList } from './ComponentList';
 
 const COLOR_SCHEMES = (Object.keys(COLOR_SCHEME_LABELS) as ColorScheme[])
   .map((value) => ({ value, label: COLOR_SCHEME_LABELS[value] }));
+
+/** Named shading looks; the sliders below stay available for fine control. */
+const LIGHTING_PRESETS: {
+  name: string;
+  values: { aoIntensity: number; aoRadius: number; outline: number; fogDensity: number };
+}[] = [
+  { name: 'Studio', values: { aoIntensity: 1, aoRadius: 4.5, outline: 0.85, fogDensity: 0.006 } },
+  { name: 'Soft', values: { aoIntensity: 1.45, aoRadius: 8, outline: 0, fogDensity: 0.004 } },
+  { name: 'Flat', values: { aoIntensity: 0, aoRadius: 0, outline: 1.2, fogDensity: 0 } },
+  { name: 'Plain', values: { aoIntensity: 0, aoRadius: 0, outline: 0, fogDensity: 0 } },
+];
+
+function matchPreset(visual: { aoIntensity: number; outline: number; fogDensity: number }): string {
+  const hit = LIGHTING_PRESETS.find((p) =>
+    Math.abs(p.values.aoIntensity - visual.aoIntensity) < 1e-3
+    && Math.abs(p.values.outline - visual.outline) < 1e-3
+    && Math.abs(p.values.fogDensity - visual.fogDensity) < 1e-4);
+  return hit ? hit.name : 'Custom';
+}
 
 const BACKGROUNDS: { label: string; value: [number, number, number] }[] = [
   { label: 'Void', value: [0.043, 0.051, 0.071] },
@@ -88,6 +107,16 @@ export function StylePanel() {
                 + `of the asymmetric unit, generated on the GPU — no extra atoms are stored.`
               : 'The coordinates as deposited. This is often not the biological molecule.'}
           </p>
+          {activeAssembly && activeAssembly.totalCopies > 1 && (
+            <div style={{ marginTop: 8 }}>
+              <Toggle
+                label="Colour copies by symmetry"
+                checked={slot.visual.colorBySymmetry}
+                onChange={(v) => updateVisual(activeSlot, { colorBySymmetry: v })}
+                hint="Tints each operator differently so symmetry mates are distinguishable"
+              />
+            </div>
+          )}
           {activeAssembly && (
             <button
               type="button"
@@ -224,6 +253,16 @@ export function StylePanel() {
 
       <div className="panel-section">
         <div className="section-label"><span>Shading</span></div>
+        <Field label="Preset">
+          <Segmented
+            value={matchPreset(slot.visual)}
+            options={LIGHTING_PRESETS.map((p) => ({ value: p.name, label: p.name }))}
+            onChange={(name) => {
+              const preset = LIGHTING_PRESETS.find((p) => p.name === name);
+              if (preset) updateVisual(activeSlot, preset.values);
+            }}
+          />
+        </Field>
         <Field label="Ambient occlusion" value={slot.visual.aoIntensity.toFixed(2)}>
           <Slider
             value={slot.visual.aoIntensity}

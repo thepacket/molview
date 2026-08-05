@@ -53,7 +53,7 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut
   out.position = cam.proj * vec4f(posView, 1.0);
   out.centerView = centerView;
   out.radius = radius;
-  out.color = inst.colorPick.xyz;
+  out.color = symmetryTint(inst.colorPick.xyz, ii / n);
   return out;
 }
 

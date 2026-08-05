@@ -27,7 +27,7 @@ fn vs(v: Vertex, @builtin(instance_index) ii: u32) -> VSOut {
   var out: VSOut;
   out.position = cam.proj * viewPos;
   out.normalView = (cam.view * vec4f(worldNormal, 0.0)).xyz;
-  out.color = v.color;
+  out.color = symmetryTint(v.color, ii);
   out.viewZ = viewPos.z;
   return out;
 }

@@ -34,7 +34,7 @@ const SORTS = [
 ] as const;
 
 /** A few structures that show off different representations well. */
-const FEATURED: { id: string; note: string }[] = [
+const FEATURED: { id: string; note: string; size?: string }[] = [
   { id: '4HHB', note: 'Haemoglobin — classic α₂β₂ tetramer with haem groups' },
   { id: '1UBQ', note: 'Ubiquitin — small, crisp β-grasp fold' },
   { id: '6VXX', note: 'SARS-CoV-2 spike — large glycosylated trimer' },
@@ -42,7 +42,8 @@ const FEATURED: { id: string; note: string }[] = [
   { id: '7A5R', note: 'Nucleosome — protein/DNA complex' },
   { id: '1AON', note: 'GroEL/GroES — 58-chain chaperonin assembly' },
   { id: '5XNL', note: 'Photosystem II — large membrane complex' },
-  { id: '3J3Q', note: 'HIV-1 capsid — 1300+ chains, tests the renderer' },
+  { id: '2BTV', note: 'Bluetongue virus — 15 chains become a 900-chain capsid' },
+  { id: '3J3Q', note: 'HIV-1 capsid — 2.4M atoms, the renderer at its limit', size: '113 MB' },
 ];
 
 const looksLikePdbId = (value: string) => /^[0-9][a-z0-9]{3}$/i.test(value.trim());
@@ -313,6 +314,7 @@ export function BrowsePanel() {
               >
                 <div className="result-top">
                   <span className="pdb-id">{f.id}</span>
+                  {f.size && <Chip>{f.size} download</Chip>}
                 </div>
                 <div className="result-title">{f.note}</div>
               </button>

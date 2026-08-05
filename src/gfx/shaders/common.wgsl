@@ -14,7 +14,7 @@ struct Camera {
   background: vec4f,
   // radius, intensity, bias, outlineStrength
   ao: vec4f,
-  // x = front clip distance in view space, y = device pixel ratio, w = clip enabled
+  // x = front clip distance, y = device pixel ratio, z = symmetry tint, w = clip enabled
   clip: vec4f,
   // Rigid transform applied to everything in this pane, for superposition.
   scene: mat4x4f,
@@ -60,6 +60,17 @@ fn encodeNormal(n: vec3f) -> vec4f {
 // Front clipping plane, perpendicular to the view direction. Slicing away the
 // near half of a large assembly is often the only way to see its interior.
 // View space looks down -z, so anything nearer than the plane has a larger z.
+// Tints a copy by its assembly operator index. Without this every symmetry
+// mate is the same colour and a 60-fold capsid reads as undifferentiated mush.
+fn symmetryTint(base: vec3f, copyIndex: u32) -> vec3f {
+  if (cam.clip.z < 0.5) {
+    return base;
+  }
+  let t = fract(f32(copyIndex) * 0.6180339887);
+  let hue = 0.5 + 0.5 * cos(6.2831853 * (t + vec3f(0.0, 0.33, 0.67)));
+  return mix(base, hue, 0.7);
+}
+
 fn clippedView(viewZ: f32) -> bool {
   return cam.clip.w > 0.5 && viewZ > -cam.clip.x;
 }

@@ -42,6 +42,8 @@ export interface SlotVisualSettings {
   orthographic: boolean;
   /** Front clipping plane offset from the camera target, in Å. 0 disables. */
   clipNear: number;
+  /** Tint each assembly copy by its operator index. */
+  colorBySymmetry: boolean;
 }
 
 export const DEFAULT_VISUAL_SETTINGS: SlotVisualSettings = {
@@ -52,6 +54,7 @@ export const DEFAULT_VISUAL_SETTINGS: SlotVisualSettings = {
   fogDensity: 0.006,
   orthographic: false,
   clipNear: 0,
+  colorBySymmetry: false,
 };
 
 /** GPU resources for one geometry group and the transforms it repeats under. */
@@ -748,7 +751,7 @@ export class Engine {
     // Labels lay themselves out in CSS pixels; the shader works in framebuffer
     // pixels, so it needs the ratio to keep text a constant apparent size.
     uniformData[85] = this.pixelRatio;
-    uniformData[86] = 0;
+    uniformData[86] = visual.colorBySymmetry ? 1 : 0;
     uniformData[87] = visual.clipNear > 0 ? 1 : 0;
 
     uniformData.set(slot.sceneTransform, 88);
