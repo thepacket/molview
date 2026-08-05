@@ -29,6 +29,8 @@ interface SlotData {
 const EMPTY_BONDS: BondList = { indices: new Uint32Array(0), count: 0 };
 /** Above this, whole-structure bond perception is not worth the stall. */
 const BOND_PERCEPTION_LIMIT = 250_000;
+/** copies x atoms above which assembly 1 is offered but not auto-selected. */
+const ASSEMBLY_AUTO_LIMIT = 20_000_000;
 
 function emptySlotData(): SlotData {
   return {
@@ -179,7 +181,10 @@ export class ViewerController {
 
       // A structure that is mostly nucleic or ligand should not open as an
       // empty cartoon; pick a representation that will actually show something.
-      this.autoSelectRepresentation(slot, s);
+      // Assembly first: it decides how many atoms are really on screen, which
+      // is what the representation choice has to be based on.
+      const copies = this.autoSelectAssembly(slot, s);
+      this.autoSelectRepresentation(slot, s, s.atomCount * copies);
       this.rebuild(slot);
       // Frame after the rebuild, not inside it: a store subscriber may already
       // have built this slot's geometry, and that path must never move a
@@ -197,7 +202,20 @@ export class ViewerController {
     }
   }
 
-  private autoSelectRepresentation(slot: number, s: Structure): void {
+  /**
+   * The deposited coordinates are the asymmetric unit, which is frequently not
+   * the biological molecule, so assembly 1 is the more honest default. The
+   * guard is for icosahedral entries whose complete assembly is a few thousand
+   * copies — those stay opt-in rather than ambushing the user on load.
+   */
+  private autoSelectAssembly(slot: number, s: Structure): number {
+    const first = s.assemblies.find((a) => a.id === '1');
+    const use = first && first.totalCopies * s.atomCount <= ASSEMBLY_AUTO_LIMIT;
+    useStore.getState().patchSlot(slot, { assemblyId: use ? first.id : '' });
+    return use ? first.totalCopies : 1;
+  }
+
+  private autoSelectRepresentation(slot: number, s: Structure, effectiveAtoms: number): void {
     let polymerResidues = 0;
     for (let r = 0; r < s.residueCount; r++) {
       const k = s.resKind[r];
@@ -209,7 +227,7 @@ export class ViewerController {
     const store = useStore.getState();
     if (polymerResidues === 0) {
       store.updateRepresentation(slot, { polymer: 'ball-stick', ligand: 'ball-stick' });
-    } else if (s.atomCount > 400_000) {
+    } else if (effectiveAtoms > 400_000) {
       // At assembly scale a ribbon is thinner than a pixel and the structure
       // reads as noise; spheres are both clearer and cheaper to build.
       store.updateRepresentation(slot, { polymer: 'spacefill', ligand: 'none' });
@@ -236,7 +254,7 @@ export class ViewerController {
     return [
       r.polymer, r.ligand, r.showWater, r.showIons, r.showHydrogens,
       r.atomScale, r.bondRadius, [...r.hiddenChains].sort().join(','),
-      state.colorScheme, state.uniformColor,
+      state.colorScheme, state.uniformColor, state.assemblyId,
     ].join('|');
   }
 
@@ -272,26 +290,28 @@ export class ViewerController {
       paletteOffset: slot * 3,
     });
 
+    const assembly = structure.assemblies.find((a) => a.id === state.assemblyId) ?? null;
+
     const geometry = buildGeometry(
       structure,
       colors,
       rep,
       data.ligandBonds,
       needsAllBonds ? data.allBonds : null,
+      assembly,
     );
 
     data.geometry = geometry;
     data.builtSignature = signature;
     this.engine.setGeometry(slot, geometry);
 
-    const triangles = geometry.cartoon ? geometry.cartoon.indices.length / 3 : 0;
     useStore.getState().patchSlot(slot, {
       stats: {
-        atoms: structure.atomCount,
+        atoms: geometry.totalAtoms,
         residues: structure.residueCount,
-        chains: structure.chainCount,
-        triangles,
-        instances: geometry.sphereCount + geometry.cylinderCount,
+        chains: geometry.totalChains,
+        triangles: geometry.totalTriangles,
+        instances: geometry.totalSpheres + geometry.totalCylinders,
       },
     });
 
@@ -537,11 +557,13 @@ export class ViewerController {
     const structure = this.data[slot].structure;
     if (!structure) return;
 
-    // Picking is a linear scan over atom centres — about 6 ms on a 2.4M-atom
-    // capsid. Stretch the hover interval with structure size so the cost stays
-    // a small fraction of the frame budget instead of fighting the renderer.
+    // Picking is a linear scan over atom centres, repeated for every assembly
+    // copy the ray could touch. Stretch the hover interval with the size of the
+    // scene actually on screen so the cost stays a small fraction of the frame
+    // budget instead of fighting the renderer.
     const now = performance.now();
-    const interval = Math.max(45, structure.atomCount / 20000);
+    const sceneAtoms = this.data[slot].geometry?.totalAtoms ?? structure.atomCount;
+    const interval = Math.max(45, sceneAtoms / 20000);
     if (now - this.lastHoverTime < interval) return;
     this.lastHoverTime = now;
 

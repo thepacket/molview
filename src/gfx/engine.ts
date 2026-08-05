@@ -9,7 +9,7 @@
  */
 
 import { Camera } from './camera';
-import { CARTOON_STRIDE, CYLINDER_STRIDE, SPHERE_STRIDE, type SceneGeometry } from './geometry';
+import { CARTOON_STRIDE, type SceneGeometry } from './geometry';
 import type { Structure } from '../mol/structure';
 
 import commonWgsl from './shaders/common.wgsl?raw';
@@ -50,9 +50,26 @@ export const DEFAULT_VISUAL_SETTINGS: SlotVisualSettings = {
   clipNear: 0,
 };
 
-interface GpuBufferSet {
-  buffer: GPUBuffer;
-  count: number;
+/** GPU resources for one geometry group and the transforms it repeats under. */
+interface GpuGroup {
+  spheres: GPUBuffer | null;
+  sphereCount: number;
+  sphereBind: GPUBindGroup | null;
+  cylinders: GPUBuffer | null;
+  cylinderCount: number;
+  cylinderBind: GPUBindGroup | null;
+  cartoonVertices: GPUBuffer | null;
+  cartoonIndices: GPUBuffer | null;
+  cartoonIndexCount: number;
+  cartoonBind: GPUBindGroup | null;
+  transformBuffer: GPUBuffer;
+  transformCount: number;
+  /** CPU copies kept for picking. */
+  transforms: Float32Array;
+  localMin: Float32Array;
+  localMax: Float32Array;
+  /** Atoms this group draws; null means all of them. */
+  atomMask: Uint8Array | null;
 }
 
 interface Slot {
@@ -60,11 +77,7 @@ interface Slot {
   uniformBuffer: GPUBuffer;
   bindGroup: GPUBindGroup;
   uniformData: Float32Array;
-  spheres: GpuBufferSet | null;
-  cylinders: GpuBufferSet | null;
-  cartoonVertices: GPUBuffer | null;
-  cartoonIndices: GPUBuffer | null;
-  cartoonIndexCount: number;
+  groups: GpuGroup[];
   structure: Structure | null;
   visual: SlotVisualSettings;
   rect: ViewportRect;
@@ -92,6 +105,10 @@ export class Engine {
 
   private cameraLayout!: GPUBindGroupLayout;
   private gbufferLayout!: GPUBindGroupLayout;
+  /** Instance data + transforms, for spheres and cylinders. */
+  private instanceLayout!: GPUBindGroupLayout;
+  /** Transforms only, for the cartoon mesh. */
+  private transformLayout!: GPUBindGroupLayout;
   private gbufferBindGroup: GPUBindGroup | null = null;
 
   private albedoTexture: GPUTexture | null = null;
@@ -175,6 +192,19 @@ export class Engine {
       }],
     });
 
+    const storage: GPUBufferBindingLayout = { type: 'read-only-storage' };
+    this.instanceLayout = this.device.createBindGroupLayout({
+      label: 'instances',
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: storage },
+        { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: storage },
+      ],
+    });
+    this.transformLayout = this.device.createBindGroupLayout({
+      label: 'transforms',
+      entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: storage }],
+    });
+
     this.gbufferLayout = this.device.createBindGroupLayout({
       label: 'gbuffer',
       entries: [
@@ -211,26 +241,18 @@ export class Engine {
       depthWriteEnabled: true,
       depthCompare: 'less',
     };
-    const cameraPipelineLayout = this.device.createPipelineLayout({
-      bindGroupLayouts: [this.cameraLayout],
+    const instancePipelineLayout = this.device.createPipelineLayout({
+      bindGroupLayouts: [this.cameraLayout, this.instanceLayout],
+    });
+    const transformPipelineLayout = this.device.createPipelineLayout({
+      bindGroupLayouts: [this.cameraLayout, this.transformLayout],
     });
 
     const sphereModule = this.module(spheresWgsl, 'spheres');
     this.spherePipeline = this.device.createRenderPipeline({
       label: 'sphere-impostors',
-      layout: cameraPipelineLayout,
-      vertex: {
-        module: sphereModule,
-        entryPoint: 'vs',
-        buffers: [{
-          arrayStride: SPHERE_STRIDE * 4,
-          stepMode: 'instance',
-          attributes: [
-            { shaderLocation: 0, offset: 0, format: 'float32x4' },
-            { shaderLocation: 1, offset: 16, format: 'float32x4' },
-          ],
-        }],
-      },
+      layout: instancePipelineLayout,
+      vertex: { module: sphereModule, entryPoint: 'vs' },
       fragment: { module: sphereModule, entryPoint: 'fs', targets: gbufferTargets },
       primitive: { topology: 'triangle-strip' },
       depthStencil,
@@ -239,29 +261,18 @@ export class Engine {
     const cylinderModule = this.module(cylindersWgsl, 'cylinders');
     this.cylinderPipeline = this.device.createRenderPipeline({
       label: 'cylinders',
-      layout: cameraPipelineLayout,
+      layout: instancePipelineLayout,
       vertex: {
         module: cylinderModule,
         entryPoint: 'vs',
-        buffers: [
-          {
-            arrayStride: 24,
-            stepMode: 'vertex',
-            attributes: [
-              { shaderLocation: 0, offset: 0, format: 'float32x3' },
-              { shaderLocation: 1, offset: 12, format: 'float32x3' },
-            ],
-          },
-          {
-            arrayStride: CYLINDER_STRIDE * 4,
-            stepMode: 'instance',
-            attributes: [
-              { shaderLocation: 2, offset: 0, format: 'float32x4' },
-              { shaderLocation: 3, offset: 16, format: 'float32x4' },
-              { shaderLocation: 4, offset: 32, format: 'float32x4' },
-            ],
-          },
-        ],
+        buffers: [{
+          arrayStride: 24,
+          stepMode: 'vertex',
+          attributes: [
+            { shaderLocation: 0, offset: 0, format: 'float32x3' },
+            { shaderLocation: 1, offset: 12, format: 'float32x3' },
+          ],
+        }],
       },
       fragment: { module: cylinderModule, entryPoint: 'fs', targets: gbufferTargets },
       primitive: { topology: 'triangle-list', cullMode: 'back' },
@@ -271,7 +282,7 @@ export class Engine {
     const cartoonModule = this.module(cartoonWgsl, 'cartoon');
     this.cartoonPipeline = this.device.createRenderPipeline({
       label: 'cartoon',
-      layout: cameraPipelineLayout,
+      layout: transformPipelineLayout,
       vertex: {
         module: cartoonModule,
         entryPoint: 'vs',
@@ -361,11 +372,7 @@ export class Engine {
           entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
         }),
         uniformData: new Float32Array(UNIFORM_BYTES / 4),
-        spheres: null,
-        cylinders: null,
-        cartoonVertices: null,
-        cartoonIndices: null,
-        cartoonIndexCount: 0,
+        groups: [],
         structure: null,
         visual: { ...DEFAULT_VISUAL_SETTINGS },
         rect: { x: 0, y: 0, width: 1, height: 1 },
@@ -391,36 +398,75 @@ export class Engine {
     this.slots[slot].structure = structure;
   }
 
+  private releaseGroups(slot: Slot): void {
+    for (const g of slot.groups) {
+      g.spheres?.destroy();
+      g.cylinders?.destroy();
+      g.cartoonVertices?.destroy();
+      g.cartoonIndices?.destroy();
+      g.transformBuffer.destroy();
+    }
+    slot.groups = [];
+  }
+
   setGeometry(slot: number, geometry: SceneGeometry | null): void {
     const s = this.slots[slot];
-    s.spheres?.buffer.destroy();
-    s.cylinders?.buffer.destroy();
-    s.cartoonVertices?.destroy();
-    s.cartoonIndices?.destroy();
-    s.spheres = null;
-    s.cylinders = null;
-    s.cartoonVertices = null;
-    s.cartoonIndices = null;
-    s.cartoonIndexCount = 0;
-    s.active = geometry !== null;
+    this.releaseGroups(s);
+    s.active = geometry !== null && geometry.groups.length > 0;
     if (!geometry) return;
 
-    if (geometry.sphereCount > 0) {
-      s.spheres = {
-        buffer: this.createBuffer(geometry.spheres, GPUBufferUsage.VERTEX),
-        count: geometry.sphereCount,
+    for (const group of geometry.groups) {
+      const transformBuffer = this.createBuffer(group.transforms, GPUBufferUsage.STORAGE);
+      const gpu: GpuGroup = {
+        spheres: null,
+        sphereCount: group.sphereCount,
+        sphereBind: null,
+        cylinders: null,
+        cylinderCount: group.cylinderCount,
+        cylinderBind: null,
+        cartoonVertices: null,
+        cartoonIndices: null,
+        cartoonIndexCount: 0,
+        cartoonBind: null,
+        transformBuffer,
+        transformCount: group.transformCount,
+        transforms: group.transforms,
+        localMin: group.localMin,
+        localMax: group.localMax,
+        atomMask: group.atomMask,
       };
-    }
-    if (geometry.cylinderCount > 0) {
-      s.cylinders = {
-        buffer: this.createBuffer(geometry.cylinders, GPUBufferUsage.VERTEX),
-        count: geometry.cylinderCount,
-      };
-    }
-    if (geometry.cartoon) {
-      s.cartoonVertices = this.createBuffer(geometry.cartoon.vertices, GPUBufferUsage.VERTEX);
-      s.cartoonIndices = this.createBuffer(geometry.cartoon.indices, GPUBufferUsage.INDEX);
-      s.cartoonIndexCount = geometry.cartoon.indices.length;
+
+      if (group.sphereCount > 0) {
+        gpu.spheres = this.createBuffer(group.spheres, GPUBufferUsage.STORAGE);
+        gpu.sphereBind = this.device.createBindGroup({
+          layout: this.instanceLayout,
+          entries: [
+            { binding: 0, resource: { buffer: gpu.spheres } },
+            { binding: 1, resource: { buffer: transformBuffer } },
+          ],
+        });
+      }
+      if (group.cylinderCount > 0) {
+        gpu.cylinders = this.createBuffer(group.cylinders, GPUBufferUsage.STORAGE);
+        gpu.cylinderBind = this.device.createBindGroup({
+          layout: this.instanceLayout,
+          entries: [
+            { binding: 0, resource: { buffer: gpu.cylinders } },
+            { binding: 1, resource: { buffer: transformBuffer } },
+          ],
+        });
+      }
+      if (group.cartoon) {
+        gpu.cartoonVertices = this.createBuffer(group.cartoon.vertices, GPUBufferUsage.VERTEX);
+        gpu.cartoonIndices = this.createBuffer(group.cartoon.indices, GPUBufferUsage.INDEX);
+        gpu.cartoonIndexCount = group.cartoon.indices.length;
+        gpu.cartoonBind = this.device.createBindGroup({
+          layout: this.transformLayout,
+          entries: [{ binding: 0, resource: { buffer: transformBuffer } }],
+        });
+      }
+
+      s.groups.push(gpu);
     }
 
     s.camera.sceneRadius = geometry.radius;
@@ -576,25 +622,32 @@ export class Engine {
       geometryPass.setScissorRect(vx, vy, vw, vh);
       geometryPass.setBindGroup(0, slot.bindGroup);
 
-      if (slot.cartoonIndexCount > 0 && slot.cartoonVertices && slot.cartoonIndices) {
-        geometryPass.setPipeline(this.cartoonPipeline);
-        geometryPass.setVertexBuffer(0, slot.cartoonVertices);
-        geometryPass.setIndexBuffer(slot.cartoonIndices, 'uint32');
-        geometryPass.drawIndexed(slot.cartoonIndexCount);
-      }
+      for (const group of slot.groups) {
+        // Instance counts are multiplied by the transform count; the shaders
+        // divide back out to recover which copy they are drawing.
+        if (group.cartoonIndexCount > 0 && group.cartoonVertices && group.cartoonIndices) {
+          geometryPass.setPipeline(this.cartoonPipeline);
+          geometryPass.setBindGroup(1, group.cartoonBind!);
+          geometryPass.setVertexBuffer(0, group.cartoonVertices);
+          geometryPass.setIndexBuffer(group.cartoonIndices, 'uint32');
+          geometryPass.drawIndexed(group.cartoonIndexCount, group.transformCount);
+        }
 
-      if (slot.cylinders) {
-        geometryPass.setPipeline(this.cylinderPipeline);
-        geometryPass.setVertexBuffer(0, this.cylinderMesh.vertices);
-        geometryPass.setVertexBuffer(1, slot.cylinders.buffer);
-        geometryPass.setIndexBuffer(this.cylinderMesh.indices, 'uint32');
-        geometryPass.drawIndexed(this.cylinderMesh.indexCount, slot.cylinders.count);
-      }
+        if (group.cylinders) {
+          geometryPass.setPipeline(this.cylinderPipeline);
+          geometryPass.setBindGroup(1, group.cylinderBind!);
+          geometryPass.setVertexBuffer(0, this.cylinderMesh.vertices);
+          geometryPass.setIndexBuffer(this.cylinderMesh.indices, 'uint32');
+          geometryPass.drawIndexed(
+            this.cylinderMesh.indexCount, group.cylinderCount * group.transformCount,
+          );
+        }
 
-      if (slot.spheres) {
-        geometryPass.setPipeline(this.spherePipeline);
-        geometryPass.setVertexBuffer(0, slot.spheres.buffer);
-        geometryPass.draw(4, slot.spheres.count);
+        if (group.spheres) {
+          geometryPass.setPipeline(this.spherePipeline);
+          geometryPass.setBindGroup(1, group.sphereBind!);
+          geometryPass.draw(4, group.sphereCount * group.transformCount);
+        }
       }
     }
     geometryPass.end();
@@ -667,14 +720,56 @@ export class Engine {
     let bestAtom = -1;
     const { x, y, z, atomCount } = structure;
 
-    for (let i = 0; i < atomCount; i++) {
-      const ox = x[i] - near[0], oy = y[i] - near[1], oz = z[i] - near[2];
-      const t = ox * rx + oy * ry + oz * rz;
-      if (t <= 0 || t >= bestT) continue;
-      const px = ox - rx * t, py = oy - ry * t, pz = oz - rz * t;
-      if (px * px + py * py + pz * pz > radius * radius) continue;
-      bestT = t;
-      bestAtom = i;
+    // Scratch for the ray pushed into a copy's local frame.
+    const lo = new Float32Array(3);
+    const ld = new Float32Array(3);
+
+    for (const group of s.groups) {
+      // Bounding sphere of the group in its own frame.
+      const cx = (group.localMin[0] + group.localMax[0]) / 2;
+      const cy = (group.localMin[1] + group.localMax[1]) / 2;
+      const cz = (group.localMin[2] + group.localMax[2]) / 2;
+      const boundRadius = 0.5 * Math.hypot(
+        group.localMax[0] - group.localMin[0],
+        group.localMax[1] - group.localMin[1],
+        group.localMax[2] - group.localMin[2],
+      ) + radius;
+
+      for (let t = 0; t < group.transformCount; t++) {
+        const m = group.transforms;
+        const o = t * 16;
+
+        // Cull first: most assembly copies are nowhere near the cursor, and a
+        // full atom scan per copy would be hopeless on a 60-fold capsid.
+        const wcx = m[o] * cx + m[o + 4] * cy + m[o + 8] * cz + m[o + 12];
+        const wcy = m[o + 1] * cx + m[o + 5] * cy + m[o + 9] * cz + m[o + 13];
+        const wcz = m[o + 2] * cx + m[o + 6] * cy + m[o + 10] * cz + m[o + 14];
+        const dx0 = wcx - near[0], dy0 = wcy - near[1], dz0 = wcz - near[2];
+        const along = dx0 * rx + dy0 * ry + dz0 * rz;
+        const perpSq = dx0 * dx0 + dy0 * dy0 + dz0 * dz0 - along * along;
+        if (perpSq > boundRadius * boundRadius) continue;
+
+        // Rigid inverse: transpose the rotation, undo the translation.
+        const px0 = near[0] - m[o + 12], py0 = near[1] - m[o + 13], pz0 = near[2] - m[o + 14];
+        lo[0] = m[o] * px0 + m[o + 1] * py0 + m[o + 2] * pz0;
+        lo[1] = m[o + 4] * px0 + m[o + 5] * py0 + m[o + 6] * pz0;
+        lo[2] = m[o + 8] * px0 + m[o + 9] * py0 + m[o + 10] * pz0;
+        ld[0] = m[o] * rx + m[o + 1] * ry + m[o + 2] * rz;
+        ld[1] = m[o + 4] * rx + m[o + 5] * ry + m[o + 6] * rz;
+        ld[2] = m[o + 8] * rx + m[o + 9] * ry + m[o + 10] * rz;
+
+        const mask = group.atomMask;
+        for (let i = 0; i < atomCount; i++) {
+          if (mask && !mask[i]) continue;
+          const ox = x[i] - lo[0], oy = y[i] - lo[1], oz = z[i] - lo[2];
+          const tt = ox * ld[0] + oy * ld[1] + oz * ld[2];
+          if (tt <= 0 || tt >= bestT) continue;
+          const qx = ox - ld[0] * tt, qy = oy - ld[1] * tt, qz = oz - ld[2] * tt;
+          if (qx * qx + qy * qy + qz * qz > radius * radius) continue;
+          bestT = tt;
+          bestAtom = i;
+        }
+      }
     }
 
     if (bestAtom < 0) return null;
@@ -687,10 +782,7 @@ export class Engine {
 
   destroy(): void {
     for (const s of this.slots) {
-      s.spheres?.buffer.destroy();
-      s.cylinders?.buffer.destroy();
-      s.cartoonVertices?.destroy();
-      s.cartoonIndices?.destroy();
+      this.releaseGroups(s);
       s.uniformBuffer.destroy();
     }
     this.albedoTexture?.destroy();

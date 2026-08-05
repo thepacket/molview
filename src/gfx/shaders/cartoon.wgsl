@@ -14,13 +14,21 @@ struct VSOut {
   @location(2) viewZ: f32,
 };
 
+// One matrix per assembly copy; the mesh is drawn once per transform.
+@group(1) @binding(0) var<storage, read> transforms: array<mat4x4f>;
+
 @vertex
-fn vs(v: Vertex) -> VSOut {
+fn vs(v: Vertex, @builtin(instance_index) ii: u32) -> VSOut {
+  let model = transforms[ii];
+  let world = (model * vec4f(v.position, 1.0)).xyz;
+  let worldNormal = (model * vec4f(v.normal, 0.0)).xyz;
+  let viewPos = cam.view * vec4f(world, 1.0);
+
   var out: VSOut;
-  out.position = cam.viewProj * vec4f(v.position, 1.0);
-  out.normalView = (cam.view * vec4f(v.normal, 0.0)).xyz;
+  out.position = cam.proj * viewPos;
+  out.normalView = (cam.view * vec4f(worldNormal, 0.0)).xyz;
   out.color = v.color;
-  out.viewZ = (cam.view * vec4f(v.position, 1.0)).z;
+  out.viewZ = viewPos.z;
   return out;
 }
 

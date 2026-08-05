@@ -3,9 +3,16 @@
 // way to draw a few hundred thousand atoms without drowning in triangles.
 
 struct Instance {
-  @location(0) centerRadius: vec4f,
-  @location(1) colorPick: vec4f,
+  centerRadius: vec4f,
+  colorPick: vec4f,
 };
+
+// Instance data lives in storage rather than a vertex buffer so one draw can
+// replay it under every assembly transform: instance i is atom (i % n) placed
+// by transform (i / n). A 60-fold capsid costs sixty matrices, not sixty
+// copies of the atoms.
+@group(1) @binding(0) var<storage, read> spheres: array<Instance>;
+@group(1) @binding(1) var<storage, read> transforms: array<mat4x4f>;
 
 struct VSOut {
   @builtin(position) position: vec4f,
@@ -15,8 +22,13 @@ struct VSOut {
 };
 
 @vertex
-fn vs(@builtin(vertex_index) vi: u32, inst: Instance) -> VSOut {
-  let center = inst.centerRadius.xyz;
+fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut {
+  let n = arrayLength(&spheres);
+  let inst = spheres[ii % n];
+  let model = transforms[ii / n];
+
+  // Assembly operators are rigid, so the radius carries over unchanged.
+  let center = (model * vec4f(inst.centerRadius.xyz, 1.0)).xyz;
   let radius = inst.centerRadius.w;
   let centerView = (cam.view * vec4f(center, 1.0)).xyz;
 

@@ -227,4 +227,7 @@ export const STRUCTURE_CATEGORIES: ReadonlySet<string> = new Set([
   'chem_comp',
   'entry',
   'struct',
+  'pdbx_struct_assembly',
+  'pdbx_struct_assembly_gen',
+  'pdbx_struct_oper_list',
 ]);

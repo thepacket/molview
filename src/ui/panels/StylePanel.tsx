@@ -1,6 +1,7 @@
 /** Representation, colouring and shading controls for the active pane. */
 
 import { Crosshair, Eye, EyeOff } from 'lucide-react';
+import type { Assembly } from '../../mol/assembly';
 import { COLOR_SCHEME_LABELS, CHAIN_PALETTE, type ColorScheme } from '../../mol/coloring';
 import { MolKind } from '../../mol/structure';
 import type { LigandStyle, PolymerStyle } from '../../gfx/geometry';
@@ -75,8 +76,46 @@ export function StylePanel() {
     }
   }
 
+  // The deposited coordinates are one option among the file's assemblies.
+  const assemblyOptions = [
+    { value: '', label: `Asymmetric unit (${structure.chainCount} chains)` },
+    ...structure.assemblies.map((a) => ({
+      value: a.id,
+      label: `Assembly ${a.id} — ${describeAssembly(a)}`,
+    })),
+  ];
+  const activeAssembly = structure.assemblies.find((a) => a.id === slot.assemblyId);
+
   return (
     <>
+      {structure.assemblies.length > 0 && (
+        <div className="panel-section">
+          <div className="section-label"><span>Biological assembly</span></div>
+          <Select
+            ariaLabel="Biological assembly"
+            value={slot.assemblyId}
+            options={assemblyOptions}
+            onChange={(v) => patchSlot(activeSlot, { assemblyId: v })}
+          />
+          <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
+            {activeAssembly
+              ? `${activeAssembly.totalCopies} cop${activeAssembly.totalCopies === 1 ? 'y' : 'ies'} `
+                + `of the asymmetric unit, generated on the GPU — no extra atoms are stored.`
+              : 'The coordinates as deposited. This is often not the biological molecule.'}
+          </p>
+          {activeAssembly && (
+            <button
+              type="button"
+              className="btn small"
+              style={{ width: '100%', marginTop: 7 }}
+              onClick={() => viewer.frameSlot(activeSlot, true)}
+            >
+              Fit assembly in view
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="panel-section">
         <div className="section-label"><span>Representation</span></div>
         <Field label="Polymer">
@@ -299,6 +338,15 @@ export function StylePanel() {
       </div>
     </>
   );
+}
+
+function describeAssembly(a: Assembly): string {
+  // Depositors write either a machine tag or a human phrase; prefer the phrase.
+  const detail = a.details && !a.details.includes('_defined_assembly')
+    ? a.details
+    : a.oligomericDetails;
+  const chains = a.oligomericCount > 0 ? `${a.oligomericCount} chains` : `${a.totalCopies}x`;
+  return detail ? `${detail}, ${chains}` : chains;
 }
 
 function kindLabel(kind: number): string {

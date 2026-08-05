@@ -43,6 +43,8 @@ export interface SlotState {
   error: string | null;
   detail: EntryDetail | null;
   representation: Representation;
+  /** Assembly id from the file, or '' for the deposited asymmetric unit. */
+  assemblyId: string;
   colorScheme: ColorScheme;
   uniformColor: number;
   visual: SlotVisualSettings;
@@ -64,6 +66,7 @@ function emptySlot(): SlotState {
     error: null,
     detail: null,
     representation: { ...DEFAULT_REPRESENTATION, hiddenChains: new Set() },
+    assemblyId: '',
     colorScheme: 'chain',
     uniformColor: 0x7bb0ff,
     visual: { ...DEFAULT_VISUAL_SETTINGS },

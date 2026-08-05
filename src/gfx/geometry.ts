@@ -7,6 +7,7 @@
  */
 
 import type { BondList } from '../mol/bonds';
+import { identityTransform, type Assembly } from '../mol/assembly';
 import { VDW_RADII } from '../mol/elements';
 import { MolKind, SS, type Structure } from '../mol/structure';
 import type { ColorProvider } from '../mol/coloring';
@@ -47,21 +48,52 @@ export interface MeshData {
   indices: Uint32Array;
 }
 
-export interface SceneGeometry {
+/**
+ * One buildable unit of the scene: geometry for a set of chains, plus the
+ * transforms it is replicated by. An asymmetric unit is a single group with one
+ * identity transform; an icosahedral assembly is a group with sixty.
+ */
+export interface GeometryGroup {
   spheres: Float32Array;
   sphereCount: number;
   cylinders: Float32Array;
   cylinderCount: number;
   cartoon: MeshData | null;
-  /** Bounds of everything actually drawn, for framing. */
+  /** Column-major 4x4 matrices, 16 floats per copy. */
+  transforms: Float32Array;
+  transformCount: number;
+  /** Untransformed bounds, used for framing and for culling picks. */
+  localMin: Float32Array;
+  localMax: Float32Array;
+  /** Atoms belonging to this group's chains; null means every atom. */
+  atomMask: Uint8Array | null;
+  /** Atoms and chains this group covers, before transforms. */
+  atomCount: number;
+  chainCount: number;
+}
+
+export interface SceneGeometry {
+  groups: GeometryGroup[];
+  /** Bounds of everything actually drawn, transforms included. */
   center: Float32Array;
   radius: number;
+  totalSpheres: number;
+  totalCylinders: number;
+  totalTriangles: number;
+  /** Atoms and chains present in the scene once transforms are applied. */
+  totalAtoms: number;
+  totalChains: number;
 }
 
 const HYDROGEN = 1;
 
-function chainVisible(s: Structure, chain: number, rep: Representation): boolean {
-  return !rep.hiddenChains.has(s.chainAuthId[chain]);
+function chainVisible(
+  s: Structure, chain: number, rep: Representation, allowedAsyms: ReadonlySet<string> | null,
+): boolean {
+  if (rep.hiddenChains.has(s.chainAuthId[chain])) return false;
+  // Assembly generators name the chains they replicate by label_asym_id.
+  if (allowedAsyms && !allowedAsyms.has(s.chainLabelId[chain])) return false;
+  return true;
 }
 
 /** Which style applies to a residue, given its kind. */
@@ -100,7 +132,86 @@ export function buildGeometry(
   rep: Representation,
   ligandBonds: BondList,
   allBonds: BondList | null,
+  assembly: Assembly | null,
 ): SceneGeometry {
+  const groups: GeometryGroup[] = [];
+
+  if (!assembly) {
+    groups.push(buildGroup(s, colors, rep, ligandBonds, allBonds, null, identityTransform(), 1));
+  } else {
+    for (const gen of assembly.gens) {
+      const group = buildGroup(
+        s, colors, rep, ligandBonds, allBonds,
+        new Set(gen.asymIds), gen.transforms, gen.count,
+      );
+      if (group.sphereCount > 0 || group.cylinderCount > 0 || group.cartoon) {
+        groups.push(group);
+      }
+    }
+  }
+
+  // Global bounds: every group's local box, pushed through every transform.
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+  for (const group of groups) {
+    const { localMin: lo, localMax: hi, transforms } = group;
+    if (!Number.isFinite(lo[0])) continue;
+    for (let t = 0; t < group.transformCount; t++) {
+      const o = t * 16;
+      for (let corner = 0; corner < 8; corner++) {
+        const cx = (corner & 1) ? hi[0] : lo[0];
+        const cy = (corner & 2) ? hi[1] : lo[1];
+        const cz = (corner & 4) ? hi[2] : lo[2];
+        const x = transforms[o] * cx + transforms[o + 4] * cy + transforms[o + 8] * cz + transforms[o + 12];
+        const y = transforms[o + 1] * cx + transforms[o + 5] * cy + transforms[o + 9] * cz + transforms[o + 13];
+        const z = transforms[o + 2] * cx + transforms[o + 6] * cy + transforms[o + 10] * cz + transforms[o + 14];
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+      }
+    }
+  }
+
+  if (!Number.isFinite(minX)) {
+    minX = minY = minZ = -1; maxX = maxY = maxZ = 1;
+  }
+
+  let totalSpheres = 0;
+  let totalCylinders = 0;
+  let totalTriangles = 0;
+  let totalAtoms = 0;
+  let totalChains = 0;
+  for (const g of groups) {
+    totalSpheres += g.sphereCount * g.transformCount;
+    totalCylinders += g.cylinderCount * g.transformCount;
+    totalTriangles += (g.cartoon ? g.cartoon.indices.length / 3 : 0) * g.transformCount;
+    totalAtoms += g.atomCount * g.transformCount;
+    totalChains += g.chainCount * g.transformCount;
+  }
+
+  return {
+    groups,
+    center: Float32Array.from([(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2]),
+    radius: Math.max(0.5 * Math.hypot(maxX - minX, maxY - minY, maxZ - minZ), 1),
+    totalSpheres,
+    totalCylinders,
+    totalTriangles,
+    totalAtoms,
+    totalChains,
+  };
+}
+
+function buildGroup(
+  s: Structure,
+  colors: ColorProvider,
+  rep: Representation,
+  ligandBonds: BondList,
+  allBonds: BondList | null,
+  allowedAsyms: ReadonlySet<string> | null,
+  transforms: Float32Array,
+  transformCount: number,
+): GeometryGroup {
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
   const grow = (x: number, y: number, z: number, r: number) => {
@@ -108,6 +219,8 @@ export function buildGeometry(
     if (y - r < minY) minY = y - r; if (y + r > maxY) maxY = y + r;
     if (z - r < minZ) minZ = z - r; if (z + r > maxZ) maxZ = z + r;
   };
+
+  const coverage = chainCoverage(s, rep, allowedAsyms);
 
   // Pass 1: decide what is drawn and how big the buffers need to be. A
   // spacefill capsid is 2.4 million atoms; growing a JS array to hold that
@@ -117,7 +230,7 @@ export function buildGeometry(
   let sphereCount = 0;
 
   for (let r = 0; r < s.residueCount; r++) {
-    if (!chainVisible(s, s.resChain[r], rep)) continue;
+    if (!chainVisible(s, s.resChain[r], rep, allowedAsyms)) continue;
 
     const kind = s.resKind[r];
     const style = styleFor(kind, rep);
@@ -208,15 +321,11 @@ export function buildGeometry(
   // ---- cartoon ----
   let cartoon: MeshData | null = null;
   if (rep.polymer === 'cartoon' || rep.polymer === 'backbone') {
-    cartoon = buildCartoon(s, colors, rep, rep.polymer === 'backbone');
+    cartoon = buildCartoon(s, colors, rep, rep.polymer === 'backbone', allowedAsyms);
     if (cartoon) {
       const v = cartoon.vertices;
       for (let i = 0; i < v.length; i += CARTOON_STRIDE) grow(v[i], v[i + 1], v[i + 2], 0);
     }
-  }
-
-  if (!Number.isFinite(minX)) {
-    minX = minY = minZ = -1; maxX = maxY = maxZ = 1;
   }
 
   return {
@@ -225,9 +334,39 @@ export function buildGeometry(
     cylinders,
     cylinderCount: bondCount * 2,
     cartoon,
-    center: Float32Array.from([(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2]),
-    radius: Math.max(0.5 * Math.hypot(maxX - minX, maxY - minY, maxZ - minZ), 1),
+    transforms,
+    transformCount,
+    localMin: Float32Array.from([minX, minY, minZ]),
+    localMax: Float32Array.from([maxX, maxY, maxZ]),
+    // Picking needs every atom of the group's chains, including ones the
+    // cartoon replaced — you should still be able to click a ribbon.
+    atomMask: coverage.mask,
+    atomCount: coverage.atoms,
+    chainCount: coverage.chains,
   };
+}
+
+/** Atoms and chains a group covers, plus the pick mask when it is a subset. */
+function chainCoverage(
+  s: Structure, rep: Representation, allowedAsyms: ReadonlySet<string> | null,
+): { mask: Uint8Array | null; atoms: number; chains: number } {
+  const mask = allowedAsyms ? new Uint8Array(s.atomCount) : null;
+  let atoms = 0;
+  let chains = 0;
+
+  for (let c = 0; c < s.chainCount; c++) {
+    if (!chainVisible(s, c, rep, allowedAsyms)) continue;
+    chains++;
+    const rStart = s.chainResStart[c];
+    const rEnd = s.chainResStart[c + 1];
+    if (rEnd <= rStart) continue;
+    const aStart = s.resAtomStart[rStart];
+    const aEnd = s.resAtomStart[rEnd];
+    atoms += aEnd - aStart;
+    if (mask) mask.fill(1, aStart, aEnd);
+  }
+
+  return { mask, atoms, chains };
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +408,7 @@ function catmullRom(
 
 function buildCartoon(
   s: Structure, colors: ColorProvider, rep: Representation, traceOnly: boolean,
+  allowedAsyms: ReadonlySet<string> | null,
 ): MeshData | null {
   const { subdiv, sides } = quality(s.residueCount);
 
@@ -284,7 +424,7 @@ function buildCartoon(
   for (let c = 0; c < s.chainCount; c++) {
     const kind = s.chainKind[c];
     if (kind !== MolKind.Protein && kind !== MolKind.Nucleic) continue;
-    if (!chainVisible(s, c, rep)) continue;
+    if (!chainVisible(s, c, rep, allowedAsyms)) continue;
 
     const maxGap = kind === MolKind.Nucleic ? 9 : 5.2;
     const start = s.chainResStart[c];
