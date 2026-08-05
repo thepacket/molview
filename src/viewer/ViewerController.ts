@@ -37,7 +37,15 @@ interface SlotData {
   loadHandle: LoadHandle | null;
   /** Snapshot of the settings the current geometry was built from. */
   builtSignature: string;
+  /** Raw bytes of a locally opened file, kept so projects can embed them. */
+  sourceFile: { name: string; buffer: ArrayBuffer } | null;
 }
+
+/**
+ * Above this a local file is not worth holding a second copy of, and embedding
+ * it in a project would be impractical anyway.
+ */
+const EMBEDDABLE_FILE_LIMIT = 25 * 1024 * 1024;
 
 const EMPTY_BONDS: BondList = { indices: new Uint32Array(0), count: 0 };
 const EMPTY_F32 = new Float32Array(0);
@@ -74,6 +82,7 @@ function emptySlotData(): SlotData {
     hydrogenBonds: [],
     loadHandle: null,
     builtSignature: '',
+    sourceFile: null,
   };
 }
 
@@ -132,6 +141,11 @@ export class ViewerController {
     return this.data[slot].structure;
   }
 
+  /** Raw bytes of a pane opened from disk, if they were small enough to keep. */
+  getSourceFile(slot: number): { name: string; buffer: ArrayBuffer } | null {
+    return this.data[slot].sourceFile;
+  }
+
   invalidate(): void {
     this.dirty = true;
   }
@@ -167,6 +181,7 @@ export class ViewerController {
       measurements: [],
       pendingAtoms: [],
       hydrogenBondCount: 0,
+      sourceFileName: file ? file.name : null,
       superposedOnto: null,
       superposeRmsd: null,
       superposePairs: null,
@@ -192,6 +207,12 @@ export class ViewerController {
       ? { buffer: await file.arrayBuffer(), name: file.name }
       : undefined;
 
+    // The buffer is transferred to the worker, so keep a copy first if we
+    // might need to write it into a project later.
+    const retained = fileData && fileData.buffer.byteLength <= EMBEDDABLE_FILE_LIMIT
+      ? { name: fileData.name, buffer: fileData.buffer.slice(0) }
+      : null;
+
     const handle = loadStructure(id, (p) => {
       const current = useStore.getState().slots[slot];
       if (current.entryId !== id) return;
@@ -212,6 +233,7 @@ export class ViewerController {
         ...emptySlotData(),
         structure: result.structure,
         ligandBonds: result.ligandBonds,
+        sourceFile: retained,
       };
       this.engine.setStructure(slot, result.structure);
       this.engine.setSceneTransform(slot, IDENTITY);

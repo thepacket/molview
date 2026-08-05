@@ -10,6 +10,7 @@
  * serialiser.
  */
 
+import { pack, unpack } from './codec';
 import { makeComponent, type Component } from '../mol/components';
 import type { ColorScheme } from '../mol/coloring';
 import { createMeasurement, type Measurement, type MeasurementKind } from '../mol/measure';
@@ -39,6 +40,16 @@ interface MeasurementDocument {
 
 interface PaneDocument {
   entryId: string | null;
+  /**
+   * Coordinates for a pane opened from disk, which has no id to refetch.
+   * Packed the same way share links are, and only written when asked for.
+   */
+  file?: { name: string; data: string };
+  /**
+   * Recorded even when the bytes are left out, so restoring can explain the
+   * empty pane instead of trying to fetch an id that was never a PDB entry.
+   */
+  fromFile?: boolean;
   assemblyId: string;
   modelNum?: number;
   components: Omit<Component, 'id'>[];
@@ -98,7 +109,25 @@ function atomRef(s: Structure, atom: number): AtomRef {
 
 const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
-export function serialiseProject(): ProjectDocument {
+export interface SerialiseOptions {
+  /**
+   * Embed the bytes of locally opened files. Off by default: it is the only
+   * thing that can make a project large, and it should be a deliberate choice.
+   */
+  includeCoordinates?: boolean;
+}
+
+/** True when any visible pane came from disk and so cannot be refetched. */
+export function hasLocalFilePanes(): boolean {
+  const state = useStore.getState();
+  const count = LAYOUT_SLOT_COUNT[state.layout];
+  for (let i = 0; i < count; i++) {
+    if (state.slots[i].sourceFileName) return true;
+  }
+  return false;
+}
+
+export function serialiseProject(_options: SerialiseOptions = {}): ProjectDocument {
   const state = useStore.getState();
   const paneCount = LAYOUT_SLOT_COUNT[state.layout];
 
@@ -112,6 +141,7 @@ export function serialiseProject(): ProjectDocument {
 
     panes.push({
       entryId: slot.entryId,
+      fromFile: slot.sourceFileName ? true : undefined,
       assemblyId: slot.assemblyId,
       modelNum: structure?.modelCount && structure.modelCount > 1
         ? structure.modelNum
@@ -240,8 +270,30 @@ export async function restoreProject(doc: ProjectDocument): Promise<RestoreRepor
   for (let i = 0; i < paneCount; i++) {
     const pane = doc.panes[i];
     if (!pane?.entryId) continue;
+
+    if (pane.fromFile && !pane.file) {
+      // Saved without coordinates: there is nothing to fetch, and pretending
+      // otherwise would surface a bare 404.
+      viewer.unload(i);
+      report.failures.push(
+        `Pane ${i + 1} was opened from a local file and its coordinates were `
+        + 'not saved with the project',
+      );
+      continue;
+    }
+
     try {
-      await viewer.load(i, pane.entryId, undefined, pane.modelNum);
+      if (pane.file) {
+        // Embedded coordinates: rebuild a File and load it as if dropped in.
+        const bytes = await unpack(pane.file.data);
+        await viewer.load(
+          i, pane.entryId,
+          new File([bytes as BlobPart], pane.file.name),
+          pane.modelNum,
+        );
+      } else {
+        await viewer.load(i, pane.entryId, undefined, pane.modelNum);
+      }
     } catch (err) {
       report.failures.push(
         `Pane ${i + 1} (${pane.entryId}): ${err instanceof Error ? err.message : String(err)}`,
@@ -315,6 +367,27 @@ export async function restoreProject(doc: ProjectDocument): Promise<RestoreRepor
   );
   viewer.invalidate();
   return report;
+}
+
+/**
+ * Adds the bytes of any locally opened panes. Separate from `serialiseProject`
+ * because packing megabytes is asynchronous and most callers do not want it.
+ */
+export async function serialiseProjectWithFiles(
+  options: SerialiseOptions = {},
+): Promise<ProjectDocument> {
+  const doc = serialiseProject(options);
+  if (!options.includeCoordinates) return doc;
+
+  for (let i = 0; i < doc.panes.length; i++) {
+    const source = viewer.getSourceFile(i);
+    if (!source) continue;
+    doc.panes[i].file = {
+      name: source.name,
+      data: await pack(new Uint8Array(source.buffer)),
+    };
+  }
+  return doc;
 }
 
 /** Suggests a filename from what the project contains. */

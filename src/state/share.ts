@@ -7,58 +7,19 @@
  * whole reason this app can do it and a desktop tool cannot.
  */
 
+import { pack, unpack } from './codec';
 import { parseProject, serialiseProject, type ProjectDocument } from './project';
 
 const HASH_KEY = 'p';
 /** Beyond this, some chat clients and mail gateways start truncating. */
 export const COMFORTABLE_URL_LENGTH = 8000;
 
-function toBase64Url(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function fromBase64Url(text: string): Uint8Array {
-  const padded = text.replace(/-/g, '+').replace(/_/g, '/');
-  const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-function hasCompression(): boolean {
-  return typeof CompressionStream !== 'undefined'
-    && typeof DecompressionStream !== 'undefined';
-}
-
-async function deflate(bytes: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([bytes as BlobPart]).stream()
-    .pipeThrough(new CompressionStream('deflate-raw'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
-async function inflate(bytes: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([bytes as BlobPart]).stream()
-    .pipeThrough(new DecompressionStream('deflate-raw'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
-/**
- * `z` marks a deflated payload; `u` an uncompressed one, for the rare browser
- * without the Compression Streams API.
- */
 export async function encodeProject(doc: ProjectDocument): Promise<string> {
-  const json = new TextEncoder().encode(JSON.stringify(doc));
-  if (!hasCompression()) return `u${toBase64Url(json)}`;
-  return `z${toBase64Url(await deflate(json))}`;
+  return pack(new TextEncoder().encode(JSON.stringify(doc)));
 }
 
 export async function decodeProject(payload: string): Promise<ProjectDocument> {
-  const kind = payload[0];
-  const body = fromBase64Url(payload.slice(1));
-  const json = kind === 'z' ? await inflate(body) : body;
-  return parseProject(new TextDecoder().decode(json));
+  return parseProject(new TextDecoder().decode(await unpack(payload)));
 }
 
 export interface ShareLink {
@@ -70,7 +31,9 @@ export interface ShareLink {
 }
 
 export async function buildShareLink(): Promise<ShareLink> {
-  const doc = serialiseProject();
+  // Never embed local-file coordinates in a link: megabytes of base64 would
+  // not survive being pasted anywhere.
+  const doc = serialiseProject({ includeCoordinates: false });
   const raw = JSON.stringify(doc);
   const payload = await encodeProject(doc);
   const url = `${location.origin}${location.pathname}#${HASH_KEY}=${payload}`;

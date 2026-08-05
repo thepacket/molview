@@ -204,7 +204,8 @@ capsid.
   aligner. They are good enough to look at and to reason from; they are not
   what you would cite.
 - NMR ensembles can be drawn whole or stepped through one model at a time.
-- A pane opened from a local file cannot be restored from a project, since
-  there is no id to refetch.
+- A pane opened from a local file has no id to refetch, so a project must embed
+  its bytes to restore it. That is an opt-in, capped at 25 MB per file, and
+  never included in a shareable link.
 - The deferred pipeline is opaque-only — there is no transparency, and no
   molecular surface representation.

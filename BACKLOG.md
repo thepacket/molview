@@ -5,11 +5,19 @@ already exists are documented at the end of [README.md](README.md) instead.
 
 ---
 
-## 1. Smaller wins
+## Open
 
-- **Projects with local files**: a pane opened from disk has no id to refetch,
-  so it is saved as an empty pane. Embedding the coordinates behind an explicit
-  opt-in is the open question.
+Nothing outstanding. Ideas that came up along the way and were deliberately not
+taken are under "Not planned" below; current limitations of what exists are at
+the end of [README.md](README.md).
+
+Two that would be worth revisiting if the app grows:
+
+- **Molecular surfaces** — see the note below. The blocker is transparency, not
+  the surface itself.
+- **A real command line** — the ⌘K palette and the selection grammar between
+  them cover most of what a command line would, but typed commands compose in a
+  way menus cannot.
 
 ---
 
@@ -29,6 +37,8 @@ already exists are documented at the end of [README.md](README.md) instead.
   so a double helix reads as one instead of as two bare tubes.
 - **Smaller wins** (`d5f2e7a`, `b82880a`) — lighting presets, colour by symmetry
   operator, download-size warnings, and NMR model selection.
+- **Projects with local files** — coordinates embedded behind an opt-in, and a
+  clear explanation when a pane was saved without them.
 - **Ensemble overlay** — every NMR model at once as backbone traces, each model
   a separate chain so `model 3` selects one of them.
 - **Shareable URLs** — the session deflated into the URL fragment; a four-pane

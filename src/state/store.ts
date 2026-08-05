@@ -72,6 +72,8 @@ export interface SlotState {
   showHydrogenBonds: boolean;
   hydrogenBondCount: number;
   showLabels: boolean;
+  /** Set when this pane was opened from a local file rather than an id. */
+  sourceFileName: string | null;
   /** Other panes whose structures are also drawn in this one. */
   overlaySlots: number[];
   /** Set when this pane has been superposed onto another. */
@@ -108,6 +110,7 @@ function emptySlot(): SlotState {
     showHydrogenBonds: false,
     hydrogenBondCount: 0,
     showLabels: true,
+    sourceFileName: null,
     overlaySlots: [],
     superposedOnto: null,
     superposeRmsd: null,

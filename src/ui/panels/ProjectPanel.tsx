@@ -9,8 +9,8 @@ import {
   Download, FilePlus2, FolderOpen, Link, Loader2, Save, Trash2, Upload,
 } from 'lucide-react';
 import {
-  parseProject, projectFilename, restoreProject, serialiseProject,
-  type RestoreReport,
+  hasLocalFilePanes, parseProject, projectFilename, restoreProject,
+  serialiseProjectWithFiles, type RestoreReport,
 } from '../../state/project';
 import {
   deleteProject, listProjects, loadProject, saveProject, type ProjectSummary,
@@ -18,7 +18,7 @@ import {
 import { buildShareLink } from '../../state/share';
 import { DEFAULT_PROJECT_NAME, useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
-import { Tip } from '../controls';
+import { Tip, Toggle } from '../controls';
 
 export function ProjectPanel() {
   const slots = useStore((s) => s.slots);
@@ -35,6 +35,7 @@ export function ProjectPanel() {
   const [error, setError] = useState<string | null>(null);
   const [pasting, setPasting] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [includeCoordinates, setIncludeCoordinates] = useState(true);
   const [pasted, setPasted] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -50,6 +51,7 @@ export function ProjectPanel() {
 
   const loadedEntries = slots.map((s) => s.entryId).filter(Boolean) as string[];
   const hasContent = loadedEntries.length > 0;
+  const localFiles = hasLocalFilePanes();
 
   const describe = (report: RestoreReport) => {
     const parts = [`${report.panesRestored} pane${report.panesRestored === 1 ? '' : 's'} restored`];
@@ -79,7 +81,10 @@ export function ProjectPanel() {
     // record never disagree.
     const finalName = name.trim() || projectName;
     setProjectName(finalName);
-    const document = { ...serialiseProject(), name: finalName };
+    const document = {
+      ...(await serialiseProjectWithFiles({ includeCoordinates })),
+      name: finalName,
+    };
     const saved = await saveProject(finalName, document, projectId ?? undefined);
     setProjectId(saved.id);
     refresh();
@@ -106,8 +111,8 @@ export function ProjectPanel() {
     setStatus(describe(report));
   });
 
-  const doExport = () => {
-    const document = serialiseProject();
+  const doExport = () => void withBusy('Exporting…', async () => {
+    const document = await serialiseProjectWithFiles({ includeCoordinates });
     const blob = new Blob([JSON.stringify(document, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = window.document.createElement('a');
@@ -115,8 +120,10 @@ export function ProjectPanel() {
     a.download = projectFilename(document);
     a.click();
     URL.revokeObjectURL(url);
-    setStatus(`Exported ${projectFilename(document)}`);
-  };
+    setStatus(
+      `Exported ${projectFilename(document)} — ${(blob.size / 1024).toFixed(1)} kB`,
+    );
+  });
 
   const doShare = () => withBusy('Building link…', async () => {
     const link = await buildShareLink();
@@ -127,6 +134,12 @@ export function ProjectPanel() {
       setShareUrl(link.url);
     }
     const kb = (link.bytes / 1024).toFixed(1);
+    if (localFiles) {
+      setError(
+        'Panes opened from disk are not in this link — a link cannot carry '
+        + 'coordinates. Export a file if you need those.',
+      );
+    }
     setStatus(
       link.tooLong
         ? `Link copied, but it is ${link.url.length} characters — some chat and `
@@ -264,6 +277,23 @@ export function ProjectPanel() {
           </div>
         ))}
       </div>
+
+      {localFiles && (
+        <div className="panel-section">
+          <div className="section-label"><span>Local coordinates</span></div>
+          <Toggle
+            label="Embed files in this project"
+            checked={includeCoordinates}
+            onChange={setIncludeCoordinates}
+            hint="Panes opened from disk have no PDB id, so their bytes must travel with the project"
+          />
+          <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
+            A pane opened from disk cannot be refetched. With this off it is
+            saved as an empty pane; with it on the project carries the file and
+            grows accordingly. Shareable links never embed coordinates.
+          </p>
+        </div>
+      )}
 
       <div className="panel-section">
         <div className="section-label"><span>File</span></div>
