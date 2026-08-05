@@ -114,6 +114,12 @@ carrying prose plus a list of actions; each action is re-validated against live
 state before it runs, so a wrong chain id becomes a stated rejection rather than
 a silent no-op.
 
+Where the model supports structured outputs — Claude and GPT do — the reply
+shape is enforced by the API and the prompt does not restate the schema, which
+is both cheaper and stricter. A toggle in Settings falls back to describing the
+schema in the prompt, which is also what happens automatically for models that
+cannot be constrained.
+
 The API key is typed into Settings, held in that tab's `sessionStorage`, and sent
 only to openrouter.ai — MolView has no server to send it to. It is never written
 into a project or a shareable link.

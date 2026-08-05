@@ -10,6 +10,7 @@ import { ACTION_TYPES } from './actionTypes';
 
 const KEY_STORAGE = 'molview-openrouter-key';
 const MODEL_STORAGE = 'molview-openrouter-model';
+const STRUCTURED_STORAGE = 'molview-openrouter-structured';
 export const SETTINGS_EVENT = 'molview:openrouter-settings';
 
 /** A capable default; the picker is populated from the live catalogue. */
@@ -44,6 +45,43 @@ export function getApiKey(): string { return sessionGet(KEY_STORAGE); }
 export function setApiKey(key: string): void { sessionSet(KEY_STORAGE, key.trim()); }
 export function getModel(): string { return sessionGet(MODEL_STORAGE) || DEFAULT_MODEL; }
 export function setModel(model: string): void { sessionSet(MODEL_STORAGE, model.trim()); }
+
+/**
+ * Whether to let the API enforce the reply shape. On by default: Claude and
+ * GPT models support it, and it lets the prompt drop the schema text.
+ */
+export function getStructuredOutputs(): boolean {
+  return sessionGet(STRUCTURED_STORAGE) !== '0';
+}
+
+export function setStructuredOutputs(enabled: boolean): void {
+  sessionSet(STRUCTURED_STORAGE, enabled ? '' : '0');
+}
+
+/** Whether the catalogue says this model can be held to a JSON schema. */
+export function modelSupportsStructured(modelId: string): boolean | null {
+  if (!modelsCache) return null;
+  const entry = modelsCache.find((m) => m.id === modelId);
+  if (!entry) return null;
+  return entry.supportedParameters.includes('structured_outputs');
+}
+
+/**
+ * True when this turn will actually be schema-enforced, which is what decides
+ * whether the prompt has to carry the schema itself.
+ *
+ * Answers false while the catalogue is unknown, so the schema goes in the
+ * prompt rather than being dropped on a model that cannot be constrained.
+ * Callers that are about to build a prompt should `await ensureModels()` first.
+ */
+export function structuredOutputsActive(): boolean {
+  return getStructuredOutputs() && modelSupportsStructured(getModel()) === true;
+}
+
+/** Warms the catalogue so the support check can answer. Never throws. */
+export async function ensureModels(): Promise<void> {
+  try { await fetchModels(); } catch { /* the request path falls back anyway */ }
+}
 
 function attributionHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
@@ -148,15 +186,15 @@ export async function requestCompletion(
 
   const body: Record<string, unknown> = { model, messages, stream: false };
 
-  // Structured output where the model can do it; a plain JSON mode otherwise;
-  // prompt-only grammar as the last resort.
-  if (entry?.supportedParameters.includes('structured_outputs')) {
+  // Structured output where the model can do it and the user wants it; a plain
+  // JSON mode otherwise; prompt-only grammar as the last resort.
+  if (getStructuredOutputs() && entry?.supportedParameters.includes('structured_outputs')) {
     body.response_format = {
       type: 'json_schema',
       json_schema: { name: 'molview_response', strict: true, schema: RESPONSE_SCHEMA },
     };
     body.provider = { require_parameters: true };
-  } else if (entry?.supportedParameters.includes('response_format')) {
+  } else if (getStructuredOutputs() && entry?.supportedParameters.includes('response_format')) {
     body.response_format = { type: 'json_object' };
   }
 

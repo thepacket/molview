@@ -10,10 +10,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, ExternalLink, KeyRound, RefreshCw, Trash2 } from 'lucide-react';
 import {
-  DEFAULT_MODEL, fetchModels, getApiKey, getModel, setApiKey, setModel,
-  type OpenRouterModel,
+  DEFAULT_MODEL, fetchModels, getApiKey, getModel, getStructuredOutputs,
+  setApiKey, setModel, setStructuredOutputs, type OpenRouterModel,
 } from '../../ai/openrouter';
-import { Field } from '../controls';
+import { Field, Toggle } from '../controls';
 
 export function SettingsPanel() {
   const [key, setKey] = useState(getApiKey());
@@ -23,6 +23,7 @@ export function SettingsPanel() {
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [structured, setStructured] = useState(getStructuredOutputs());
 
   const load = (force = false) => {
     setLoading(true);
@@ -43,6 +44,11 @@ export function SettingsPanel() {
       : models;
     return list.slice(0, 60);
   }, [models, filter]);
+
+  const selectedSupports = models.length === 0
+    ? null
+    : models.find((m) => m.id === modelId)?.supportedParameters
+      .includes('structured_outputs') ?? false;
 
   const commitKey = () => {
     setApiKey(key);
@@ -160,8 +166,30 @@ export function SettingsPanel() {
 
         <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 8, lineHeight: 1.5 }}>
           Models marked <em>structured</em> can be held to the reply schema
-          exactly; others are asked for the same shape in the prompt and are more
-          likely to drift. The default is {DEFAULT_MODEL}.
+          exactly. The default is {DEFAULT_MODEL}.
+        </p>
+      </div>
+
+      <div className="panel-section">
+        <div className="section-label"><span>Reply format</span></div>
+        <Toggle
+          label="Structured outputs"
+          checked={structured}
+          onChange={(v) => { setStructuredOutputs(v); setStructured(v); }}
+          hint="Let the API enforce the reply schema instead of describing it in the prompt"
+        />
+        <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
+          {structured
+            ? (selectedSupports === false
+                ? `${modelId} does not advertise structured outputs, so the schema `
+                  + 'is being described in the prompt instead. Replies may drift '
+                  + 'from the expected shape.'
+                : 'The API holds the model to the reply schema, so the prompt does '
+                  + 'not restate it — about 140 tokens a turn cheaper, and the '
+                  + 'reply shape is guaranteed rather than requested.')
+            : 'The schema is spelled out in the prompt instead. Slower and more '
+              + 'expensive, but it is the fallback when a provider mishandles '
+              + 'schema-constrained requests.'}
         </p>
       </div>
     </>

@@ -15,7 +15,8 @@ import { applyAction } from '../ai/actions';
 import { parseReply } from '../ai/parse';
 import { sceneContext, systemPrompt } from '../ai/prompt';
 import {
-  getApiKey, getModel, requestCompletion, SETTINGS_EVENT, type ChatMessage,
+  ensureModels, getApiKey, getModel, requestCompletion, SETTINGS_EVENT,
+  type ChatMessage,
 } from '../ai/openrouter';
 import { useStore } from '../state/store';
 import { Tip } from './controls';
@@ -144,6 +145,10 @@ export function AssistantPanel() {
 
     const controller = new AbortController();
     abortRef.current = controller;
+
+    // The prompt's shape depends on whether this model can be schema-enforced,
+    // so the catalogue has to be known before the prompt is built.
+    await ensureModels();
 
     // A short rolling window keeps the request small; the scene is appended
     // fresh each turn because it is the part that actually changes.

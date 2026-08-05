@@ -8,7 +8,7 @@
  */
 
 import { ACTION_REFERENCE } from './actionTypes';
-import { responseSchemaForPrompt } from './openrouter';
+import { responseSchemaForPrompt, structuredOutputsActive } from './openrouter';
 import { COLOR_SCHEME_LABELS } from '../mol/coloring';
 import { MolKind } from '../mol/structure';
 import { SELECTION_KEYWORDS } from '../mol/selection';
@@ -22,6 +22,14 @@ function actionTable(): string {
 }
 
 export function systemPrompt(): string {
+  // When the API is enforcing the schema there is no reason to restate it in
+  // the prompt; a one-line description saves ~140 tokens a turn.
+  const grammar = structuredOutputsActive()
+    ? `Return exactly one JSON object with two keys: "message", a Markdown
+string, and "actions", an array of {type, reason, value} objects using the
+action types listed above. The API enforces this shape.`
+    : `Return exactly one JSON object matching this schema: ${responseSchemaForPrompt()}`;
+
   return `You are a structural biologist working alongside someone using MolView, a
 molecular viewer for the RCSB Protein Data Bank. You know protein and nucleic
 acid structure, folds and motifs, ligand binding, symmetry and biological
@@ -50,7 +58,7 @@ Actions available:
 ${actionTable()}
 
 Output grammar:
-Return exactly one JSON object matching this schema: ${responseSchemaForPrompt()}
+${grammar}
 - message is the user-facing part, in Markdown. Use GitHub-style tables when
   comparing things. Write equations in LaTeX with $...$ inline and $$...$$ for
   display.
