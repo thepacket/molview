@@ -75,6 +75,23 @@ means intersection, so `protein /A` is `protein and /A`. A malformed expression
 is reported inline and that layer is skipped; the rest of the scene still
 renders.
 
+**Measurements and contacts.** Distances, angles and torsions by clicking
+atoms, with the value drawn in the viewport. Hydrogen bonds from a geometric
+heavy-atom criterion, restricted to what is actually visible and recomputed
+when the layers change. The haem Fe to proximal histidine NE2 in `4HHB`
+measures 2.14 Å.
+
+**Superposition.** Align one pane onto another: sequence alignment decides
+which residues correspond, then the paired Cα atoms are fitted and the outliers
+pruned. Validated against known comparisons — 4HHB's identical alpha chains
+0.30 Å, alpha vs beta 1.09 Å, alpha vs sperm whale myoglobin 1.07 Å.
+
+**Projects.** Save a session in the browser and reopen it later, or export it
+as `.molview.json` to move between machines. Saving never downloads a file;
+export is the only operation that touches the file system. Coordinates are not
+stored — entries are referenced by PDB id and refetched, so a two-pane project
+is about 2 KB.
+
 **Inspection.** Hover or click any atom for its residue, chain and atom name.
 The sequence track is built from the loaded coordinates, so gaps in the model
 appear as gaps and every residue you click actually exists in the scene. Chains
@@ -102,11 +119,11 @@ definition for a whole page of hits.
 src/
   rcsb/        GraphQL + Search clients, MessagePack, BinaryCIF, mmCIF text parser
   mol/         Structure model, element data, bond perception, colour schemes,
-               and the loading worker
+               selections, components, measurements, alignment, loading worker
   gfx/         WebGPU engine, camera, geometry generation, WGSL shaders
   viewer/      Controller bridging React state to GPU resources
   ui/          Application shell, panels, command palette
-  state/       Zustand store
+  state/       Zustand store, project serialisation, IndexedDB
 ```
 
 **The structure model** is structure-of-arrays: flat typed arrays for
@@ -169,7 +186,12 @@ capsid.
 - Picking is a linear scan over atom centres, repeated for each assembly copy
   whose bounding sphere the ray crosses; the hover interval widens with scene
   size to keep the cost off the frame budget.
-- Assembly copies share their source chain's colours, so symmetry mates are not
-  visually distinguishable from one another.
+- Secondary structure, hydrogen bonds and superposition are geometric
+  approximations, not DSSP, an energetic H-bond analysis, or a structure-based
+  aligner. They are good enough to look at and to reason from; they are not
+  what you would cite.
+- Only one NMR model is drawn at a time.
+- A pane opened from a local file cannot be restored from a project, since
+  there is no id to refetch.
 - The deferred pipeline is opaque-only — there is no transparency, and no
   molecular surface representation.
