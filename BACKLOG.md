@@ -7,9 +7,6 @@ already exists are documented at the end of [README.md](README.md) instead.
 
 ## 1. Smaller wins
 
-- **Overlay two structures in one pane**: superposition already puts panes in a
-  shared frame, but drawing both in a single viewport would make the comparison
-  direct rather than side-by-side.
 - **Ensemble overlay**: models can be stepped through one at a time, but drawing
   several at once is the usual way to read NMR spread.
 - **Projects with local files**: a pane opened from disk has no id to refetch,
@@ -36,6 +33,9 @@ already exists are documented at the end of [README.md](README.md) instead.
   so a double helix reads as one instead of as two bare tubes.
 - **Smaller wins** (`d5f2e7a`, `b82880a`) — lighting presets, colour by symmetry
   operator, download-size warnings, and NMR model selection.
+- **Overlay structures in one pane** — a pane can draw other panes' structures
+  in their own superposed frames, turning a side-by-side comparison into a
+  direct one.
 - **Per-chain alignment choice** — chain selectors on both sides of a
   superposition, defaulting to the longest.
 - **Projects** — save/load in IndexedDB, export/import as `.molview.json`.

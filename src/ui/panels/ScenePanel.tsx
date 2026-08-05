@@ -2,7 +2,8 @@
 
 import { useRef, useState } from 'react';
 import {
-  Columns2, FolderOpen, Grid2x2, Link2, Link2Off, Rows2, Square, Trash2,
+  Columns2, Eye, EyeOff, FolderOpen, Grid2x2, Link2, Link2Off, Rows2, Square,
+  Trash2,
 } from 'lucide-react';
 import { LAYOUT_SLOT_COUNT, useStore, type LayoutMode } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
@@ -92,6 +93,8 @@ export function ScenePanel() {
       </div>
 
       <SuperposeSection />
+
+      <OverlaySection />
 
       <div className="panel-section">
         <div className="section-label"><span>Local file</span></div>
@@ -258,6 +261,73 @@ function SuperposeSection() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Overlay: draw another pane's structure inside this one. Combined with
+ * superposition this turns a side-by-side comparison into a direct one.
+ */
+function OverlaySection() {
+  const slots = useStore((s) => s.slots);
+  const activeSlot = useStore((s) => s.activeSlot);
+
+  // Deliberately not limited to the visible layout: overlaying is how you
+  // collapse several panes into one, so the sources are often off-screen.
+  const candidates = slots
+    .map((slot, index) => ({ slot, index }))
+    .filter(({ slot, index }) => index !== activeSlot && slot.status === 'ready');
+
+  if (slots[activeSlot].status !== 'ready' || candidates.length === 0) return null;
+
+  const active = slots[activeSlot].overlaySlots;
+
+  return (
+    <div className="panel-section">
+      <div className="section-label">
+        <span>Overlay in pane {activeSlot + 1}</span>
+        {active.length > 0 && (
+          <button
+            type="button"
+            className="btn ghost small"
+            onClick={() => viewer.setOverlaySlots(activeSlot, [])}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      {candidates.map(({ slot, index }) => {
+        const on = active.includes(index);
+        return (
+          <div key={index} className="chain-toggle" data-hidden={!on}>
+            <span className="pane-index">{index + 1}</span>
+            <span className="chain-name">{slot.entryId}</span>
+            <Tip label={on ? 'Stop drawing here' : 'Draw inside this pane'}>
+              <button
+                type="button"
+                className="pane-icon-btn"
+                data-active={on}
+                style={{ width: 20, height: 20 }}
+                aria-label={`${on ? 'Remove' : 'Add'} pane ${index + 1} overlay`}
+                onClick={() => viewer.setOverlaySlots(
+                  activeSlot,
+                  on ? active.filter((s) => s !== index) : [...active, index],
+                )}
+              >
+                {on ? <Eye size={11} /> : <EyeOff size={11} />}
+              </button>
+            </Tip>
+          </div>
+        );
+      })}
+
+      <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
+        Each overlaid structure keeps its own superposition, so align first and
+        the two land on top of each other. Clicking still picks atoms from this
+        pane\u2019s own structure.
+      </p>
     </div>
   );
 }

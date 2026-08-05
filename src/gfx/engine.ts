@@ -81,8 +81,15 @@ interface GpuGroup {
 
 interface Slot {
   camera: Camera;
-  uniformBuffer: GPUBuffer;
-  bindGroup: GPUBindGroup;
+  /**
+   * One buffer per possible source slot. They all carry this pane's camera;
+   * they differ only in the scene transform, which is what lets a pane draw
+   * another pane's structure in its own superposed frame.
+   */
+  uniformBuffers: GPUBuffer[];
+  bindGroups: GPUBindGroup[];
+  /** Other slots whose geometry is drawn into this pane. */
+  overlaySources: number[];
   uniformData: Float32Array;
   groups: GpuGroup[];
   structure: Structure | null;
@@ -509,18 +516,25 @@ export class Engine {
 
   private createSlots(): void {
     for (let i = 0; i < MAX_SLOTS; i++) {
-      const uniformBuffer = this.device.createBuffer({
-        label: `camera-${i}`,
-        size: UNIFORM_BYTES,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      });
+      const uniformBuffers: GPUBuffer[] = [];
+      const bindGroups: GPUBindGroup[] = [];
+      for (let source = 0; source < MAX_SLOTS; source++) {
+        const buffer = this.device.createBuffer({
+          label: `camera-${i}-source-${source}`,
+          size: UNIFORM_BYTES,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        uniformBuffers.push(buffer);
+        bindGroups.push(this.device.createBindGroup({
+          layout: this.cameraLayout,
+          entries: [{ binding: 0, resource: { buffer } }],
+        }));
+      }
       this.slots.push({
         camera: new Camera(),
-        uniformBuffer,
-        bindGroup: this.device.createBindGroup({
-          layout: this.cameraLayout,
-          entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
-        }),
+        uniformBuffers,
+        bindGroups,
+        overlaySources: [],
         uniformData: new Float32Array(UNIFORM_BYTES / 4),
         groups: [],
         structure: null,
@@ -574,6 +588,15 @@ export class Engine {
 
   getSceneTransform(slot: number): Float32Array {
     return this.slots[slot].sceneTransform;
+  }
+
+  /** Other slots whose geometry should also be drawn inside this pane. */
+  setOverlaySources(slot: number, sources: number[]): void {
+    this.slots[slot].overlaySources = [...sources];
+  }
+
+  getOverlaySources(slot: number): number[] {
+    return this.slots[slot].overlaySources;
   }
 
   setStructure(slot: number, structure: Structure | null): void {
@@ -754,9 +777,13 @@ export class Engine {
     uniformData[86] = visual.colorBySymmetry ? 1 : 0;
     uniformData[87] = visual.clipNear > 0 ? 1 : 0;
 
-    uniformData.set(slot.sceneTransform, 88);
-
-    this.device.queue.writeBuffer(slot.uniformBuffer, 0, uniformData as unknown as BufferSource);
+    // Emit one variant per source slot; only the scene transform differs.
+    for (let source = 0; source < MAX_SLOTS; source++) {
+      uniformData.set(this.slots[source].sceneTransform, 88);
+      this.device.queue.writeBuffer(
+        slot.uniformBuffers[source], 0, uniformData as unknown as BufferSource,
+      );
+    }
   }
 
   /** True when something is still animating and another frame is warranted. */
@@ -768,7 +795,8 @@ export class Engine {
     const px = this.pixelRatio;
 
     const visible = this.slots.filter(
-      (s) => (s.active || s.overlayCount > 0 || s.labelCount > 0)
+      (s) => (s.active || s.overlayCount > 0 || s.labelCount > 0
+          || s.overlaySources.length > 0)
         && s.rect.width > 0 && s.rect.height > 0,
     );
     for (const slot of visible) this.writeUniforms(slot);
@@ -809,9 +837,19 @@ export class Engine {
 
       geometryPass.setViewport(vx, vy, vw, vh, 0, 1);
       geometryPass.setScissorRect(vx, vy, vw, vh);
-      geometryPass.setBindGroup(0, slot.bindGroup);
 
-      for (const group of slot.groups) {
+      // The pane's own structure, then anything overlaid onto it. Each source
+      // is drawn with this pane's camera but its own scene transform, which is
+      // what puts a superposed structure in the right place.
+      const paneIndex = this.slots.indexOf(slot);
+      const sources = [paneIndex, ...slot.overlaySources.filter((s) => s !== paneIndex)];
+
+      for (const source of sources) {
+      const sourceSlot = this.slots[source];
+      if (!sourceSlot.active) continue;
+      geometryPass.setBindGroup(0, slot.bindGroups[source]);
+
+      for (const group of sourceSlot.groups) {
         // Instance counts are multiplied by the transform count; the shaders
         // divide back out to recover which copy they are drawing.
         if (group.cartoonIndexCount > 0 && group.cartoonVertices && group.cartoonIndices) {
@@ -838,7 +876,9 @@ export class Engine {
           geometryPass.draw(4, group.sphereCount * group.transformCount);
         }
       }
+      }
 
+      geometryPass.setBindGroup(0, slot.bindGroups[paneIndex]);
       if (slot.overlayCount > 0 && slot.overlayBind) {
         geometryPass.setPipeline(this.cylinderPipeline);
         geometryPass.setBindGroup(1, slot.overlayBind);
@@ -871,7 +911,7 @@ export class Engine {
 
       compositePass.setViewport(vx, vy, vw, vh, 0, 1);
       compositePass.setScissorRect(vx, vy, vw, vh);
-      compositePass.setBindGroup(0, slot.bindGroup);
+      compositePass.setBindGroup(0, slot.bindGroups[this.slots.indexOf(slot)]);
       compositePass.draw(3);
     }
 
@@ -888,7 +928,7 @@ export class Engine {
       compositePass.setPipeline(this.labelPipeline);
       compositePass.setViewport(vx, vy, vw, vh, 0, 1);
       compositePass.setScissorRect(vx, vy, vw, vh);
-      compositePass.setBindGroup(0, slot.bindGroup);
+      compositePass.setBindGroup(0, slot.bindGroups[this.slots.indexOf(slot)]);
       compositePass.setBindGroup(1, slot.labelBind);
       compositePass.draw(4, slot.labelCount);
     }
@@ -1011,7 +1051,7 @@ export class Engine {
       this.releaseGroups(s);
       s.labelBuffer?.destroy();
       s.overlayBuffer?.destroy();
-      s.uniformBuffer.destroy();
+      for (const buffer of s.uniformBuffers) buffer.destroy();
     }
     this.albedoTexture?.destroy();
     this.normalTexture?.destroy();

@@ -275,6 +275,7 @@ export class ViewerController {
       this.engine.setStructure(i, null);
       this.engine.setGeometry(i, null);
       this.engine.setSceneTransform(i, IDENTITY);
+      this.engine.setOverlaySources(i, []);
       this.engine.setOverlay(i, EMPTY_F32);
       this.engine.setLabels(i, EMPTY_F32);
     }
@@ -283,6 +284,11 @@ export class ViewerController {
   }
 
   unload(slot: number): void {
+    // Nothing should keep drawing a structure that no longer exists.
+    for (let i = 0; i < MAX_SLOTS; i++) {
+      const sources = useStore.getState().slots[i].overlaySlots;
+      if (sources.includes(slot)) this.setOverlaySlots(i, sources.filter((s) => s !== slot));
+    }
     this.data[slot].loadHandle?.cancel();
     this.data[slot] = emptySlotData();
     this.engine.setStructure(slot, null);
@@ -307,11 +313,59 @@ export class ViewerController {
     ].join('|');
   }
 
-  /** Points a slot's camera at all of its current geometry. */
+  /**
+   * Draws other panes' structures inside this one. They keep their own scene
+   * transforms, so a superposed pair lands on top of each other rather than
+   * side by side.
+   */
+  setOverlaySlots(slot: number, sources: number[]): void {
+    const valid = sources.filter((s) => s !== slot && this.data[s].structure);
+    this.engine.setOverlaySources(slot, valid);
+    useStore.getState().patchSlot(slot, { overlaySlots: valid });
+    this.frameSlot(slot, true);
+    this.invalidate();
+  }
+
+  /**
+   * Points a slot's camera at its geometry, plus anything overlaid onto it.
+   * Overlaid bounds are pushed through their own scene transform first.
+   */
   frameSlot(slot: number, animate = false): void {
     const geometry = this.data[slot].geometry;
-    if (!geometry) return;
-    this.engine.getCamera(slot).frame(geometry.center, geometry.radius, animate);
+    const sources = [slot, ...useStore.getState().slots[slot].overlaySlots];
+
+    let cx = 0, cy = 0, cz = 0, radius = 0;
+    const spheres: { c: [number, number, number]; r: number }[] = [];
+
+    for (const source of sources) {
+      const g = this.data[source].geometry;
+      if (!g) continue;
+      const m = this.engine.getSceneTransform(source);
+      const x = g.center[0], y = g.center[1], z = g.center[2];
+      spheres.push({
+        c: [
+          m[0] * x + m[4] * y + m[8] * z + m[12],
+          m[1] * x + m[5] * y + m[9] * z + m[13],
+          m[2] * x + m[6] * y + m[10] * z + m[14],
+        ],
+        r: g.radius,
+      });
+    }
+    if (spheres.length === 0) {
+      if (!geometry) return;
+      this.engine.getCamera(slot).frame(geometry.center, geometry.radius, animate);
+      this.invalidate();
+      return;
+    }
+
+    // Centroid of the sphere centres, then the radius that reaches them all.
+    for (const s of spheres) { cx += s.c[0]; cy += s.c[1]; cz += s.c[2]; }
+    cx /= spheres.length; cy /= spheres.length; cz /= spheres.length;
+    for (const s of spheres) {
+      radius = Math.max(radius, Math.hypot(s.c[0] - cx, s.c[1] - cy, s.c[2] - cz) + s.r);
+    }
+
+    this.engine.getCamera(slot).frame([cx, cy, cz], radius, animate);
     this.invalidate();
   }
 

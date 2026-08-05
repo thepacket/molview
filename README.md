@@ -81,6 +81,10 @@ heavy-atom criterion, restricted to what is actually visible and recomputed
 when the layers change. The haem Fe to proximal histidine NE2 in `4HHB`
 measures 2.14 Å.
 
+**Overlay.** A pane can draw other panes' structures inside it, each keeping its
+own superposition, so two folds land on top of each other in one viewport
+rather than side by side.
+
 **Superposition.** Align one pane onto another: sequence alignment decides
 which residues correspond, then the paired Cα atoms are fitted and the outliers
 pruned. Validated against known comparisons — 4HHB's identical alpha chains
