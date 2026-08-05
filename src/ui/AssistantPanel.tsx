@@ -96,6 +96,20 @@ export function AssistantPanel() {
     setEntries((prev) => [...prev, { id: nextId.current++, role, content }]);
   }, []);
 
+  /**
+   * Drops everything the assistant has accumulated: the visible transcript and
+   * the rolling history sent with each turn. A request still in flight is
+   * aborted too, since its reply would otherwise land in a transcript the user
+   * has just emptied.
+   */
+  const clearContext = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    conversationRef.current = [];
+    setEntries([]);
+    setBusy(false);
+  };
+
   const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
     if (collapsed) return;
     const target = event.currentTarget;
@@ -204,14 +218,15 @@ export function AssistantPanel() {
         <span className="assistant-title">Assistant</span>
         <span className="assistant-model">{hasKey ? model : 'no API key'}</span>
         <div className="assistant-tools">
-          <Tip label="Clear the conversation">
+          <Tip label="Forget the conversation so far">
             <button
               type="button"
-              className="pane-icon-btn"
+              className="btn ghost small"
               aria-label="Clear conversation"
-              onClick={() => { setEntries([]); conversationRef.current = []; }}
+              disabled={entries.length === 0 && !busy}
+              onClick={clearContext}
             >
-              <Eraser size={12} />
+              <Eraser size={11} /> Clear
             </button>
           </Tip>
           <Tip label="Assistant settings">
