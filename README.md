@@ -90,6 +90,11 @@ which residues correspond, then the paired Cα atoms are fitted and the outliers
 pruned. Validated against known comparisons — 4HHB's identical alpha chains
 0.30 Å, alpha vs beta 1.09 Å, alpha vs sperm whale myoglobin 1.07 Å.
 
+**Shareable links.** The whole session compresses into the URL fragment — a
+four-pane project including a 2.9M-atom capsid is about 1 kB of link. A fragment
+never reaches a server, so the link discloses nothing in transit. Opening one
+works both cold and pasted into a tab already running the app.
+
 **Projects.** A session has a name, shown in the centre of the title bar and
 renamed by clicking it; **New project** clears every pane back to defaults.
 Save a session in the browser and reopen it later, or export it as

@@ -12,8 +12,6 @@ already exists are documented at the end of [README.md](README.md) instead.
 - **Projects with local files**: a pane opened from disk has no id to refetch,
   so it is saved as an empty pane. Embedding the coordinates behind an explicit
   opt-in is the open question.
-- **Shareable URLs**: the project serialiser is the hard part and it exists now;
-  what is missing is a compact encoding that fits in a link.
 
 ---
 
@@ -33,6 +31,8 @@ already exists are documented at the end of [README.md](README.md) instead.
   so a double helix reads as one instead of as two bare tubes.
 - **Smaller wins** (`d5f2e7a`, `b82880a`) — lighting presets, colour by symmetry
   operator, download-size warnings, and NMR model selection.
+- **Shareable URLs** — the session deflated into the URL fragment; a four-pane
+  project including a 2.9M-atom capsid fits in about 1 kB of link.
 - **Overlay structures in one pane** — a pane can draw other panes' structures
   in their own superposed frames, turning a side-by-side comparison into a
   direct one.

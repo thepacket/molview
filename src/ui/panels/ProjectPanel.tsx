@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Download, FilePlus2, FolderOpen, Loader2, Save, Trash2, Upload,
+  Download, FilePlus2, FolderOpen, Link, Loader2, Save, Trash2, Upload,
 } from 'lucide-react';
 import {
   parseProject, projectFilename, restoreProject, serialiseProject,
@@ -15,6 +15,7 @@ import {
 import {
   deleteProject, listProjects, loadProject, saveProject, type ProjectSummary,
 } from '../../state/projectStore';
+import { buildShareLink } from '../../state/share';
 import { DEFAULT_PROJECT_NAME, useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Tip } from '../controls';
@@ -33,6 +34,7 @@ export function ProjectPanel() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pasting, setPasting] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [pasted, setPasted] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -115,6 +117,24 @@ export function ProjectPanel() {
     URL.revokeObjectURL(url);
     setStatus(`Exported ${projectFilename(document)}`);
   };
+
+  const doShare = () => withBusy('Building link…', async () => {
+    const link = await buildShareLink();
+    try {
+      await navigator.clipboard.writeText(link.url);
+    } catch {
+      // Clipboard access can be refused; the link is still worth showing.
+      setShareUrl(link.url);
+    }
+    const kb = (link.bytes / 1024).toFixed(1);
+    setStatus(
+      link.tooLong
+        ? `Link copied, but it is ${link.url.length} characters — some chat and `
+          + 'mail clients truncate links that long. Export a file instead.'
+        : `Link copied — ${kb} kB of URL, compressed from `
+          + `${(link.rawBytes / 1024).toFixed(1)} kB of JSON.`,
+    );
+  });
 
   const doImport = (text: string) => withBusy('Importing…', async () => {
     const report = await restoreProject(parseProject(text));
@@ -277,6 +297,28 @@ export function ProjectPanel() {
         >
           <Upload size={12} /> Import from file
         </button>
+        <button
+          type="button"
+          className="btn"
+          style={{ width: '100%', marginTop: 6 }}
+          disabled={!hasContent || busy}
+          onClick={doShare}
+        >
+          <Link size={12} /> Copy shareable link
+        </button>
+        <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 6, lineHeight: 1.5 }}>
+          The whole session is compressed into the link's fragment, which never
+          leaves the browser it is opened in.
+        </p>
+        {shareUrl && (
+          <textarea
+            className="text-input"
+            readOnly
+            style={{ height: 70, marginTop: 6, padding: 7, fontFamily: 'var(--mono)', fontSize: 9.5 }}
+            value={shareUrl}
+            onFocus={(e) => e.currentTarget.select()}
+          />
+        )}
         <button
           type="button"
           className="btn ghost small"

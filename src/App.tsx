@@ -12,11 +12,16 @@ import { MeasurePanel } from './ui/panels/MeasurePanel';
 import { ProjectPanel } from './ui/panels/ProjectPanel';
 import { SequencePanel } from './ui/panels/SequencePanel';
 import { StylePanel } from './ui/panels/StylePanel';
+import { restoreProject } from './state/project';
+import {
+  clearProjectPayload, decodeProject, projectPayloadFromLocation,
+} from './state/share';
 import { LAYOUT_SLOT_COUNT, useStore } from './state/store';
 import { viewer } from './viewer/ViewerController';
 
 export default function App() {
   useGlobalShortcuts();
+  useSharedProject();
 
   const panel = useStore((s) => s.panel);
   const panelOpen = useStore((s) => s.panelOpen);
@@ -72,6 +77,59 @@ export default function App() {
       <CommandPalette />
     </Tooltip.Provider>
   );
+}
+
+/**
+ * Opens a project carried in the URL fragment. Waits for the engine, because
+ * restoring loads structures straight into GPU slots.
+ */
+function useSharedProject(): void {
+  useEffect(() => {
+    let cancelled = false;
+    let running = false;
+
+    const open = async (payload: string) => {
+      // Pasting a second link while one is still opening would interleave two
+      // restores over the same panes.
+      if (running) return;
+      running = true;
+      try {
+        const doc = await decodeProject(payload);
+        await restoreProject(doc);
+        // The session is live now; a stale fragment would misdescribe it.
+        clearProjectPayload();
+      } catch (err) {
+        useStore.getState().setGpuInfo(
+          useStore.getState().gpuName,
+          `Could not open the shared project: ${
+            err instanceof Error ? err.message : String(err)}`,
+        );
+      } finally {
+        running = false;
+      }
+    };
+
+    const payload = projectPayloadFromLocation();
+    if (payload) {
+      void viewer.ready.then(() => {
+        // StrictMode mounts effects twice; the first pass bails here.
+        if (!cancelled) void open(payload);
+      });
+    }
+
+    // Pasting a link into the address bar of a tab already running the app is
+    // a same-document navigation: no reload, so only hashchange sees it.
+    const onHashChange = () => {
+      const next = projectPayloadFromLocation();
+      if (next && !cancelled) void open(next);
+    };
+    window.addEventListener('hashchange', onHashChange);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('hashchange', onHashChange);
+    };
+  }, []);
 }
 
 /** Application-level keyboard map. Ignored while typing into a field. */

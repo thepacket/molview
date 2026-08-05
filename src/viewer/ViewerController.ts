@@ -89,6 +89,9 @@ export class ViewerController {
   private running = false;
   private initialised = false;
   private initStarted = false;
+  private readyResolve!: () => void;
+  /** Resolves once the engine exists, so callers can queue work behind it. */
+  readonly ready = new Promise<void>((resolve) => { this.readyResolve = resolve; });
 
   private dragMode: DragMode = 'none';
   private dragSlot = -1;
@@ -112,6 +115,7 @@ export class ViewerController {
       this.stop();
     };
     useStore.getState().setGpuInfo(this.engine.adapterInfo, null);
+    this.readyResolve();
     this.start();
   }
 
