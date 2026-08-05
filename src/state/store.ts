@@ -11,6 +11,7 @@ import {
   EMPTY_FILTERS, type EntryDetail, type EntrySummary, type SearchFilters,
 } from '../rcsb/api';
 import { DEFAULT_REPRESENTATION, type Representation } from '../gfx/geometry';
+import type { Component } from '../mol/components';
 import { DEFAULT_VISUAL_SETTINGS, MAX_SLOTS, type SlotVisualSettings } from '../gfx/engine';
 import type { ColorScheme } from '../mol/coloring';
 
@@ -43,12 +44,17 @@ export interface SlotState {
   error: string | null;
   detail: EntryDetail | null;
   representation: Representation;
+  /** Draw layers, applied in order; the last one covering an atom wins. */
+  components: Component[];
   /** Assembly id from the file, or '' for the deposited asymmetric unit. */
   assemblyId: string;
   colorScheme: ColorScheme;
   uniformColor: number;
   visual: SlotVisualSettings;
   stats: SlotStats | null;
+  /** Atoms matched per component, and parse failures, from the last rebuild. */
+  componentCounts: Map<string, number>;
+  componentErrors: Map<string, string>;
   /** Residue the pointer is currently over, as a display string. */
   hoverLabel: string | null;
   selectedResidue: number | null;
@@ -66,11 +72,14 @@ function emptySlot(): SlotState {
     error: null,
     detail: null,
     representation: { ...DEFAULT_REPRESENTATION, hiddenChains: new Set() },
+    components: [],
     assemblyId: '',
     colorScheme: 'chain',
     uniformColor: 0x7bb0ff,
     visual: { ...DEFAULT_VISUAL_SETTINGS },
     stats: null,
+    componentCounts: new Map(),
+    componentErrors: new Map(),
     hoverLabel: null,
     selectedResidue: null,
     selectionLabel: null,
@@ -116,6 +125,9 @@ export interface AppState {
 
   patchSlot: (slot: number, patch: Partial<SlotState>) => void;
   updateRepresentation: (slot: number, patch: Partial<Representation>) => void;
+  setComponents: (slot: number, components: Component[]) => void;
+  updateComponent: (slot: number, id: string, patch: Partial<Component>) => void;
+  removeComponent: (slot: number, id: string) => void;
   updateVisual: (slot: number, patch: Partial<SlotVisualSettings>) => void;
   clearSlot: (slot: number) => void;
 
@@ -173,6 +185,30 @@ export const useStore = create<AppState>((set) => ({
     slots[slot] = {
       ...slots[slot],
       representation: { ...slots[slot].representation, ...patch },
+    };
+    return { slots };
+  }),
+
+  setComponents: (slot, components) => set((s) => {
+    const slots = s.slots.slice();
+    slots[slot] = { ...slots[slot], components };
+    return { slots };
+  }),
+
+  updateComponent: (slot, id, patch) => set((s) => {
+    const slots = s.slots.slice();
+    slots[slot] = {
+      ...slots[slot],
+      components: slots[slot].components.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+    };
+    return { slots };
+  }),
+
+  removeComponent: (slot, id) => set((s) => {
+    const slots = s.slots.slice();
+    slots[slot] = {
+      ...slots[slot],
+      components: slots[slot].components.filter((c) => c.id !== id),
     };
     return { slots };
   }),

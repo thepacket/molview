@@ -8,18 +8,16 @@
 
 import type { BondList } from '../mol/bonds';
 import { identityTransform, type Assembly } from '../mol/assembly';
+import { Style, type ResolvedScene } from '../mol/components';
 import { VDW_RADII } from '../mol/elements';
 import { MolKind, SS, type Structure } from '../mol/structure';
-import type { ColorProvider } from '../mol/coloring';
 
-export type PolymerStyle = 'cartoon' | 'backbone' | 'ball-stick' | 'spacefill' | 'licorice' | 'none';
-export type LigandStyle = 'ball-stick' | 'spacefill' | 'licorice' | 'none';
-
+/**
+ * Settings that apply to the whole pane rather than to one component. Which
+ * atoms get which style now comes from the component list — see
+ * `mol/components.ts` — so what is left here is sizing and global filters.
+ */
 export interface Representation {
-  polymer: PolymerStyle;
-  ligand: LigandStyle;
-  showWater: boolean;
-  showIons: boolean;
   showHydrogens: boolean;
   /** 0.25 – 2.0; scales atom radii in ball-and-stick / licorice. */
   atomScale: number;
@@ -29,10 +27,6 @@ export interface Representation {
 }
 
 export const DEFAULT_REPRESENTATION: Representation = {
-  polymer: 'cartoon',
-  ligand: 'ball-stick',
-  showWater: false,
-  showIons: true,
   showHydrogens: false,
   atomScale: 1,
   bondRadius: 0.16,
@@ -85,50 +79,25 @@ export interface SceneGeometry {
   totalChains: number;
 }
 
-const HYDROGEN = 1;
-
+/** Assembly generators name the chains they replicate by label_asym_id. */
 function chainVisible(
-  s: Structure, chain: number, rep: Representation, allowedAsyms: ReadonlySet<string> | null,
+  s: Structure, chain: number, allowedAsyms: ReadonlySet<string> | null,
 ): boolean {
-  if (rep.hiddenChains.has(s.chainAuthId[chain])) return false;
-  // Assembly generators name the chains they replicate by label_asym_id.
-  if (allowedAsyms && !allowedAsyms.has(s.chainLabelId[chain])) return false;
-  return true;
+  return !allowedAsyms || allowedAsyms.has(s.chainLabelId[chain]);
 }
 
-/** Which style applies to a residue, given its kind. */
-function styleFor(kind: number, rep: Representation): PolymerStyle | LigandStyle | 'none' {
-  switch (kind) {
-    case MolKind.Protein:
-    case MolKind.Nucleic:
-      return rep.polymer;
-    case MolKind.Water:
-      return rep.showWater ? 'ball-stick' : 'none';
-    case MolKind.Ion:
-      return rep.showIons ? 'spacefill' : 'none';
-    default:
-      return rep.ligand;
-  }
-}
-
-/**
- * A residue drawn as a cartoon still contributes no atoms — except that
- * nucleic bases read as bare tubes without them, so nucleic side atoms stay.
- */
-function atomRadius(
-  style: string, element: number, rep: Representation,
-): number {
+function atomRadius(style: number, element: number, rep: Representation): number {
   switch (style) {
-    case 'spacefill': return VDW_RADII[element];
-    case 'ball-stick': return VDW_RADII[element] * 0.25 * rep.atomScale;
-    case 'licorice': return rep.bondRadius * rep.atomScale;
+    case Style.Spacefill: return VDW_RADII[element];
+    case Style.BallStick: return VDW_RADII[element] * 0.25 * rep.atomScale;
+    case Style.Licorice: return rep.bondRadius * rep.atomScale;
     default: return 0;
   }
 }
 
 export function buildGeometry(
   s: Structure,
-  colors: ColorProvider,
+  resolved: ResolvedScene,
   rep: Representation,
   ligandBonds: BondList,
   allBonds: BondList | null,
@@ -137,11 +106,11 @@ export function buildGeometry(
   const groups: GeometryGroup[] = [];
 
   if (!assembly) {
-    groups.push(buildGroup(s, colors, rep, ligandBonds, allBonds, null, identityTransform(), 1));
+    groups.push(buildGroup(s, resolved, rep, ligandBonds, allBonds, null, identityTransform(), 1));
   } else {
     for (const gen of assembly.gens) {
       const group = buildGroup(
-        s, colors, rep, ligandBonds, allBonds,
+        s, resolved, rep, ligandBonds, allBonds,
         new Set(gen.asymIds), gen.transforms, gen.count,
       );
       if (group.sphereCount > 0 || group.cylinderCount > 0 || group.cartoon) {
@@ -204,7 +173,7 @@ export function buildGeometry(
 
 function buildGroup(
   s: Structure,
-  colors: ColorProvider,
+  resolved: ResolvedScene,
   rep: Representation,
   ligandBonds: BondList,
   allBonds: BondList | null,
@@ -220,7 +189,8 @@ function buildGroup(
     if (z - r < minZ) minZ = z - r; if (z + r > maxZ) maxZ = z + r;
   };
 
-  const coverage = chainCoverage(s, rep, allowedAsyms);
+  const coverage = chainCoverage(s, allowedAsyms);
+  const { atomStyle, atomColor } = resolved;
 
   // Pass 1: decide what is drawn and how big the buffers need to be. A
   // spacefill capsid is 2.4 million atoms; growing a JS array to hold that
@@ -228,20 +198,17 @@ function buildGroup(
   const drawAtom = new Uint8Array(s.atomCount);
   const atomRadii = new Float32Array(s.atomCount);
   let sphereCount = 0;
+  let wantsSticks = false;
 
   for (let r = 0; r < s.residueCount; r++) {
-    if (!chainVisible(s, s.resChain[r], rep, allowedAsyms)) continue;
-
-    const kind = s.resKind[r];
-    const style = styleFor(kind, rep);
-    if (style === 'none') continue;
-
-    const isPolymer = kind === MolKind.Protein || kind === MolKind.Nucleic;
-    // Cartoon and backbone replace the atoms entirely.
-    if (isPolymer && (style === 'cartoon' || style === 'backbone')) continue;
+    if (!chainVisible(s, s.resChain[r], allowedAsyms)) continue;
 
     for (let a = s.resAtomStart[r], end = s.resAtomStart[r + 1]; a < end; a++) {
-      if (!rep.showHydrogens && s.element[a] === HYDROGEN) continue;
+      const style = atomStyle[a];
+      // Cartoon and backbone replace their atoms with a ribbon.
+      if (style === Style.None || style === Style.Cartoon || style === Style.Backbone) continue;
+      if (style === Style.BallStick || style === Style.Licorice) wantsSticks = true;
+
       drawAtom[a] = 1;
       const radius = atomRadius(style, s.element[a], rep);
       atomRadii[a] = radius;
@@ -254,7 +221,7 @@ function buildGroup(
   for (let a = 0; a < s.atomCount; a++) {
     const radius = atomRadii[a];
     if (!drawAtom[a] || radius <= 0) continue;
-    const c = colors.atom(a);
+    const c = atomColor[a];
     const x = s.x[a], y = s.y[a], z = s.z[a];
     spheres[so] = x; spheres[so + 1] = y; spheres[so + 2] = z; spheres[so + 3] = radius;
     spheres[so + 4] = ((c >> 16) & 0xff) / 255;
@@ -266,8 +233,7 @@ function buildGroup(
   }
 
   // ---- bonds ----
-  const wantsSticks = rep.polymer === 'ball-stick' || rep.polymer === 'licorice'
-    || rep.ligand === 'ball-stick' || rep.ligand === 'licorice' || rep.showWater;
+  // `wantsSticks` was set during pass 1 by whichever component asked for them.
   const bondSource = allBonds ?? ligandBonds;
 
   let bondCount = 0;
@@ -293,7 +259,7 @@ function buildGroup(
       const bx = s.x[b], by = s.y[b], bz = s.z[b];
       const mx = (ax + bx) / 2, my = (ay + by) / 2, mz = (az + bz) / 2;
 
-      const ca = colors.atom(a);
+      const ca = atomColor[a];
       cylinders[co] = ax; cylinders[co + 1] = ay; cylinders[co + 2] = az;
       cylinders[co + 3] = radius;
       cylinders[co + 4] = mx; cylinders[co + 5] = my; cylinders[co + 6] = mz;
@@ -303,7 +269,7 @@ function buildGroup(
       cylinders[co + 10] = (ca & 0xff) / 255;
       co += CYLINDER_STRIDE;
 
-      const cb = colors.atom(b);
+      const cb = atomColor[b];
       cylinders[co] = bx; cylinders[co + 1] = by; cylinders[co + 2] = bz;
       cylinders[co + 3] = radius;
       cylinders[co + 4] = mx; cylinders[co + 5] = my; cylinders[co + 6] = mz;
@@ -319,9 +285,8 @@ function buildGroup(
   }
 
   // ---- cartoon ----
-  let cartoon: MeshData | null = null;
-  if (rep.polymer === 'cartoon' || rep.polymer === 'backbone') {
-    cartoon = buildCartoon(s, colors, rep, rep.polymer === 'backbone', allowedAsyms);
+  let cartoon: MeshData | null = buildCartoon(s, resolved, allowedAsyms);
+  {
     if (cartoon) {
       const v = cartoon.vertices;
       for (let i = 0; i < v.length; i += CARTOON_STRIDE) grow(v[i], v[i + 1], v[i + 2], 0);
@@ -348,14 +313,14 @@ function buildGroup(
 
 /** Atoms and chains a group covers, plus the pick mask when it is a subset. */
 function chainCoverage(
-  s: Structure, rep: Representation, allowedAsyms: ReadonlySet<string> | null,
+  s: Structure, allowedAsyms: ReadonlySet<string> | null,
 ): { mask: Uint8Array | null; atoms: number; chains: number } {
   const mask = allowedAsyms ? new Uint8Array(s.atomCount) : null;
   let atoms = 0;
   let chains = 0;
 
   for (let c = 0; c < s.chainCount; c++) {
-    if (!chainVisible(s, c, rep, allowedAsyms)) continue;
+    if (!chainVisible(s, c, allowedAsyms)) continue;
     chains++;
     const rStart = s.chainResStart[c];
     const rEnd = s.chainResStart[c + 1];
@@ -407,9 +372,9 @@ function catmullRom(
 }
 
 function buildCartoon(
-  s: Structure, colors: ColorProvider, rep: Representation, traceOnly: boolean,
-  allowedAsyms: ReadonlySet<string> | null,
+  s: Structure, resolved: ResolvedScene, allowedAsyms: ReadonlySet<string> | null,
 ): MeshData | null {
+  const { residueStyle, atomColor } = resolved;
   const { subdiv, sides } = quality(s.residueCount);
 
   const vertices: number[] = [];
@@ -424,7 +389,7 @@ function buildCartoon(
   for (let c = 0; c < s.chainCount; c++) {
     const kind = s.chainKind[c];
     if (kind !== MolKind.Protein && kind !== MolKind.Nucleic) continue;
-    if (!chainVisible(s, c, rep, allowedAsyms)) continue;
+    if (!chainVisible(s, c, allowedAsyms)) continue;
 
     const maxGap = kind === MolKind.Nucleic ? 9 : 5.2;
     const start = s.chainResStart[c];
@@ -451,7 +416,7 @@ function buildCartoon(
         const r = residues[i];
         const a = s.resAnchor[r];
         pos.push(s.x[a], s.y[a], s.z[a]);
-        colorList.push(colors.residue(r));
+        colorList.push(atomColor[a]);
 
         // Carson–Bugg frame: the peptide plane fixes the ribbon's flat face.
         const next = i + 1 < n ? s.resAnchor[residues[i + 1]] : -1;
@@ -503,21 +468,32 @@ function buildCartoon(
         prevDir[0] = dx; prevDir[1] = dy; prevDir[2] = dz;
         widthDir.push(dx, dy, dz);
 
-        profiles.push(profileFor(s, r, kind, i, n, residues, traceOnly));
+        profiles.push(profileFor(s, r, kind, i, n, residues,
+          residueStyle[r] === Style.Backbone));
       }
 
       sweep(vertices, indices, pos, widthDir, profiles, colorList, subdiv, sides);
     };
 
     let prevAnchor = -1;
+    let prevStyle = 0;
     for (let r = start; r < end; r++) {
       const anchor = s.resAnchor[r];
       const k = s.resKind[r];
-      if (anchor < 0 || (k !== MolKind.Protein && k !== MolKind.Nucleic)) {
+      const style = residueStyle[r];
+      // A ribbon breaks where the style changes, so a component covering part
+      // of a chain produces its own segment rather than bleeding into the rest.
+      if (anchor < 0 || style === 0 || (k !== MolKind.Protein && k !== MolKind.Nucleic)) {
         flush();
         prevAnchor = -1;
+        prevStyle = 0;
         continue;
       }
+      if (prevStyle !== 0 && style !== prevStyle) {
+        flush();
+        prevAnchor = -1;
+      }
+      prevStyle = style;
       if (prevAnchor >= 0) {
         const d = Math.hypot(
           s.x[anchor] - s.x[prevAnchor],

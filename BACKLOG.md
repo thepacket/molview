@@ -16,10 +16,51 @@ A **project** is the full state of a session as JSON. Four operations:
 | Export | download as a `.molview.json` file |
 | Import | read a dropped/chosen file, or paste JSON text directly |
 
-*Assumption to confirm:* "DOM" here means in-browser persistence — the Web
-Storage / IndexedDB APIs — as distinct from export/import, which crosses the
-file-system boundary. IndexedDB is the better target of the two: `localStorage`
-is synchronous, ~5 MB, and strings only.
+**Save and export are distinct.** Saving never downloads a file: it writes to
+browser-local storage and the project reappears in the picker on the next visit.
+Export is the only operation that crosses the file-system boundary.
+
+### Decided: storage
+
+**IndexedDB**, not `localStorage` — the latter is synchronous, capped near 5 MB,
+and stores strings only, all of which become problems the moment a project
+embeds coordinates. No library; a small promise wrapper over the raw API is
+enough for one object store.
+
+```
+database  molview            (version 1)
+store     projects           keyPath "id", index on "updatedAt"
+record    { id, name, createdAt, updatedAt, format, state }
+```
+
+### Decided: format
+
+A single JSON document, readable rather than golfed, with an integer `format`
+field from the first release so old projects can be migrated rather than
+rejected:
+
+```jsonc
+{
+  "format": 1,
+  "app": "molview",
+  "created": "2026-08-05T12:00:00Z",
+  "session": { "layout": "quad", "activeSlot": 0, "linkedCameras": false },
+  "panes": [
+    {
+      "entryId": "4HHB",
+      "assemblyId": "1",
+      "representation": { /* styles, radii, hiddenChains as an array */ },
+      "colorScheme": "chain",
+      "visual": { /* ao, outline, fog, clip, background */ },
+      "camera": { "target": [x, y, z], "orientation": [x, y, z, w], "distance": 0 }
+    }
+  ]
+}
+```
+
+The same document is what export writes and import reads, so a project is
+portable between browsers without a second serialiser. URL sharing gets its own
+compact encoding later rather than distorting this one.
 
 ### What the JSON holds
 

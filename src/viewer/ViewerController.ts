@@ -10,7 +10,9 @@ import { Engine, MAX_SLOTS, type PickResult, type ViewportRect } from '../gfx/en
 import type { CameraState } from '../gfx/camera';
 import { buildGeometry, type SceneGeometry } from '../gfx/geometry';
 import { computeBonds, type BondList } from '../mol/bonds';
-import { makeColorProvider } from '../mol/coloring';
+import {
+  defaultComponents, resolveComponents, Style, type ResolvedScene,
+} from '../mol/components';
 import { MolKind, resNameOf, atomNameOf, type Structure } from '../mol/structure';
 import { loadStructure, type LoadHandle } from '../mol/loader';
 import { fetchEntryDetail } from '../rcsb/api';
@@ -31,6 +33,23 @@ const EMPTY_BONDS: BondList = { indices: new Uint32Array(0), count: 0 };
 const BOND_PERCEPTION_LIMIT = 250_000;
 /** copies x atoms above which assembly 1 is offered but not auto-selected. */
 const ASSEMBLY_AUTO_LIMIT = 20_000_000;
+
+/**
+ * Whole-structure bond perception is expensive, so only run it when a layer
+ * actually asks for sticks on polymer atoms — ligand connectivity is already
+ * computed during load.
+ */
+function componentsNeedPolymerBonds(s: Structure, resolved: ResolvedScene): boolean {
+  const { atomStyle } = resolved;
+  for (let r = 0; r < s.residueCount; r++) {
+    const kind = s.resKind[r];
+    if (kind !== MolKind.Protein && kind !== MolKind.Nucleic) continue;
+    for (let a = s.resAtomStart[r], e = s.resAtomStart[r + 1]; a < e; a++) {
+      if (atomStyle[a] === Style.BallStick || atomStyle[a] === Style.Licorice) return true;
+    }
+  }
+  return false;
+}
 
 function emptySlotData(): SlotData {
   return {
@@ -184,7 +203,9 @@ export class ViewerController {
       // Assembly first: it decides how many atoms are really on screen, which
       // is what the representation choice has to be based on.
       const copies = this.autoSelectAssembly(slot, s);
-      this.autoSelectRepresentation(slot, s, s.atomCount * copies);
+      // Components are rebuilt per structure: carrying the previous pane's
+      // layers over is how you end up looking at a ligand in capsid spacefill.
+      useStore.getState().setComponents(slot, defaultComponents(s, s.atomCount * copies));
       this.rebuild(slot);
       // Frame after the rebuild, not inside it: a store subscriber may already
       // have built this slot's geometry, and that path must never move a
@@ -215,27 +236,6 @@ export class ViewerController {
     return use ? first.totalCopies : 1;
   }
 
-  private autoSelectRepresentation(slot: number, s: Structure, effectiveAtoms: number): void {
-    let polymerResidues = 0;
-    for (let r = 0; r < s.residueCount; r++) {
-      const k = s.resKind[r];
-      if (k === MolKind.Protein || k === MolKind.Nucleic) polymerResidues++;
-    }
-    // Always reset to a representation that suits *this* structure. Carrying
-    // the previous pane contents' style over is how you end up looking at a
-    // 60-atom ligand in whole-assembly spacefill.
-    const store = useStore.getState();
-    if (polymerResidues === 0) {
-      store.updateRepresentation(slot, { polymer: 'ball-stick', ligand: 'ball-stick' });
-    } else if (effectiveAtoms > 400_000) {
-      // At assembly scale a ribbon is thinner than a pixel and the structure
-      // reads as noise; spheres are both clearer and cheaper to build.
-      store.updateRepresentation(slot, { polymer: 'spacefill', ligand: 'none' });
-    } else {
-      store.updateRepresentation(slot, { polymer: 'cartoon', ligand: 'ball-stick' });
-    }
-  }
-
   unload(slot: number): void {
     this.data[slot].loadHandle?.cancel();
     this.data[slot] = emptySlotData();
@@ -252,9 +252,12 @@ export class ViewerController {
   private signatureOf(state: SlotState): string {
     const r = state.representation;
     return [
-      r.polymer, r.ligand, r.showWater, r.showIons, r.showHydrogens,
-      r.atomScale, r.bondRadius, [...r.hiddenChains].sort().join(','),
+      r.showHydrogens, r.atomScale, r.bondRadius,
+      [...r.hiddenChains].sort().join(','),
       state.colorScheme, state.uniformColor, state.assemblyId,
+      state.components.map((c) => [
+        c.selection, c.style, c.colorScheme ?? '', c.uniformColor, c.visible,
+      ].join(',')).join(';'),
     ].join('|');
   }
 
@@ -277,24 +280,28 @@ export class ViewerController {
     if (signature === data.builtSignature && data.geometry) return;
 
     const rep = state.representation;
-    const needsAllBonds = rep.polymer === 'ball-stick' || rep.polymer === 'licorice';
+    const resolved = resolveComponents(structure, state.components, {
+      paneColorScheme: state.colorScheme,
+      paneUniformColor: state.uniformColor,
+      hiddenChains: rep.hiddenChains,
+      showHydrogens: rep.showHydrogens,
+      paletteOffset: slot * 3,
+    });
+
+    // Whole-structure connectivity is only needed when a component covering
+    // polymer atoms asks for sticks; ligand bonds are always available.
+    const needsAllBonds = componentsNeedPolymerBonds(structure, resolved);
     if (needsAllBonds && !data.allBonds) {
       data.allBonds = structure.atomCount <= BOND_PERCEPTION_LIMIT
         ? computeBonds(structure)
         : data.ligandBonds;
     }
 
-    const colors = makeColorProvider(structure, {
-      scheme: state.colorScheme,
-      uniformColor: state.uniformColor,
-      paletteOffset: slot * 3,
-    });
-
     const assembly = structure.assemblies.find((a) => a.id === state.assemblyId) ?? null;
 
     const geometry = buildGeometry(
       structure,
-      colors,
+      resolved,
       rep,
       data.ligandBonds,
       needsAllBonds ? data.allBonds : null,
@@ -306,6 +313,8 @@ export class ViewerController {
     this.engine.setGeometry(slot, geometry);
 
     useStore.getState().patchSlot(slot, {
+      componentCounts: resolved.counts,
+      componentErrors: resolved.errors,
       stats: {
         atoms: geometry.totalAtoms,
         residues: structure.residueCount,

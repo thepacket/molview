@@ -4,26 +4,11 @@ import { Crosshair, Eye, EyeOff } from 'lucide-react';
 import type { Assembly } from '../../mol/assembly';
 import { COLOR_SCHEME_LABELS, CHAIN_PALETTE, type ColorScheme } from '../../mol/coloring';
 import { MolKind } from '../../mol/structure';
-import type { LigandStyle, PolymerStyle } from '../../gfx/geometry';
+
 import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Field, Select, Slider, Toggle, Tip } from '../controls';
-
-const POLYMER_STYLES: { value: PolymerStyle; label: string }[] = [
-  { value: 'cartoon', label: 'Cartoon' },
-  { value: 'backbone', label: 'Backbone trace' },
-  { value: 'ball-stick', label: 'Ball and stick' },
-  { value: 'licorice', label: 'Licorice' },
-  { value: 'spacefill', label: 'Spacefill' },
-  { value: 'none', label: 'Hidden' },
-];
-
-const LIGAND_STYLES: { value: LigandStyle; label: string }[] = [
-  { value: 'ball-stick', label: 'Ball and stick' },
-  { value: 'licorice', label: 'Licorice' },
-  { value: 'spacefill', label: 'Spacefill' },
-  { value: 'none', label: 'Hidden' },
-];
+import { ComponentList } from './ComponentList';
 
 const COLOR_SCHEMES = (Object.keys(COLOR_SCHEME_LABELS) as ColorScheme[])
   .map((value) => ({ value, label: COLOR_SCHEME_LABELS[value] }));
@@ -116,25 +101,11 @@ export function StylePanel() {
         </div>
       )}
 
+      <ComponentList slot={activeSlot} />
+
       <div className="panel-section">
-        <div className="section-label"><span>Representation</span></div>
-        <Field label="Polymer">
-          <Select
-            ariaLabel="Polymer representation"
-            value={rep.polymer}
-            options={POLYMER_STYLES}
-            onChange={(v) => updateRepresentation(activeSlot, { polymer: v })}
-          />
-        </Field>
-        <Field label="Ligands and cofactors">
-          <Select
-            ariaLabel="Ligand representation"
-            value={rep.ligand}
-            options={LIGAND_STYLES}
-            onChange={(v) => updateRepresentation(activeSlot, { ligand: v })}
-          />
-        </Field>
-        <Field label="Atom scale" value={`${rep.atomScale.toFixed(2)}×`}>
+        <div className="section-label"><span>Sizing</span></div>
+        <Field label="Atom scale" value={`${rep.atomScale.toFixed(2)}x`}>
           <Slider
             value={rep.atomScale}
             min={0.25}
@@ -143,7 +114,7 @@ export function StylePanel() {
             onChange={(v) => updateRepresentation(activeSlot, { atomScale: v })}
           />
         </Field>
-        <Field label="Bond radius" value={`${rep.bondRadius.toFixed(2)} Å`}>
+        <Field label="Bond radius" value={`${rep.bondRadius.toFixed(2)} A`}>
           <Slider
             value={rep.bondRadius}
             min={0.04}
@@ -152,17 +123,6 @@ export function StylePanel() {
             onChange={(v) => updateRepresentation(activeSlot, { bondRadius: v })}
           />
         </Field>
-        <Toggle
-          label="Waters"
-          checked={rep.showWater}
-          onChange={(v) => updateRepresentation(activeSlot, { showWater: v })}
-          hint="Crystallographic waters; usually thousands of them"
-        />
-        <Toggle
-          label="Ions"
-          checked={rep.showIons}
-          onChange={(v) => updateRepresentation(activeSlot, { showIons: v })}
-        />
         <Toggle
           label="Hydrogens"
           checked={rep.showHydrogens}
@@ -173,7 +133,7 @@ export function StylePanel() {
 
       <div className="panel-section">
         <div className="section-label"><span>Colour</span></div>
-        <Field label="Scheme">
+        <Field label="Default scheme">
           <Select
             ariaLabel="Colour scheme"
             value={slot.colorScheme}

@@ -1042,6 +1042,121 @@ textarea {
   font-weight: 700;
 }
 
+/* --- component layers ----------------------------------------------------- */
+
+.component {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px;
+  margin-bottom: 6px;
+  background: var(--bg-input);
+}
+
+.component[data-hidden='true'] {
+  opacity: 0.5;
+}
+
+.component-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.component-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.component-name {
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  padding: 0 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-size: 11.5px;
+  font-weight: 500;
+  outline: none;
+  user-select: text;
+}
+
+.component-name:hover {
+  border-color: var(--line-strong);
+}
+
+.component-name:focus {
+  background: var(--bg-void);
+  border-color: var(--accent-dim);
+}
+
+.component-count {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.selection-input {
+  height: 24px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.selection-input[data-invalid='true'] {
+  border-color: var(--error);
+}
+
+.selection-error {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--error);
+  line-height: 1.4;
+}
+
+.component-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.component-reorder {
+  display: flex;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.component-reorder button {
+  font-size: 9.5px;
+  color: var(--text-faint);
+}
+
+.component-reorder button:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.component-reorder button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.add-component {
+  padding: 7px;
+  margin-bottom: 7px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+}
+
 /* --- entity list ---------------------------------------------------------- */
 
 .entity {

@@ -6,17 +6,12 @@
 import { useEffect, useState } from 'react';
 import { Command } from 'cmdk';
 import { COLOR_SCHEME_LABELS, type ColorScheme } from '../mol/coloring';
-import type { PolymerStyle } from '../gfx/geometry';
+import {
+  STYLE_LABELS, STYLE_ORDER, Style, makeComponent,
+} from '../mol/components';
+import { SELECTION_EXAMPLES } from '../mol/selection';
 import { LAYOUT_SLOT_COUNT, useStore, type LayoutMode } from '../state/store';
 import { viewer } from '../viewer/ViewerController';
-
-const POLYMER_STYLES: { value: PolymerStyle; label: string }[] = [
-  { value: 'cartoon', label: 'Cartoon' },
-  { value: 'backbone', label: 'Backbone trace' },
-  { value: 'ball-stick', label: 'Ball and stick' },
-  { value: 'licorice', label: 'Licorice' },
-  { value: 'spacefill', label: 'Spacefill' },
-];
 
 const LAYOUTS: { value: LayoutMode; label: string }[] = [
   { value: 'single', label: 'Single pane' },
@@ -129,23 +124,38 @@ export function CommandPalette() {
           </Command.Group>
 
           <Command.Group heading="Representation">
-            {POLYMER_STYLES.map((s) => (
+            {STYLE_ORDER.filter((s) => s !== Style.None).map((style) => (
               <Command.Item
-                key={s.value}
-                value={`representation ${s.label}`}
-                onSelect={() => run(() => store.updateRepresentation(activeSlot, { polymer: s.value }))}
+                key={style}
+                value={`style all ${STYLE_LABELS[style]}`}
+                onSelect={() => run(() => store.setComponents(
+                  activeSlot,
+                  store.slots[activeSlot].components.map((c) => ({ ...c, style })),
+                ))}
               >
-                Polymer as {s.label.toLowerCase()}
+                Style every component as {STYLE_LABELS[style].toLowerCase()}
               </Command.Item>
             ))}
-            <Command.Item
-              value="toggle waters"
-              onSelect={() => run(() => store.updateRepresentation(activeSlot, {
-                showWater: !store.slots[activeSlot].representation.showWater,
-              }))}
-            >
-              Toggle waters
-            </Command.Item>
+          </Command.Group>
+
+          <Command.Group heading="Add component">
+            {SELECTION_EXAMPLES.map((example) => (
+              <Command.Item
+                key={example.value}
+                value={`add component ${example.label} ${example.value}`}
+                onSelect={() => run(() => store.setComponents(activeSlot, [
+                  ...store.slots[activeSlot].components,
+                  makeComponent({
+                    name: example.label,
+                    selection: example.value,
+                    style: Style.BallStick,
+                  }),
+                ]))}
+              >
+                {example.label}
+                <span className="shortcut">{example.value}</span>
+              </Command.Item>
+            ))}
           </Command.Group>
 
           <Command.Group heading="Colour">
