@@ -5,7 +5,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, FolderOpen, Loader2, Save, Trash2, Upload } from 'lucide-react';
+import {
+  Download, FilePlus2, FolderOpen, Loader2, Save, Trash2, Upload,
+} from 'lucide-react';
 import {
   parseProject, projectFilename, restoreProject, serialiseProject,
   type RestoreReport,
@@ -13,13 +15,20 @@ import {
 import {
   deleteProject, listProjects, loadProject, saveProject, type ProjectSummary,
 } from '../../state/projectStore';
-import { useStore } from '../../state/store';
+import { DEFAULT_PROJECT_NAME, useStore } from '../../state/store';
+import { viewer } from '../../viewer/ViewerController';
 import { Tip } from '../controls';
 
 export function ProjectPanel() {
   const slots = useStore((s) => s.slots);
+  const projectName = useStore((s) => s.projectName);
+  const projectId = useStore((s) => s.projectId);
+  const setProjectName = useStore((s) => s.setProjectName);
+  const setProjectId = useStore((s) => s.setProjectId);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [name, setName] = useState('');
+  const [name, setName] = useState(projectName);
+  const [newName, setNewName] = useState('');
+  const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +43,8 @@ export function ProjectPanel() {
   }, []);
 
   useEffect(refresh, [refresh]);
+  // Renaming in the title bar should be reflected here rather than fighting it.
+  useEffect(() => setName(projectName), [projectName]);
 
   const loadedEntries = slots.map((s) => s.entryId).filter(Boolean) as string[];
   const hasContent = loadedEntries.length > 0;
@@ -62,17 +73,34 @@ export function ProjectPanel() {
   };
 
   const doSave = () => withBusy('Saving…', async () => {
-    const document = serialiseProject();
-    const saved = await saveProject(name || loadedEntries.join(', '), document);
-    setName('');
+    // Renaming here renames the project itself, so the title bar and the saved
+    // record never disagree.
+    const finalName = name.trim() || projectName;
+    setProjectName(finalName);
+    const document = { ...serialiseProject(), name: finalName };
+    const saved = await saveProject(finalName, document, projectId ?? undefined);
+    setProjectId(saved.id);
     refresh();
-    setStatus(`Saved "${saved.name}" in this browser`);
+    setStatus(
+      projectId ? `Updated "${saved.name}"` : `Saved "${saved.name}" in this browser`,
+    );
   });
+
+  const doNew = () => {
+    viewer.newProject(newName || DEFAULT_PROJECT_NAME);
+    setNewName('');
+    setCreating(false);
+    setStatus(null);
+    setError(null);
+  };
 
   const doOpen = (id: string) => withBusy('Loading…', async () => {
     const project = await loadProject(id);
     if (!project) throw new Error('That project is no longer in the store');
     const report = await restoreProject(project.document);
+    // Remember which record this came from, so the next save updates it.
+    setProjectName(project.name);
+    setProjectId(project.id);
     setStatus(describe(report));
   });
 
@@ -90,6 +118,8 @@ export function ProjectPanel() {
 
   const doImport = (text: string) => withBusy('Importing…', async () => {
     const report = await restoreProject(parseProject(text));
+    // An imported project is not yet a record in this browser.
+    setProjectId(null);
     setPasting(false);
     setPasted('');
     setStatus(describe(report));
@@ -98,10 +128,59 @@ export function ProjectPanel() {
   return (
     <>
       <div className="panel-section">
+        <div className="section-label"><span>Current project</span></div>
+        {!creating ? (
+          <>
+            <div className="current-project">{projectName}</div>
+            <button
+              type="button"
+              className="btn"
+              style={{ width: '100%', marginTop: 7 }}
+              onClick={() => setCreating(true)}
+            >
+              <FilePlus2 size={12} /> New project
+            </button>
+          </>
+        ) : (
+          <>
+            <input
+              className="text-input"
+              placeholder={DEFAULT_PROJECT_NAME}
+              value={newName}
+              autoFocus
+              spellCheck={false}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') doNew();
+                if (e.key === 'Escape') { setCreating(false); setNewName(''); }
+              }}
+            />
+            <p style={{ fontSize: 10.5, color: 'var(--text-faint)', margin: '7px 0', lineHeight: 1.5 }}>
+              Clears every pane and returns all settings to their defaults.
+              Anything unsaved is lost.
+            </p>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button type="button" className="btn primary small" style={{ flex: 1 }} onClick={doNew}>
+                Create
+              </button>
+              <button
+                type="button"
+                className="btn small"
+                style={{ flex: 1 }}
+                onClick={() => { setCreating(false); setNewName(''); }}
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="panel-section">
         <div className="section-label"><span>Save to this browser</span></div>
         <input
           className="text-input"
-          placeholder={hasContent ? loadedEntries.join(', ') : 'Nothing loaded yet'}
+          placeholder={projectName}
           value={name}
           spellCheck={false}
           disabled={!hasContent}
@@ -115,7 +194,7 @@ export function ProjectPanel() {
           disabled={!hasContent || busy}
           onClick={doSave}
         >
-          <Save size={12} /> Save project
+          <Save size={12} /> {projectId ? 'Save changes' : 'Save project'}
         </button>
         <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
           Stored in this browser only. Structures are referenced by PDB id and

@@ -263,6 +263,25 @@ export class ViewerController {
     return use ? first.totalCopies : 1;
   }
 
+  /**
+   * Starts a fresh project. Panes are unloaded individually rather than by
+   * resetting the store alone, because the GPU buffers and structures live
+   * outside it and would otherwise leak.
+   */
+  newProject(name: string): void {
+    for (let i = 0; i < MAX_SLOTS; i++) {
+      this.data[i].loadHandle?.cancel();
+      this.data[i] = emptySlotData();
+      this.engine.setStructure(i, null);
+      this.engine.setGeometry(i, null);
+      this.engine.setSceneTransform(i, IDENTITY);
+      this.engine.setOverlay(i, EMPTY_F32);
+      this.engine.setLabels(i, EMPTY_F32);
+    }
+    useStore.getState().resetSession(name);
+    this.invalidate();
+  }
+
   unload(slot: number): void {
     this.data[slot].loadHandle?.cancel();
     this.data[slot] = emptySlotData();

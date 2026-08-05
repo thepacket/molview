@@ -26,6 +26,8 @@ export const LAYOUT_SLOT_COUNT: Record<LayoutMode, number> = {
   quad: 4,
 };
 
+export const DEFAULT_PROJECT_NAME = 'Untitled';
+
 export type SlotStatus = 'empty' | 'loading' | 'ready' | 'error';
 
 export interface SlotStats {
@@ -135,6 +137,10 @@ export interface AppState {
   gpuName: string;
   gpuError: string | null;
   frameMs: number;
+  /** Name of the session being worked on; shown in the title bar. */
+  projectName: string;
+  /** Id of the saved project this session came from, if any. */
+  projectId: string | null;
   search: SearchState;
 
   setLayout: (layout: LayoutMode) => void;
@@ -146,6 +152,10 @@ export interface AppState {
   setLinkedCameras: (linked: boolean) => void;
   setGpuInfo: (name: string, error: string | null) => void;
   setFrameMs: (ms: number) => void;
+  setProjectName: (name: string) => void;
+  setProjectId: (id: string | null) => void;
+  /** Wipes every pane back to defaults; the controller frees the GPU side. */
+  resetSession: (name: string) => void;
 
   patchSlot: (slot: number, patch: Partial<SlotState>) => void;
   updateRepresentation: (slot: number, patch: Partial<Representation>) => void;
@@ -172,6 +182,8 @@ export const useStore = create<AppState>((set) => ({
   gpuName: '',
   gpuError: null,
   frameMs: 0,
+  projectName: DEFAULT_PROJECT_NAME,
+  projectId: null,
   search: {
     filters: { ...EMPTY_FILTERS },
     status: 'idle',
@@ -197,6 +209,19 @@ export const useStore = create<AppState>((set) => ({
   setLinkedCameras: (linkedCameras) => set({ linkedCameras }),
   setGpuInfo: (gpuName, gpuError) => set({ gpuName, gpuError }),
   setFrameMs: (frameMs) => set({ frameMs }),
+  setProjectName: (projectName) => set({
+    projectName: projectName.trim() || DEFAULT_PROJECT_NAME,
+  }),
+  setProjectId: (projectId) => set({ projectId }),
+
+  resetSession: (name) => set({
+    slots: Array.from({ length: MAX_SLOTS }, emptySlot),
+    layout: 'single',
+    activeSlot: 0,
+    linkedCameras: false,
+    projectName: name.trim() || DEFAULT_PROJECT_NAME,
+    projectId: null,
+  }),
 
   patchSlot: (slot, patch) => set((s) => {
     const slots = s.slots.slice();

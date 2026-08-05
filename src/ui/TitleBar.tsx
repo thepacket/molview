@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from 'react';
 import {
-  Columns2, Command, Grid2x2, Link2, Link2Off, PanelLeft, PanelRight, Rows2, Square,
+  Columns2, Command, Grid2x2, Link2, Link2Off, PanelLeft, PanelRight, Pencil,
+  Rows2, Square,
 } from 'lucide-react';
 import { useStore, type LayoutMode } from '../state/store';
 import { viewer } from '../viewer/ViewerController';
@@ -26,6 +28,7 @@ export function TitleBar() {
 
   return (
     <header className="titlebar">
+      <div className="titlebar-left">
       <div className="brand">
         <MoleculeMark />
         <span className="brand-name">Mol<span>View</span></span>
@@ -64,8 +67,11 @@ export function TitleBar() {
         </button>
       </Tip>
 
-      <div className="titlebar-spacer" />
+      </div>
 
+      <ProjectTitle />
+
+      <div className="titlebar-right">
       <button type="button" className="tool-btn" onClick={() => setPaletteOpen(true)}>
         <Command size={13} />
         <span style={{ fontSize: 11 }}>Commands</span>
@@ -83,7 +89,68 @@ export function TitleBar() {
           <PanelRight size={14} />
         </button>
       </Tip>
+      </div>
     </header>
+  );
+}
+
+/**
+ * The project name, centred. Click to rename in place — a dialog for a single
+ * text field would be heavier than the thing it edits.
+ */
+function ProjectTitle() {
+  const projectName = useStore((s) => s.projectName);
+  const setProjectName = useStore((s) => s.setProjectName);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(projectName);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(projectName);
+  }, [projectName, editing]);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    setProjectName(draft);
+    setEditing(false);
+  };
+
+  return (
+    <div className="titlebar-center">
+      {editing ? (
+        <input
+          ref={inputRef}
+          className="project-name-input"
+          value={draft}
+          spellCheck={false}
+          aria-label="Project name"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') { setDraft(projectName); setEditing(false); }
+            e.stopPropagation();
+          }}
+        />
+      ) : (
+        <Tip label="Rename this project">
+          <button
+            type="button"
+            className="project-name"
+            onClick={() => setEditing(true)}
+          >
+            {projectName}
+            <Pencil size={10} className="project-name-pencil" />
+          </button>
+        </Tip>
+      )}
+    </div>
   );
 }
 

@@ -187,6 +187,15 @@ export function CommandPalette() {
               Open projects
             </Command.Item>
             <Command.Item
+              value="new project clear session"
+              onSelect={() => run(() => {
+                viewer.newProject('Untitled');
+                store.setPanel('project');
+              })}
+            >
+              New project
+            </Command.Item>
+            <Command.Item
               value="clear pane"
               onSelect={() => run(() => viewer.unload(activeSlot))}
             >

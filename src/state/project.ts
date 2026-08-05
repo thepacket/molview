@@ -70,6 +70,7 @@ interface PaneDocument {
 export interface ProjectDocument {
   format: number;
   app: 'molview';
+  name: string;
   created: string;
   session: {
     layout: LayoutMode;
@@ -154,6 +155,7 @@ export function serialiseProject(): ProjectDocument {
   return {
     format: PROJECT_FORMAT,
     app: 'molview',
+    name: state.projectName,
     created: new Date().toISOString(),
     session: {
       layout: state.layout,
@@ -221,6 +223,8 @@ export interface RestoreReport {
 export async function restoreProject(doc: ProjectDocument): Promise<RestoreReport> {
   const store = useStore.getState();
   const report: RestoreReport = { panesRestored: 0, measurementsDropped: 0, failures: [] };
+
+  if (doc.name) store.setProjectName(doc.name);
 
   const layout = doc.session?.layout ?? 'single';
   store.setLayout(layout);
@@ -315,6 +319,12 @@ export async function restoreProject(doc: ProjectDocument): Promise<RestoreRepor
 
 /** Suggests a filename from what the project contains. */
 export function projectFilename(doc: ProjectDocument): string {
+  // Prefer the project's own name; fall back to what it contains.
+  const fromName = (doc.name ?? '').trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (fromName && fromName !== 'untitled') return `${fromName}.molview.json`;
+
   const ids = doc.panes.map((p) => p.entryId).filter(Boolean) as string[];
   const stem = ids.length > 0 ? ids.join('-').toLowerCase() : 'session';
   return `${stem}.molview.json`;

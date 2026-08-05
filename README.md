@@ -86,8 +86,11 @@ which residues correspond, then the paired Cα atoms are fitted and the outliers
 pruned. Validated against known comparisons — 4HHB's identical alpha chains
 0.30 Å, alpha vs beta 1.09 Å, alpha vs sperm whale myoglobin 1.07 Å.
 
-**Projects.** Save a session in the browser and reopen it later, or export it
-as `.molview.json` to move between machines. Saving never downloads a file;
+**Projects.** A session has a name, shown in the centre of the title bar and
+renamed by clicking it; **New project** clears every pane back to defaults.
+Save a session in the browser and reopen it later, or export it as
+`.molview.json` to move between machines. Saving an already-saved project
+updates it in place rather than making a copy. Saving never downloads a file;
 export is the only operation that touches the file system. Coordinates are not
 stored — entries are referenced by PDB id and refetched, so a two-pane project
 is about 2 KB.
