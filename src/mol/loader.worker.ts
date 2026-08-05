@@ -22,6 +22,8 @@ export interface LoadRequest {
   file?: { buffer: ArrayBuffer; name: string };
   /** Which model of an NMR ensemble to build; defaults to the first. */
   modelNum?: number;
+  /** Build every model at once, for an ensemble overlay. */
+  allModels?: boolean;
 }
 
 export interface CancelRequest {
@@ -49,7 +51,7 @@ function transferablesOf(s: Structure, bonds: BondList): Transferable[] {
     s.atomNameId.buffer, s.atomResidue.buffer, s.resNameId.buffer, s.resSeq.buffer,
     s.resChain.buffer, s.resSS.buffer, s.resKind.buffer, s.resAtomStart.buffer,
     s.resAnchor.buffer, s.resOrient.buffer, s.chainKind.buffer,
-    s.chainResStart.buffer, s.center.buffer, bonds.indices.buffer,
+    s.chainResStart.buffer, s.chainModel.buffer, s.center.buffer, bonds.indices.buffer,
   ] as Transferable[];
 }
 
@@ -90,6 +92,7 @@ async function handleLoad(req: LoadRequest): Promise<void> {
     const title = block.category('struct').field('title').str(0) || req.entryId;
     const structure = buildStructure(block, req.entryId.toUpperCase(), title, {
       modelNum: req.modelNum,
+      allModels: req.allModels,
     });
 
     if (controller.signal.aborted) return;

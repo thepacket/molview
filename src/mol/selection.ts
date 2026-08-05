@@ -125,10 +125,12 @@ type Node =
   | { type: 'backbone' }
   | { type: 'sidechain' }
   | { type: 'hydrogen' }
-  | { type: 'polymer' };
+  | { type: 'polymer' }
+  | { type: 'model'; values: number[] };
 
 /** Keywords taking an argument, e.g. `chain A`, `element Fe`. */
-const ARGUMENT_KEYWORDS: Record<string, 'chain' | 'residue' | 'atom' | 'element'> = {
+const ARGUMENT_KEYWORDS: Record<string, 'chain' | 'residue' | 'atom' | 'element' | 'model'> = {
+  model: 'model',
   chain: 'chain',
   resname: 'residue',
   resid: 'residue',
@@ -245,7 +247,11 @@ class Parser {
         throw new SelectionError(`"${rawWord}" needs a value, e.g. "${word} A"`);
       }
       this.pos++;
-      return { type: argKind, values: next.value.split(',').filter(Boolean) } as Node;
+      const values = next.value.split(',').filter(Boolean);
+      if (argKind === 'model') {
+        return { type: 'model', values: values.map(Number).filter(Number.isFinite) };
+      }
+      return { type: argKind, values } as Node;
     }
 
     switch (word) {
@@ -391,6 +397,9 @@ function evaluate(node: Node, s: Structure, out: Uint8Array): Uint8Array {
             hit = k === MolKind.Protein || k === MolKind.Nucleic;
             break;
           }
+          case 'model':
+            hit = node.values.includes(s.chainModel[s.resChain[r]]);
+            break;
           case 'ss':
             hit = s.resKind[r] === MolKind.Protein && node.values.includes(s.resSS[r]);
             break;
@@ -431,7 +440,7 @@ export function countSelected(mask: Uint8Array): number {
 export const SELECTION_KEYWORDS = [
   'all', 'protein', 'nucleic', 'polymer', 'ligand', 'ion', 'water', 'hetero',
   'helix', 'sheet', 'coil', 'backbone', 'sidechain', 'hydrogen', 'heavy',
-  'and', 'or', 'not',
+  'model', 'and', 'or', 'not',
 ];
 
 export const SELECTION_EXAMPLES: { label: string; value: string }[] = [

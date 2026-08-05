@@ -61,13 +61,16 @@ export function loadStructure(
   onProgress: (p: LoadProgress) => void,
   file?: { buffer: ArrayBuffer; name: string },
   modelNum?: number,
+  allModels?: boolean,
 ): LoadHandle {
   const w = ensureWorker();
   const requestId = nextId++;
 
   const promise = new Promise<LoadResult>((resolve, reject) => {
     pending.set(requestId, { resolve, reject, onProgress });
-    const req: LoadRequest = { type: 'load', requestId, entryId, file, modelNum };
+    const req: LoadRequest = {
+      type: 'load', requestId, entryId, file, modelNum, allModels,
+    };
     w.postMessage(req, file ? [file.buffer] : []);
   });
 

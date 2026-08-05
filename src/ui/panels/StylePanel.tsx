@@ -133,21 +133,34 @@ export function StylePanel() {
       {structure.modelCount > 1 && (
         <div className="panel-section">
           <div className="section-label"><span>Ensemble</span></div>
-          <Field
-            label="Model"
-            value={`${structure.modelNum} of ${structure.modelCount}`}
-          >
-            <Slider
-              value={structure.modelNum}
-              min={1}
-              max={structure.modelCount}
-              step={1}
-              onChange={(v) => void viewer.setModel(activeSlot, v)}
-            />
-          </Field>
-          <p style={{ fontSize: 10.5, color: 'var(--text-faint)', lineHeight: 1.5 }}>
-            NMR depositions contain several models of the same molecule. One is
-            shown at a time; the camera stays put as you step through them.
+          <Toggle
+            label={`Show all ${structure.modelCount} models`}
+            checked={structure.modelNum === 0}
+            onChange={(v) => void viewer.setEnsembleOverlay(activeSlot, v)}
+            hint="Draws every model at once, as backbone traces"
+          />
+          {structure.modelNum !== 0 && (
+            <div style={{ marginTop: 9 }}>
+              <Field
+                label="Model"
+                value={`${structure.modelNum} of ${structure.modelCount}`}
+              >
+                <Slider
+                  value={structure.modelNum}
+                  min={1}
+                  max={structure.modelCount}
+                  step={1}
+                  onChange={(v) => void viewer.setModel(activeSlot, v)}
+                />
+              </Field>
+            </div>
+          )}
+          <p style={{ fontSize: 10.5, color: 'var(--text-faint)', lineHeight: 1.5, marginTop: 7 }}>
+            {structure.modelNum === 0
+              ? 'Every model is drawn as a separate chain, so "model 3" selects one '
+                + 'of them and the spread between them is visible directly.'
+              : 'NMR depositions contain several models of the same molecule. The '
+                + 'camera stays put as you step through them.'}
           </p>
         </div>
       )}

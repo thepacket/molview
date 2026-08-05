@@ -67,6 +67,7 @@ rainbow — per component or inherited from the pane.
 | `:HEM` | residues by component name |
 | `@CA,N,C,O` | atoms by name |
 | `/A:1-140@CA` | all three, intersected |
+| `model 3` | one member of an NMR ensemble |
 
 Combined with `and` / `or` / `not`, parentheses, and category keywords —
 `protein`, `nucleic`, `polymer`, `ligand`, `ion`, `water`, `hetero`, `helix`,
@@ -202,7 +203,7 @@ capsid.
   approximations, not DSSP, an energetic H-bond analysis, or a structure-based
   aligner. They are good enough to look at and to reason from; they are not
   what you would cite.
-- Only one NMR model is drawn at a time.
+- NMR ensembles can be drawn whole or stepped through one model at a time.
 - A pane opened from a local file cannot be restored from a project, since
   there is no id to refetch.
 - The deferred pipeline is opaque-only — there is no transparency, and no

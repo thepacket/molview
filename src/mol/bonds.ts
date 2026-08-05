@@ -20,7 +20,10 @@ const TOLERANCE = 0.45;
 const MAX_BOND = 2.2;
 
 export function computeBonds(s: Structure, atomFilter?: Uint8Array): BondList {
-  const { x, y, z, element, atomCount, atomResidue, resKind } = s;
+  const { x, y, z, element, atomCount, atomResidue, resKind, resChain, chainModel } = s;
+  // Ensemble models are superposed, so their atoms overlap in space; without
+  // this every model would be bonded to every other one.
+  const modelOf = (atom: number) => chainModel[resChain[atomResidue[atom]]];
 
   const cell = MAX_BOND;
   const inv = 1 / cell;
@@ -92,6 +95,7 @@ export function computeBonds(s: Structure, atomFilter?: Uint8Array): BondList {
 
             // Waters bond to nothing here; hydrogen bonds are not covalent.
             if (isWaterI || resKind[atomResidue[j]] === Kind.Water) continue;
+            if (modelOf(i) !== modelOf(j)) continue;
 
             const dxp = x[i] - x[j];
             const dyp = y[i] - y[j];

@@ -142,13 +142,14 @@ export class ViewerController {
 
   async load(
     slot: number, entryId: string, file?: File, modelNum?: number,
+    allModels?: boolean,
   ): Promise<void> {
     const store = useStore.getState();
     const id = entryId.trim().toUpperCase();
     if (!id && !file) return;
 
     this.data[slot].loadHandle?.cancel();
-    const keepCamera = modelNum !== undefined
+    const keepCamera = (modelNum !== undefined || allModels !== undefined)
       && store.slots[slot].entryId === entryId.trim().toUpperCase();
 
     store.patchSlot(slot, {
@@ -199,7 +200,7 @@ export class ViewerController {
         progressLoaded: p.loaded,
         progressTotal: p.total,
       });
-    }, fileData, modelNum);
+    }, fileData, modelNum, allModels);
 
     this.data[slot].loadHandle = handle;
 
@@ -681,6 +682,23 @@ export class ViewerController {
     const entryId = useStore.getState().slots[slot].entryId;
     if (!entryId) return;
     await this.load(slot, entryId, undefined, modelNum);
+  }
+
+  /**
+   * Loads every model of an ensemble at once. A backbone trace is the
+   * conventional way to read the spread — twenty cartoons on top of each other
+   * is a solid mass.
+   */
+  async setEnsembleOverlay(slot: number, enabled: boolean): Promise<void> {
+    const entryId = useStore.getState().slots[slot].entryId;
+    if (!entryId) return;
+    await this.load(slot, entryId, undefined, enabled ? undefined : 1, enabled);
+    if (!enabled) return;
+
+    const components = useStore.getState().slots[slot].components.map((c) => (
+      c.selection === 'polymer' ? { ...c, style: Style.Backbone } : c
+    ));
+    useStore.getState().setComponents(slot, components);
   }
 
   clearSuperposition(slot: number): void {
