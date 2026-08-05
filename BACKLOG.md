@@ -104,20 +104,7 @@ small, short keys, omit defaults).
 
 ---
 
-## 2. Selection model
-
-Today a representation is **per pane and global**: one polymer style, one ligand
-style, one colour scheme. ChimeraX attaches style and colour to arbitrary atom
-selections, and nearly everything expressive depends on that.
-
-Turn `Representation` into a list of `{selection, style, colour}` components,
-with an atom-specification language behind it (`/A:1-50@CA`) driven from the
-existing ⌘K palette. This is the highest-ceiling item on the list: most other
-features either need it or get better with it.
-
----
-
-## 3. Measurements and labels
+## 2. Measurements and labels
 
 Distances between picked atoms, H-bonds, clashes. The geometry is
 straightforward; the blocker is that **the engine has no text rendering**. That
@@ -126,7 +113,7 @@ residue labels, distance readouts and colour-key legends all ride on it.
 
 ---
 
-## 4. Structural superposition
+## 3. Structural superposition
 
 Sequence-guided alignment (Needleman–Wunsch over the one-letter sequences the
 sequence track already builds) plus Kabsch superposition, with an RMSD readout.
@@ -138,7 +125,7 @@ two structures in a single pane.
 
 ---
 
-## 5. Nucleotide slab/ladder representation
+## 4. Nucleotide slab/ladder representation
 
 Currently the weakest visual: `1BNA` renders as two featureless tubes. Base
 slabs make nucleic acids legible. Mesh generation like the cartoon builder, so
@@ -146,7 +133,7 @@ it reuses machinery that exists.
 
 ---
 
-## 6. Smaller wins
+## 5. Smaller wins
 
 - **Named lighting presets** ("soft", "flat", "silhouette") instead of four raw
   sliders. Nearly free.
@@ -156,6 +143,16 @@ it reuses machinery that exists.
   overlaying them is cheap.
 - **Featured-list download sizes**: `3J3Q` is a 113 MB download with no warning
   on the button.
+
+---
+
+## Done
+
+- **Biological assemblies** (`b8daf53`) — operator expressions applied on the
+  GPU; a 49k-atom asymmetric unit becomes a 900-chain capsid for the cost of
+  sixty matrices.
+- **Selection model** (`f1801fc`) — an atom-specification language and ordered
+  draw components, replacing the per-pane global representation.
 
 ---
 

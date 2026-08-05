@@ -49,10 +49,31 @@ encodes a frame in 0.17 ms. Assembly 1 is selected automatically unless the
 expansion would be extreme (icosahedral entries with thousands of copies stay
 opt-in), and the asymmetric unit is always available as an explicit choice.
 
-**Representations.** Cartoon ribbons with real secondary-structure
-cross-sections and β-strand arrowheads, backbone trace, ball-and-stick,
-licorice and spacefill. Colour by chain, element, secondary structure, residue
-type, B-factor/pLDDT, hydrophobicity, entity, or an N→C rainbow.
+**Representations are composable.** A pane is an ordered list of *components* —
+each one a selection plus how to draw it — applied like layers, so the last
+component covering an atom wins. "Cartoon everywhere, spheres on chain A, sticks
+at the haem" is three rows, not a special case. Styles are cartoon ribbons with
+real secondary-structure cross-sections and β-strand arrowheads, backbone trace,
+ball-and-stick, licorice and spacefill. Colour by chain, element, secondary
+structure, residue type, B-factor/pLDDT, hydrophobicity, entity, or an N→C
+rainbow — per component or inherited from the pane.
+
+**Selections** use a compact atom-specification grammar:
+
+| | |
+| --- | --- |
+| `/A,B` | chains, by auth id |
+| `:1-140,200` | residues by sequence number |
+| `:HEM` | residues by component name |
+| `@CA,N,C,O` | atoms by name |
+| `/A:1-140@CA` | all three, intersected |
+
+Combined with `and` / `or` / `not`, parentheses, and category keywords —
+`protein`, `nucleic`, `polymer`, `ligand`, `ion`, `water`, `hetero`, `helix`,
+`sheet`, `coil`, `backbone`, `sidechain`, `hydrogen`, `heavy`. Juxtaposition
+means intersection, so `protein /A` is `protein and /A`. A malformed expression
+is reported inline and that layer is skipped; the rest of the scene still
+renders.
 
 **Inspection.** Hover or click any atom for its residue, chain and atom name.
 The sequence track is built from the loaded coordinates, so gaps in the model
