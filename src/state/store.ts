@@ -119,7 +119,8 @@ function emptySlot(): SlotState {
 }
 
 export type PanelId =
-  | 'browse' | 'entry' | 'style' | 'sequence' | 'measure' | 'scene' | 'project';
+  | 'browse' | 'entry' | 'style' | 'sequence' | 'measure' | 'scene' | 'project'
+  | 'settings';
 
 export interface SearchState {
   filters: SearchFilters;

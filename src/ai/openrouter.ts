@@ -1,0 +1,220 @@
+/**
+ * OpenRouter client.
+ *
+ * Called straight from the browser. The key is held in this tab's
+ * sessionStorage and sent only to openrouter.ai — nothing in MolView proxies
+ * it, and it is never written into a project, a share link, or a log.
+ */
+
+import { ACTION_TYPES } from './actionTypes';
+
+const KEY_STORAGE = 'molview-openrouter-key';
+const MODEL_STORAGE = 'molview-openrouter-model';
+export const SETTINGS_EVENT = 'molview:openrouter-settings';
+
+/** A capable default; the picker is populated from the live catalogue. */
+export const DEFAULT_MODEL = 'anthropic/claude-sonnet-5';
+
+export interface OpenRouterModel {
+  id: string;
+  name: string;
+  provider: string;
+  supportedParameters: string[];
+}
+
+function sessionGet(key: string): string {
+  try {
+    return sessionStorage.getItem(key) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function sessionSet(key: string, value: string): void {
+  try {
+    if (value) sessionStorage.setItem(key, value);
+    else sessionStorage.removeItem(key);
+  } catch {
+    // A browser with storage disabled still works, just not across reloads.
+  }
+  window.dispatchEvent(new CustomEvent(SETTINGS_EVENT));
+}
+
+export function getApiKey(): string { return sessionGet(KEY_STORAGE); }
+export function setApiKey(key: string): void { sessionSet(KEY_STORAGE, key.trim()); }
+export function getModel(): string { return sessionGet(MODEL_STORAGE) || DEFAULT_MODEL; }
+export function setModel(model: string): void { sessionSet(MODEL_STORAGE, model.trim()); }
+
+function attributionHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'X-OpenRouter-Title': 'MolView',
+    Authorization: `Bearer ${getApiKey()}`,
+  };
+  if (location.protocol.startsWith('http')) headers['HTTP-Referer'] = location.origin;
+  return headers;
+}
+
+// ---------------------------------------------------------------------------
+// Model catalogue
+// ---------------------------------------------------------------------------
+
+let modelsCache: OpenRouterModel[] | null = null;
+
+export async function fetchModels(force = false): Promise<OpenRouterModel[]> {
+  if (modelsCache && !force) return modelsCache;
+
+  const response = await fetch('https://openrouter.ai/api/v1/models');
+  if (!response.ok) throw new Error(`Could not list models (${response.status})`);
+  const json = await response.json();
+
+  const models: OpenRouterModel[] = (json.data ?? [])
+    .map((m: Record<string, unknown>) => ({
+      id: String(m.id),
+      name: String(m.name ?? m.id),
+      provider: String(m.id).split('/')[0].replace(/^~/, ''),
+      supportedParameters: Array.isArray(m.supported_parameters)
+        ? (m.supported_parameters as string[])
+        : [],
+    }))
+    .sort((a: OpenRouterModel, b: OpenRouterModel) => a.name.localeCompare(b.name));
+
+  modelsCache = models;
+  return models;
+}
+
+// ---------------------------------------------------------------------------
+// Completion
+// ---------------------------------------------------------------------------
+
+/** The reply envelope: prose for the user, plus actions for the viewer. */
+const RESPONSE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['message', 'actions'],
+  properties: {
+    message: {
+      type: 'string',
+      description: 'User-facing Markdown. Use Markdown tables and LaTeX equations when useful.',
+    },
+    actions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['type', 'reason', 'value'],
+        properties: {
+          type: { enum: [...ACTION_TYPES] },
+          reason: { type: 'string' },
+          value: {
+            type: ['string', 'null'],
+            description: 'Instruction value, or null when the instruction needs none.',
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+export function responseSchemaForPrompt(): string {
+  return JSON.stringify(RESPONSE_SCHEMA);
+}
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface Completion {
+  content: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export async function requestCompletion(
+  messages: ChatMessage[],
+  signal?: AbortSignal,
+): Promise<Completion> {
+  const key = getApiKey();
+  if (!key) throw new Error('Add an OpenRouter API key in Settings first.');
+
+  const model = getModel();
+  const catalogue = await fetchModels().catch(() => [] as OpenRouterModel[]);
+  const entry = catalogue.find((m) => m.id === model);
+  const supports = (parameter: string) =>
+    !entry || entry.supportedParameters.includes(parameter);
+
+  const body: Record<string, unknown> = { model, messages, stream: false };
+
+  // Structured output where the model can do it; a plain JSON mode otherwise;
+  // prompt-only grammar as the last resort.
+  if (entry?.supportedParameters.includes('structured_outputs')) {
+    body.response_format = {
+      type: 'json_schema',
+      json_schema: { name: 'molview_response', strict: true, schema: RESPONSE_SCHEMA },
+    };
+    body.provider = { require_parameters: true };
+  } else if (entry?.supportedParameters.includes('response_format')) {
+    body.response_format = { type: 'json_object' };
+  }
+
+  const reasoning = entry?.supportedParameters.includes('reasoning');
+  if (reasoning) body.reasoning = { effort: 'low', exclude: true };
+
+  // A truncated reply loses the closing brace and becomes unparseable, so the
+  // cap is generous rather than tight.
+  const cap = reasoning ? 3200 : 2400;
+  if (supports('max_completion_tokens')) body.max_completion_tokens = cap;
+  else body.max_tokens = cap;
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: attributionHeaders(),
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  const json = await response.json().catch(() => null);
+  if (!response.ok || json?.error) throw new Error(formatError(response.status, json));
+
+  const choice = json?.choices?.[0];
+  const raw = choice?.message?.content;
+  const content = typeof raw === 'string'
+    ? raw
+    : Array.isArray(raw)
+      ? raw.map((part: { text?: string }) => part?.text ?? '').join('')
+      : '';
+
+  if (!content.trim()) throw new Error('The model returned an empty reply.');
+  if (choice?.finish_reason === 'length' || choice?.finish_reason === 'max_tokens') {
+    throw new Error('The reply was cut off before it finished. Ask for something shorter.');
+  }
+
+  const usage = json?.usage ?? {};
+  return {
+    content,
+    model: json?.model ?? model,
+    promptTokens: usage.prompt_tokens ?? 0,
+    completionTokens: usage.completion_tokens ?? 0,
+    totalTokens: usage.total_tokens ?? 0,
+  };
+}
+
+function formatError(status: number, json: unknown): string {
+  const error = (json as { error?: Record<string, unknown> })?.error;
+  if (!error) {
+    if (status === 401) return 'OpenRouter rejected the API key.';
+    if (status === 402) return 'That OpenRouter account is out of credit.';
+    if (status === 429) return 'OpenRouter is rate limiting this key. Wait a moment.';
+    return `OpenRouter returned ${status}.`;
+  }
+  const parts = [String(error.message ?? `OpenRouter returned ${status}`)];
+  const metadata = error.metadata as Record<string, unknown> | undefined;
+  if (metadata?.provider_name) parts.push(`(provider: ${String(metadata.provider_name)})`);
+  if (typeof metadata?.raw === 'string' && metadata.raw) {
+    parts.push(metadata.raw.slice(0, 500));
+  }
+  return parts.join(' ');
+}

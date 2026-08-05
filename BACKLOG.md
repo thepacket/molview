@@ -11,6 +11,15 @@ Nothing outstanding. Ideas that came up along the way and were deliberately not
 taken are under "Not planned" below; current limitations of what exists are at
 the end of [README.md](README.md).
 
+Ideas that surfaced while building the assistant:
+
+- **Feed action results back to the model.** Results are shown to the user but
+  not returned to the model, so it cannot see that a chain id was rejected and
+  correct itself.
+- **A confirmation mode for actions.** Everything the assistant can do is a
+  reversible view change, so it runs directly; a toggle for people who want to
+  approve each one would be cheap.
+
 Two that would be worth revisiting if the app grows:
 
 - **Molecular surfaces** — see the note below. The blocker is transparency, not
@@ -39,6 +48,8 @@ Two that would be worth revisiting if the app grows:
   operator, download-size warnings, and NMR model selection.
 - **Projects with local files** — coordinates embedded behind an opt-in, and a
   clear explanation when a pane was saved without them.
+- **Assistant** — an OpenRouter-backed panel that answers in Markdown/LaTeX and
+  drives the viewer through a validated 18-action command surface.
 - **Ensemble overlay** — every NMR model at once as backbone traces, each model
   a separate chain so `model 3` selects one of them.
 - **Shareable URLs** — the session deflated into the URL fragment; a four-pane

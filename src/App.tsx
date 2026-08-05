@@ -10,6 +10,8 @@ import { EntryPanel } from './ui/panels/EntryPanel';
 import { ScenePanel } from './ui/panels/ScenePanel';
 import { MeasurePanel } from './ui/panels/MeasurePanel';
 import { ProjectPanel } from './ui/panels/ProjectPanel';
+import { SettingsPanel } from './ui/panels/SettingsPanel';
+import { AssistantPanel } from './ui/AssistantPanel';
 import { SequencePanel } from './ui/panels/SequencePanel';
 import { StylePanel } from './ui/panels/StylePanel';
 import { restoreProject } from './state/project';
@@ -49,6 +51,7 @@ export default function App() {
                 {panel === 'measure' && <MeasurePanel />}
                 {panel === 'scene' && <ScenePanel />}
                 {panel === 'project' && <ProjectPanel />}
+                {panel === 'settings' && <SettingsPanel />}
                 {panel === 'entry' && <EntryPanel />}
               </div>
             </aside>
@@ -71,6 +74,7 @@ export default function App() {
           )}
         </div>
 
+        <AssistantPanel />
         <StatusBar />
       </div>
 

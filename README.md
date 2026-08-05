@@ -105,6 +105,19 @@ export is the only operation that touches the file system. Coordinates are not
 stored — entries are referenced by PDB id and refetched, so a two-pane project
 is about 2 KB.
 
+**Assistant.** A panel above the status bar talks to any model on
+[OpenRouter](https://openrouter.ai). It answers as a structural biologist would
+— Markdown with GitHub tables and LaTeX equations — and it can drive the viewer:
+loading entries, building representations from selections, measuring, colouring,
+switching assemblies, superposing panes. Replies come back as one JSON object
+carrying prose plus a list of actions; each action is re-validated against live
+state before it runs, so a wrong chain id becomes a stated rejection rather than
+a silent no-op.
+
+The API key is typed into Settings, held in that tab's `sessionStorage`, and sent
+only to openrouter.ai — MolView has no server to send it to. It is never written
+into a project or a shareable link.
+
 **Inspection.** Hover or click any atom for its residue, chain and atom name.
 The sequence track is built from the loaded coordinates, so gaps in the model
 appear as gaps and every residue you click actually exists in the scene. Chains

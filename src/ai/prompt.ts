@@ -1,0 +1,134 @@
+/**
+ * The system prompt, and the compacted scene description sent with each turn.
+ *
+ * The command list is described twice on purpose: once machine-readable, as the
+ * enum inside the injected JSON schema, and once in prose so the model knows
+ * what each action is *for*. Structures are summarised — chain names and counts,
+ * never coordinates.
+ */
+
+import { ACTION_REFERENCE } from './actionTypes';
+import { responseSchemaForPrompt } from './openrouter';
+import { COLOR_SCHEME_LABELS } from '../mol/coloring';
+import { MolKind } from '../mol/structure';
+import { SELECTION_KEYWORDS } from '../mol/selection';
+import { LAYOUT_SLOT_COUNT, useStore } from '../state/store';
+import { viewer } from '../viewer/ViewerController';
+
+function actionTable(): string {
+  return ACTION_REFERENCE
+    .map((a) => `- ${a.type} — value: ${a.value}. ${a.note}`)
+    .join('\n');
+}
+
+export function systemPrompt(): string {
+  return `You are a structural biologist working alongside someone using MolView, a
+molecular viewer for the RCSB Protein Data Bank. You know protein and nucleic
+acid structure, folds and motifs, ligand binding, symmetry and biological
+assemblies, crystallographic and cryo-EM practice, and how to read a structure
+critically.
+
+Answer as a knowledgeable colleague would: get to the point, say what is
+actually visible in the data, and separate what the structure shows from what
+is inference. If a question rests on a wrong premise, say so. If something
+cannot be determined from the coordinates at hand, say that rather than
+guessing. Do not pad replies with restatements of the question.
+
+You can also drive the viewer. SCENE describes what is currently loaded.
+
+Selections use MolView's grammar:
+  /A,B          chains by auth id
+  :1-140,200    residues by sequence number
+  :HEM          residues by component name
+  @CA,N,C,O     atoms by name
+  /A:1-140@CA   the three intersected
+Combine with and / or / not and parentheses. Juxtaposition means intersection,
+so "protein /A" is "protein and /A". Category keywords: ${SELECTION_KEYWORDS.join(', ')}.
+Colour schemes: ${Object.keys(COLOR_SCHEME_LABELS).join(', ')}.
+
+Actions available:
+${actionTable()}
+
+Output grammar:
+Return exactly one JSON object matching this schema: ${responseSchemaForPrompt()}
+- message is the user-facing part, in Markdown. Use GitHub-style tables when
+  comparing things. Write equations in LaTeX with $...$ inline and $$...$$ for
+  display.
+- Because message is a JSON string, escape every LaTeX backslash as two JSON
+  backslashes: emit $$\\\\mathrm{RMSD}=\\\\sqrt{N^{-1}\\\\sum_i d_i^2}$$ in the JSON source.
+- actions change the viewer. Emit one only when the user asks to show, change,
+  load, measure, or move something; a suggestion belongs in message alone. Give
+  each action a short reason. Actions run in order, and later ones see the
+  effect of earlier ones — so load before you style, and set the active pane
+  before acting on it.
+- Only reference panes, entries, chains and assemblies that appear in SCENE.
+- Never wrap the JSON object in Markdown fences, and put no prose outside it.`;
+}
+
+/** A compact description of what is on screen. Counts and names, no coordinates. */
+export function sceneContext(): string {
+  const state = useStore.getState();
+  const paneCount = LAYOUT_SLOT_COUNT[state.layout];
+
+  const panes = [];
+  for (let i = 0; i < paneCount; i++) {
+    const slot = state.slots[i];
+    const structure = viewer.getStructure(i);
+    if (!structure || slot.status !== 'ready') {
+      panes.push({ pane: i + 1, empty: true });
+      continue;
+    }
+
+    // Chains as the user sees them: one entry per auth id.
+    const chains = new Map<string, { kind: string; residues: number }>();
+    for (let c = 0; c < structure.chainCount; c++) {
+      const id = structure.chainAuthId[c];
+      const residues = structure.chainResStart[c + 1] - structure.chainResStart[c];
+      const kind = kindName(structure.chainKind[c]);
+      const existing = chains.get(id);
+      if (existing) existing.residues += residues;
+      else chains.set(id, { kind, residues });
+    }
+
+    const ligands = new Set<string>();
+    for (let r = 0; r < structure.residueCount && ligands.size < 12; r++) {
+      if (structure.resKind[r] === MolKind.Ligand) {
+        ligands.add(structure.nameTable[structure.resNameId[r]]);
+      }
+    }
+
+    panes.push({
+      pane: i + 1,
+      active: i === state.activeSlot,
+      entry: slot.entryId,
+      title: slot.detail?.title,
+      method: slot.detail?.method,
+      resolution: slot.detail?.resolution,
+      atoms: slot.stats?.atoms,
+      chains: [...chains].map(([id, c]) => `${id}:${c.kind}:${c.residues}`),
+      ligands: [...ligands],
+      assembly: slot.assemblyId || 'asymmetric unit',
+      assembliesAvailable: structure.assemblies.map((a) => `${a.id} (${a.totalCopies}x)`),
+      models: structure.modelCount,
+      showingAllModels: structure.modelNum === 0,
+      components: state.slots[i].components.map((c) => `${c.name}="${c.selection}"`),
+      colorScheme: slot.colorScheme,
+      measurements: slot.measurements.map((m) => `${m.kind} ${m.label}`),
+      superposedOnto: slot.superposedOnto === null ? undefined : slot.superposedOnto + 1,
+      rmsd: slot.superposeRmsd ?? undefined,
+      overlaying: slot.overlaySlots.map((s) => s + 1),
+    });
+  }
+
+  return JSON.stringify({ layout: state.layout, activePane: state.activeSlot + 1, panes });
+}
+
+function kindName(kind: number): string {
+  switch (kind) {
+    case MolKind.Protein: return 'protein';
+    case MolKind.Nucleic: return 'nucleic';
+    case MolKind.Water: return 'water';
+    case MolKind.Ion: return 'ion';
+    default: return 'ligand';
+  }
+}

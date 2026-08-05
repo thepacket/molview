@@ -1,0 +1,339 @@
+/**
+ * Applying assistant actions to the viewer.
+ *
+ * The vocabulary itself lives in actionTypes.ts; this is only the executor.
+ * Actions arrive inside the model's JSON reply as `{type, reason, value}` and
+ * are applied here. Every branch re-validates against live state and returns a
+ * sentence for the transcript, so a wrong id becomes "rejected: ..." rather
+ * than a silent no-op.
+ *
+ * The surface is deliberately small and made only of reversible view changes.
+ * Nothing here writes to disk, sends data anywhere, or touches the API key.
+ */
+
+import { type Action } from './actionTypes';
+import { Style, makeComponent, STYLE_LABELS } from '../mol/components';
+import { COLOR_SCHEME_LABELS, type ColorScheme } from '../mol/coloring';
+import { evaluateSelection, parseSelection, selectionError } from '../mol/selection';
+import { createMeasurement, describeAtom, type MeasurementKind } from '../mol/measure';
+import { LAYOUT_SLOT_COUNT, useStore, type LayoutMode } from '../state/store';
+import { viewer } from '../viewer/ViewerController';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const STYLE_BY_NAME: Record<string, Style> = {
+  cartoon: Style.Cartoon,
+  backbone: Style.Backbone,
+  'backbone-trace': Style.Backbone,
+  trace: Style.Backbone,
+  'ball-stick': Style.BallStick,
+  'ball-and-stick': Style.BallStick,
+  ballstick: Style.BallStick,
+  licorice: Style.Licorice,
+  sticks: Style.Licorice,
+  spacefill: Style.Spacefill,
+  spheres: Style.Spacefill,
+  hidden: Style.None,
+  none: Style.None,
+};
+
+const LIGHTING: Record<string, { aoIntensity: number; aoRadius: number; outline: number; fogDensity: number }> = {
+  studio: { aoIntensity: 1, aoRadius: 4.5, outline: 0.85, fogDensity: 0.006 },
+  soft: { aoIntensity: 1.45, aoRadius: 8, outline: 0, fogDensity: 0.004 },
+  flat: { aoIntensity: 0, aoRadius: 0, outline: 1.2, fogDensity: 0 },
+  plain: { aoIntensity: 0, aoRadius: 0, outline: 0, fogDensity: 0 },
+};
+
+const BACKGROUNDS: Record<string, [number, number, number]> = {
+  void: [0.043, 0.051, 0.071],
+  slate: [0.11, 0.13, 0.16],
+  ink: [0.02, 0.02, 0.03],
+  bone: [0.87, 0.88, 0.9],
+};
+
+function reject(message: string): string {
+  return `Rejected: ${message}`;
+}
+
+/** Pane index from a trailing "pane N", or the active pane. */
+function paneFrom(text: string | null | undefined): { pane: number; rest: string } {
+  const state = useStore.getState();
+  const raw = (text ?? '').trim();
+  const match = /\s*\bpane\s*(\d+)\s*$/i.exec(raw);
+  if (match) {
+    return { pane: Number(match[1]) - 1, rest: raw.slice(0, match.index).trim() };
+  }
+  return { pane: state.activeSlot, rest: raw };
+}
+
+function paneExists(pane: number): boolean {
+  const state = useStore.getState();
+  return Number.isInteger(pane) && pane >= 0 && pane < LAYOUT_SLOT_COUNT[state.layout];
+}
+
+/** Resolves a selection that is meant to name exactly one atom. */
+function singleAtom(slot: number, spec: string): number | string {
+  const structure = viewer.getStructure(slot);
+  if (!structure) return 'that pane has no structure';
+  const problem = selectionError(spec);
+  if (problem) return `"${spec}" is not a valid selection (${problem})`;
+
+  const mask = evaluateSelection(parseSelection(spec), structure);
+  let found = -1;
+  let count = 0;
+  for (let a = 0; a < mask.length; a++) {
+    if (!mask[a]) continue;
+    count++;
+    if (found < 0) found = a;
+  }
+  if (count === 0) return `"${spec}" matched no atoms`;
+  // More than one is usually a too-loose spec; taking the first would quietly
+  // measure something the user did not mean.
+  if (count > 1) return `"${spec}" matched ${count} atoms; name a single atom`;
+  return found;
+}
+
+// ---------------------------------------------------------------------------
+// Execution
+// ---------------------------------------------------------------------------
+
+export async function applyAction(action: Action): Promise<string> {
+  const store = useStore.getState();
+  const value = (action.value ?? '').trim();
+
+  switch (action.type) {
+    case 'load': {
+      const { pane, rest } = paneFrom(value);
+      const id = rest.toUpperCase();
+      if (!/^[0-9][A-Z0-9]{3}$/.test(id)) return reject(`"${rest}" is not a PDB id`);
+      if (!paneExists(pane)) return reject(`pane ${pane + 1} is not in the current layout`);
+      await viewer.load(pane, id);
+      const slot = useStore.getState().slots[pane];
+      return slot.status === 'error'
+        ? reject(`${id} did not load (${slot.error})`)
+        : `Loaded ${id} into pane ${pane + 1}.`;
+    }
+
+    case 'clear': {
+      const pane = value ? Number(value) - 1 : store.activeSlot;
+      if (!paneExists(pane)) return reject(`pane ${value} is not in the current layout`);
+      viewer.unload(pane);
+      return `Cleared pane ${pane + 1}.`;
+    }
+
+    case 'layout': {
+      const layouts: LayoutMode[] = ['single', 'columns', 'rows', 'quad'];
+      if (!layouts.includes(value as LayoutMode)) return reject(`unknown layout "${value}"`);
+      store.setLayout(value as LayoutMode);
+      return `Switched to the ${value} layout.`;
+    }
+
+    case 'pane': {
+      const pane = Number(value) - 1;
+      if (!paneExists(pane)) return reject(`pane ${value} is not in the current layout`);
+      store.setActiveSlot(pane);
+      return `Pane ${pane + 1} is now active.`;
+    }
+
+    case 'component': {
+      const parts = value.split('|').map((p) => p.trim());
+      if (parts.length < 3) {
+        return reject('component needs "Name | selection | style" at least');
+      }
+      const [name, selection, styleName, colorName] = parts;
+      const style = STYLE_BY_NAME[styleName.toLowerCase()];
+      if (style === undefined) return reject(`unknown style "${styleName}"`);
+
+      const problem = selectionError(selection);
+      if (problem) return reject(`selection "${selection}" is invalid (${problem})`);
+
+      let colorScheme: ColorScheme | null = null;
+      if (colorName) {
+        const key = colorName.toLowerCase().replace(/\s+/g, '');
+        const match = (Object.keys(COLOR_SCHEME_LABELS) as ColorScheme[])
+          .find((s) => s === key || COLOR_SCHEME_LABELS[s].toLowerCase().startsWith(key));
+        if (!match) return reject(`unknown colour scheme "${colorName}"`);
+        colorScheme = match;
+      }
+
+      const slot = store.activeSlot;
+      if (!viewer.getStructure(slot)) return reject(`pane ${slot + 1} has no structure`);
+
+      const existing = store.slots[slot].components;
+      store.setComponents(slot, [
+        ...existing.filter((c) => c.name.toLowerCase() !== name.toLowerCase()),
+        makeComponent({ name, selection, style, colorScheme }),
+      ]);
+      return `Added "${name}" — ${selection} as ${STYLE_LABELS[style].toLowerCase()}.`;
+    }
+
+    case 'remove-component': {
+      const slot = store.activeSlot;
+      const components = store.slots[slot].components;
+      if (value.toLowerCase() === 'all') {
+        store.setComponents(slot, []);
+        return 'Removed every draw layer.';
+      }
+      const target = components.find((c) => c.name.toLowerCase() === value.toLowerCase());
+      if (!target) return reject(`no layer named "${value}"`);
+      store.removeComponent(slot, target.id);
+      return `Removed "${target.name}".`;
+    }
+
+    case 'color': {
+      const key = value.toLowerCase().replace(/\s+/g, '');
+      const scheme = (Object.keys(COLOR_SCHEME_LABELS) as ColorScheme[])
+        .find((s) => s === key || COLOR_SCHEME_LABELS[s].toLowerCase().startsWith(key));
+      if (!scheme) return reject(`unknown colour scheme "${value}"`);
+      store.patchSlot(store.activeSlot, { colorScheme: scheme });
+      return `Colouring by ${COLOR_SCHEME_LABELS[scheme].toLowerCase()}.`;
+    }
+
+    case 'assembly': {
+      const slot = store.activeSlot;
+      const structure = viewer.getStructure(slot);
+      if (!structure) return reject(`pane ${slot + 1} has no structure`);
+      if (/^(asym|asymmetric|au|none)$/i.test(value)) {
+        store.patchSlot(slot, { assemblyId: '' });
+        return 'Showing the deposited asymmetric unit.';
+      }
+      const assembly = structure.assemblies.find((a) => a.id === value);
+      if (!assembly) {
+        const ids = structure.assemblies.map((a) => a.id).join(', ') || 'none';
+        return reject(`this entry has no assembly "${value}" (available: ${ids})`);
+      }
+      store.patchSlot(slot, { assemblyId: assembly.id });
+      const copies = assembly.totalCopies;
+      return `Showing assembly ${assembly.id} — ${copies} cop${copies === 1 ? 'y' : 'ies'}.`;
+    }
+
+    case 'focus': {
+      const slot = store.activeSlot;
+      const structure = viewer.getStructure(slot);
+      if (!structure) return reject(`pane ${slot + 1} has no structure`);
+      const problem = selectionError(value);
+      if (problem) return reject(`selection "${value}" is invalid (${problem})`);
+
+      const mask = evaluateSelection(parseSelection(value), structure);
+      let first = -1;
+      let count = 0;
+      for (let a = 0; a < mask.length; a++) {
+        if (mask[a]) { count++; if (first < 0) first = a; }
+      }
+      if (count === 0) return reject(`"${value}" matched no atoms`);
+      viewer.focusResidue(slot, structure.atomResidue[first]);
+      return `Focused on ${value} (${count.toLocaleString()} atoms).`;
+    }
+
+    case 'reset-view':
+      viewer.resetView(store.activeSlot);
+      return 'Framed the whole structure.';
+
+    case 'spin': {
+      const on = /^(on|true|yes|start)$/i.test(value);
+      store.patchSlot(store.activeSlot, { spinning: on });
+      return on ? 'Auto-rotate on.' : 'Auto-rotate off.';
+    }
+
+    case 'lighting': {
+      const preset = LIGHTING[value.toLowerCase()];
+      if (!preset) return reject(`unknown lighting preset "${value}"`);
+      store.updateVisual(store.activeSlot, preset);
+      return `Lighting set to ${value.toLowerCase()}.`;
+    }
+
+    case 'background': {
+      const background = BACKGROUNDS[value.toLowerCase()];
+      if (!background) return reject(`unknown background "${value}"`);
+      store.updateVisual(store.activeSlot, { background });
+      return `Background set to ${value.toLowerCase()}.`;
+    }
+
+    case 'hbonds': {
+      const on = /^(on|true|yes|show)$/i.test(value);
+      const slot = store.activeSlot;
+      if (!viewer.getStructure(slot)) return reject(`pane ${slot + 1} has no structure`);
+      viewer.toggleHydrogenBonds(slot, on);
+      const count = useStore.getState().slots[slot].hydrogenBondCount;
+      return on ? `Showing ${count.toLocaleString()} hydrogen bonds.` : 'Hydrogen bonds hidden.';
+    }
+
+    case 'measure': {
+      const slot = store.activeSlot;
+      const structure = viewer.getStructure(slot);
+      if (!structure) return reject(`pane ${slot + 1} has no structure`);
+
+      const [kindWord, ...specs] = value.split(/\s+/).filter(Boolean);
+      const kind = (kindWord ?? '').toLowerCase() as MeasurementKind;
+      const needed = kind === 'distance' ? 2 : kind === 'angle' ? 3 : kind === 'torsion' ? 4 : 0;
+      if (!needed) return reject(`unknown measurement "${kindWord}"`);
+      if (specs.length !== needed) {
+        const article = kind === 'angle' ? 'an' : 'a';
+        return reject(`${article} ${kind} needs ${needed} atoms, got ${specs.length}`);
+      }
+
+      const atoms: number[] = [];
+      for (const spec of specs) {
+        const resolved = singleAtom(slot, spec);
+        if (typeof resolved === 'string') return reject(resolved);
+        atoms.push(resolved);
+      }
+
+      const measurement = createMeasurement(structure, kind, atoms);
+      store.patchSlot(slot, {
+        measurements: [...store.slots[slot].measurements, measurement],
+      });
+      viewer.refreshOverlay(slot);
+      const labels = atoms.map((a) => describeAtom(structure, a)).join(' → ');
+      return `${kind} ${labels} = ${measurement.label}`;
+    }
+
+    case 'superpose': {
+      const match = /^(\d+)\s+onto\s+(\d+)(?:\s+chain\s+(\S+)\s+onto\s+(\S+))?$/i.exec(value);
+      if (!match) return reject('superpose expects "2 onto 1" or "2 onto 1 chain B onto A"');
+      const mobile = Number(match[1]) - 1;
+      const reference = Number(match[2]) - 1;
+      if (!paneExists(mobile) || !paneExists(reference)) {
+        return reject('one of those panes is not in the current layout');
+      }
+      const result = viewer.superpose(mobile, reference, match[3], match[4]);
+      if (typeof result === 'string') return reject(result);
+      return `Superposed pane ${mobile + 1} onto pane ${reference + 1} — `
+        + `RMSD ${result.rmsd.toFixed(2)} Å over ${result.pairs} matched Cα.`;
+    }
+
+    case 'overlay': {
+      const slot = store.activeSlot;
+      if (/^(off|none|clear)$/i.test(value)) {
+        viewer.setOverlaySlots(slot, []);
+        return 'Cleared the overlay.';
+      }
+      const panes = value.split(',').map((p) => Number(p.trim()) - 1);
+      if (panes.some((p) => !paneExists(p))) {
+        return reject('one of those panes is not in the current layout');
+      }
+      viewer.setOverlaySlots(slot, panes);
+      const applied = useStore.getState().slots[slot].overlaySlots;
+      if (applied.length === 0) return reject('none of those panes has a structure');
+      return `Drawing pane${applied.length > 1 ? 's' : ''} `
+        + `${applied.map((p) => p + 1).join(', ')} inside pane ${slot + 1}.`;
+    }
+
+    case 'ensemble': {
+      const slot = store.activeSlot;
+      const structure = viewer.getStructure(slot);
+      if (!structure) return reject(`pane ${slot + 1} has no structure`);
+      if (structure.modelCount < 2) return reject('this entry has only one model');
+      const on = /^(on|true|yes|all)$/i.test(value);
+      await viewer.setEnsembleOverlay(slot, on);
+      return on
+        ? `Showing all ${structure.modelCount} models.`
+        : 'Showing a single model.';
+    }
+
+    default:
+      return reject('unsupported action');
+  }
+}

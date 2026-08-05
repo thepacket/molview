@@ -1,0 +1,169 @@
+/**
+ * Settings. Currently just the assistant's OpenRouter credentials and model.
+ *
+ * The key is typed by the user and never leaves this browser except in the
+ * Authorization header of a request to openrouter.ai. It is held in this tab's
+ * sessionStorage, so closing the tab discards it, and it is deliberately
+ * excluded from projects and share links.
+ */
+
+import { useEffect, useMemo, useState } from 'react';
+import { Check, ExternalLink, KeyRound, RefreshCw, Trash2 } from 'lucide-react';
+import {
+  DEFAULT_MODEL, fetchModels, getApiKey, getModel, setApiKey, setModel,
+  type OpenRouterModel,
+} from '../../ai/openrouter';
+import { Field } from '../controls';
+
+export function SettingsPanel() {
+  const [key, setKey] = useState(getApiKey());
+  const [saved, setSaved] = useState(false);
+  const [models, setModels] = useState<OpenRouterModel[]>([]);
+  const [modelId, setModelId] = useState(getModel());
+  const [filter, setFilter] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = (force = false) => {
+    setLoading(true);
+    setError(null);
+    fetchModels(force)
+      .then(setModels)
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const visible = useMemo(() => {
+    const needle = filter.trim().toLowerCase();
+    const list = needle
+      ? models.filter((m) =>
+          m.id.toLowerCase().includes(needle) || m.name.toLowerCase().includes(needle))
+      : models;
+    return list.slice(0, 60);
+  }, [models, filter]);
+
+  const commitKey = () => {
+    setApiKey(key);
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 1600);
+  };
+
+  return (
+    <>
+      <div className="panel-section">
+        <div className="section-label"><span>OpenRouter</span></div>
+
+        <Field label="API key">
+          <input
+            className="text-input"
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="sk-or-v1-…"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitKey(); }}
+          />
+        </Field>
+
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            type="button"
+            className="btn primary small"
+            style={{ flex: 1 }}
+            disabled={!key.trim()}
+            onClick={commitKey}
+          >
+            {saved ? <><Check size={11} /> Saved</> : <><KeyRound size={11} /> Save key</>}
+          </button>
+          <button
+            type="button"
+            className="btn small"
+            style={{ flex: 1 }}
+            disabled={!getApiKey()}
+            onClick={() => { setApiKey(''); setKey(''); }}
+          >
+            <Trash2 size={11} /> Clear
+          </button>
+        </div>
+
+        <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 8, lineHeight: 1.5 }}>
+          Kept in this tab only, and sent straight to openrouter.ai — MolView has
+          no server to send it to. Closing the tab discards it. It is never
+          written into a project or a shareable link.
+        </p>
+        <a
+          className="link"
+          href="https://openrouter.ai/keys"
+          target="_blank"
+          rel="noreferrer"
+          style={{ fontSize: 10.5, display: 'inline-block', marginTop: 5 }}
+        >
+          Get a key <ExternalLink size={9} style={{ verticalAlign: -1 }} />
+        </a>
+      </div>
+
+      <div className="panel-section">
+        <div className="section-label">
+          <span>Model</span>
+          <button
+            type="button"
+            className="btn ghost small"
+            disabled={loading}
+            onClick={() => load(true)}
+          >
+            <RefreshCw size={11} /> Refresh
+          </button>
+        </div>
+
+        <div className="current-project" style={{ marginBottom: 7 }}>{modelId}</div>
+
+        <input
+          className="text-input"
+          placeholder={`Filter ${models.length || ''} models…`}
+          value={filter}
+          spellCheck={false}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+
+        {error && (
+          <p style={{ fontSize: 10.5, color: 'var(--error)', marginTop: 6 }}>{error}</p>
+        )}
+        {loading && (
+          <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 6 }}>
+            Loading the catalogue…
+          </p>
+        )}
+
+        <div className="model-list">
+          {visible.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              className="model-row"
+              data-active={m.id === modelId}
+              onClick={() => { setModel(m.id); setModelId(m.id); }}
+            >
+              <span className="model-name">{m.name}</span>
+              <span className="model-id">{m.id}</span>
+              {m.supportedParameters.includes('structured_outputs') && (
+                <span className="chip accent">structured</span>
+              )}
+            </button>
+          ))}
+          {!loading && visible.length === 0 && (
+            <p style={{ fontSize: 10.5, color: 'var(--text-faint)' }}>Nothing matches.</p>
+          )}
+        </div>
+
+        <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 8, lineHeight: 1.5 }}>
+          Models marked <em>structured</em> can be held to the reply schema
+          exactly; others are asked for the same shape in the prompt and are more
+          likely to drift. The default is {DEFAULT_MODEL}.
+        </p>
+      </div>
+    </>
+  );
+}
