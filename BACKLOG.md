@@ -16,6 +16,19 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
+### Open question: 1AKE reads low
+
+With the non-orthogonal fix in, four of five test entries sample 2.6-3.2 sigma
+at their own atoms. 1AKE reads 0.56, with 28% of its atoms at *negative*
+density — and it is not a registration error: no translation within 3 A
+improves it, the density and atom centroids agree to 3.7 A, `sample_rate` is 1
+so nothing was downsampled, and its own wwPDB record says 0.7% RSRZ outliers
+and Rwork 0.196, meaning the model does fit its density.
+
+Something specific to that entry or that map is unaccounted for. Worth
+resolving because whatever it is presumably affects other entries silently;
+the same statistic is the only check the density path has.
+
 ### Blocked for now
 
 - **Conservation colouring.** ConSurf-DB has precomputed profiles for most PDB

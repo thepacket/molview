@@ -33,8 +33,10 @@ export type MapKind = 'x-ray' | 'em';
  *
  * Sample `(i, j, k)` sits at `origin + i*stepA + j*stepB + k*stepC`, with `i`
  * varying fastest through `values`. Keeping the three step vectors rather than
- * a spacing triple means a non-orthogonal cell costs nothing extra: the
- * skew is baked in once, here, instead of at every marching-cubes vertex.
+ * a spacing triple means a non-orthogonal cell costs nothing extra when
+ * *generating* geometry — the skew is baked in once, here. Going the other
+ * way, from a point to a grid index, needs `toGrid` and is where a skewed cell
+ * does cost something.
  */
 export interface VolumeGrid {
   /** '2Fo-Fc', 'Fo-Fc' or 'em', as the server names it. */
@@ -45,6 +47,18 @@ export interface VolumeGrid {
   stepA: Float32Array;
   stepB: Float32Array;
   stepC: Float32Array;
+  /**
+   * World displacement to fractional grid index, row-major 3x3 — the inverse
+   * of the matrix whose columns are the three step vectors.
+   *
+   * Needed because those vectors are not perpendicular in general. Projecting
+   * onto each one separately is the same thing only for a cubic, tetragonal or
+   * orthorhombic cell; a hexagonal cell has gamma = 120 degrees and a
+   * monoclinic one has beta != 90, and for those the projection lands in the
+   * wrong voxel. It reads as a map that is displaced rather than absent, which
+   * is the failure that looks most like working software.
+   */
+  toGrid: Float32Array;
   mean: number;
   sigma: number;
   min: number;
@@ -179,6 +193,7 @@ function readGrid(block: CifBlock): VolumeGrid | null {
     stepA: steps[0],
     stepB: steps[1],
     stepC: steps[2],
+    toGrid: invertSteps(steps[0], steps[1], steps[2]),
     mean: n('mean_sampled'),
     sigma: n('sigma_sampled'),
     min: n('min_sampled'),
@@ -205,19 +220,81 @@ function fracToCart(size: number[], angles: number[]): number[][] {
 }
 
 /**
+ * The three inverse-matrix rows, as the columns of the step matrix inverted.
+ *
+ * Written out rather than pulled from a library because it is one 3x3 and the
+ * whole correctness of every lookup into the grid rests on it.
+ */
+function invertSteps(a: Float32Array, b: Float32Array, c: Float32Array): Float32Array {
+  const m = [
+    a[0], b[0], c[0],
+    a[1], b[1], c[1],
+    a[2], b[2], c[2],
+  ];
+  const det = m[0] * (m[4] * m[8] - m[5] * m[7])
+    - m[1] * (m[3] * m[8] - m[5] * m[6])
+    + m[2] * (m[3] * m[7] - m[4] * m[6]);
+  // A degenerate cell would make every lookup NaN; an identity at least keeps
+  // the failure local and visible rather than blanking the pane.
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) {
+    return Float32Array.from([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  }
+  return Float32Array.from([
+    (m[4] * m[8] - m[5] * m[7]) / det,
+    (m[2] * m[7] - m[1] * m[8]) / det,
+    (m[1] * m[5] - m[2] * m[4]) / det,
+    (m[5] * m[6] - m[3] * m[8]) / det,
+    (m[0] * m[8] - m[2] * m[6]) / det,
+    (m[2] * m[3] - m[0] * m[5]) / det,
+    (m[3] * m[7] - m[4] * m[6]) / det,
+    (m[1] * m[6] - m[0] * m[7]) / det,
+    (m[0] * m[4] - m[1] * m[3]) / det,
+  ]);
+}
+
+/** Fractional grid index of a Cartesian point. Writes `out` and returns it. */
+export function gridIndexOf(
+  grid: VolumeGrid, x: number, y: number, z: number, out: Float32Array,
+): Float32Array {
+  const { origin, toGrid } = grid;
+  const dx = x - origin[0], dy = y - origin[1], dz = z - origin[2];
+  out[0] = toGrid[0] * dx + toGrid[1] * dy + toGrid[2] * dz;
+  out[1] = toGrid[3] * dx + toGrid[4] * dy + toGrid[5] * dz;
+  out[2] = toGrid[6] * dx + toGrid[7] * dy + toGrid[8] * dz;
+  return out;
+}
+
+/**
+ * How far one index can move for a world displacement of unit length, per
+ * axis — the row norms of the inverse. A caller rasterising a sphere of radius
+ * r needs `ceil(r * reach)` cells along each axis, which in a skewed cell is
+ * more than `r / spacing`.
+ */
+export function gridReach(grid: VolumeGrid): [number, number, number] {
+  const m = grid.toGrid;
+  return [
+    Math.hypot(m[0], m[1], m[2]),
+    Math.hypot(m[3], m[4], m[5]),
+    Math.hypot(m[6], m[7], m[8]),
+  ];
+}
+
+const SCRATCH_INDEX = new Float32Array(3);
+
+/**
  * Trilinear sample at a Cartesian point, in units of sigma above the mean.
  *
- * Only correct for a grid whose step vectors are orthogonal, which every map
- * the server returns has been; a triclinic cell would need the inverse of the
- * step matrix. Used for reporting the density under an atom, never for the
- * surface itself.
+ * Goes through the inverse step matrix rather than projecting onto each step
+ * vector, because those vectors are only mutually perpendicular in a cubic,
+ * tetragonal or orthorhombic cell. Hexagonal, trigonal, monoclinic and
+ * triclinic cells are a large part of the archive, and for those the two
+ * differ: 101M is P6, and the projection reads 0.06 sigma at its own atoms
+ * where the inverse reads 2.85.
  */
 export function sampleSigma(grid: VolumeGrid, x: number, y: number, z: number): number {
-  const { origin, counts } = grid;
-  const dx = x - origin[0], dy = y - origin[1], dz = z - origin[2];
-  const fi = project(dx, dy, dz, grid.stepA);
-  const fj = project(dx, dy, dz, grid.stepB);
-  const fk = project(dx, dy, dz, grid.stepC);
+  const { counts } = grid;
+  const index = gridIndexOf(grid, x, y, z, SCRATCH_INDEX);
+  const fi = index[0], fj = index[1], fk = index[2];
   if (fi < 0 || fj < 0 || fk < 0
     || fi > counts[0] - 1 || fj > counts[1] - 1 || fk > counts[2] - 1) return Number.NaN;
 
@@ -238,10 +315,4 @@ export function sampleSigma(grid: VolumeGrid, x: number, y: number, z: number): 
   const value = c0 * (1 - tk) + c1 * tk;
 
   return (value - grid.mean) / (grid.sigma || 1);
-}
-
-/** Component of a vector along a step vector, in whole samples. */
-function project(x: number, y: number, z: number, step: Float32Array): number {
-  const lenSq = step[0] * step[0] + step[1] * step[1] + step[2] * step[2];
-  return (x * step[0] + y * step[1] + z * step[2]) / (lenSq || 1);
 }

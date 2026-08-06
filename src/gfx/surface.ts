@@ -165,6 +165,8 @@ export function gaussianSurface(
     stepA: Float32Array.from([step, 0, 0]),
     stepB: Float32Array.from([0, step, 0]),
     stepC: Float32Array.from([0, 0, step]),
+    // Axis-aligned and uniform, so the inverse is simply the reciprocal.
+    toGrid: Float32Array.from([1 / step, 0, 0, 0, 1 / step, 0, 0, 0, 1 / step]),
     // Field values are absolute, so a caller's "sigma" is the level itself.
     mean: 0,
     sigma: 1,

@@ -24,7 +24,7 @@
  *   outward winding without the table having to encode it.
  */
 
-import type { VolumeGrid } from '../rcsb/volume';
+import { gridIndexOf, gridReach, type VolumeGrid } from '../rcsb/volume';
 
 export interface IsoMesh {
   /** Interleaved position (3) + normal (3) + colour (3). */
@@ -441,19 +441,20 @@ function wireframe(tris: number[]): Uint32Array {
 export function nearMask(grid: VolumeGrid, points: Float32Array, radius: number): Uint8Array {
   const [nx, ny, nz] = grid.counts;
   const mask = new Uint8Array(nx * ny * nz);
-  const { origin, stepA, stepB, stepC } = grid;
-  const sa = Math.hypot(stepA[0], stepA[1], stepA[2]) || 1;
-  const sb = Math.hypot(stepB[0], stepB[1], stepB[2]) || 1;
-  const sc = Math.hypot(stepC[0], stepC[1], stepC[2]) || 1;
-  const ra = Math.ceil(radius / sa), rb = Math.ceil(radius / sb), rc = Math.ceil(radius / sc);
+  // Through the inverse, not by projecting onto each step vector: those are
+  // perpendicular only in an orthorhombic-or-better cell, and a hexagonal or
+  // monoclinic one lands the mask beside the model instead of on it.
+  const reach = gridReach(grid);
+  const ra = Math.ceil(radius * reach[0]);
+  const rb = Math.ceil(radius * reach[1]);
+  const rc = Math.ceil(radius * reach[2]);
+  const index = new Float32Array(3);
 
   for (let p = 0; p + 2 < points.length; p += 3) {
-    const dx = points[p] - origin[0];
-    const dy = points[p + 1] - origin[1];
-    const dz = points[p + 2] - origin[2];
-    const ci = Math.round((dx * stepA[0] + dy * stepA[1] + dz * stepA[2]) / (sa * sa));
-    const cj = Math.round((dx * stepB[0] + dy * stepB[1] + dz * stepB[2]) / (sb * sb));
-    const ck = Math.round((dx * stepC[0] + dy * stepC[1] + dz * stepC[2]) / (sc * sc));
+    gridIndexOf(grid, points[p], points[p + 1], points[p + 2], index);
+    const ci = Math.round(index[0]);
+    const cj = Math.round(index[1]);
+    const ck = Math.round(index[2]);
 
     for (let k = Math.max(ck - rc, 0); k <= Math.min(ck + rc, nz - 1); k++) {
       for (let j = Math.max(cj - rb, 0); j <= Math.min(cj + rb, ny - 1); j++) {
