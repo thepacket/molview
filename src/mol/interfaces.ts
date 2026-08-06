@@ -13,12 +13,19 @@
  * surface area. It tells you where to look.
  */
 
+import type { Assembly } from './assembly';
 import { MolKind, type Structure } from './structure';
 
 export interface ChainInterface {
   /** Auth chain ids, ordered so the pair reads the same way every time. */
   chainA: string;
   chainB: string;
+  /**
+   * Set when chainB belongs to a symmetry copy rather than to the deposited
+   * coordinates — the operator index that produced it. Such an interface cannot
+   * be written as a selection, because the second half is not in the file.
+   */
+  copyB?: number;
   /** Heavy-atom pairs within the cutoff. */
   contacts: number;
   /** Residues involved on each side, as sequence numbers. */
@@ -29,6 +36,13 @@ export interface ChainInterface {
 }
 
 export interface InterfaceOptions {
+  /**
+   * When present, contacts with symmetry copies are included. Only the copies
+   * around the reference one are tested: in a symmetric assembly every distinct
+   * interface appears in the neighbourhood of any single copy, so testing all
+   * 60 against all 60 would return the same handful of answers 3,600 times.
+   */
+  assembly?: Assembly | null;
   /** Heavy-atom separation counted as a contact. 4 A is the usual choice. */
   cutoff?: number;
   /** Ignore pairs with fewer contacts than this — crystal grazes, mostly. */
@@ -156,7 +170,146 @@ export function findInterfaces(
       residuesB: [...entry.residuesB].sort((x, y) => x - y),
     });
   }
+  if (options.assembly) {
+    out.push(...symmetryContacts(s, candidates, options.assembly, cutoff, minContacts));
+  }
+
   out.sort((p, q) => q.contacts - p.contacts);
+  return out;
+}
+
+/**
+ * Contacts between the deposited chains and the symmetry copies around them.
+ *
+ * Only the copies neighbouring the reference are tested. In a symmetric
+ * assembly every distinct interface already appears there, so comparing all
+ * sixty copies against all sixty would rediscover the same handful of answers
+ * 3,600 times over. Copy pairs whose bounding spheres cannot reach each other
+ * are rejected before any atom is transformed, which is what keeps a capsid
+ * affordable.
+ */
+function symmetryContacts(
+  s: Structure, candidates: number[], assembly: Assembly,
+  cutoff: number, minContacts: number,
+): ChainInterface[] {
+  // Bounding sphere of the reference coordinates, to reject distant copies.
+  let cx = 0, cy = 0, cz = 0;
+  for (const a of candidates) { cx += s.x[a]; cy += s.y[a]; cz += s.z[a]; }
+  cx /= candidates.length; cy /= candidates.length; cz /= candidates.length;
+  let radius = 0;
+  for (const a of candidates) {
+    radius = Math.max(radius, Math.hypot(s.x[a] - cx, s.y[a] - cy, s.z[a] - cz));
+  }
+
+  const inv = 1 / cutoff;
+  const key = (gx: number, gy: number, gz: number) =>
+    (gx * 73856093) ^ (gy * 19349663) ^ (gz * 83492791);
+
+  // Hash the reference atoms once; every copy is queried against it.
+  const buckets = new Map<number, number[]>();
+  for (const a of candidates) {
+    const k = key(
+      Math.floor(s.x[a] * inv), Math.floor(s.y[a] * inv), Math.floor(s.z[a] * inv),
+    );
+    const bucket = buckets.get(k);
+    if (bucket) bucket.push(a);
+    else buckets.set(k, [a]);
+  }
+
+  const maxSq = cutoff * cutoff;
+  const polarSq = 3.5 * 3.5;
+  const reach = 2 * radius + cutoff;
+  const found = new Map<string, {
+    contacts: number; polar: number; residuesA: Set<number>; copy: number;
+    chainA: string; chainB: string;
+  }>();
+
+  for (const gen of assembly.gens) {
+    const allowed = new Set(gen.asymIds);
+    for (let t = 0; t < gen.count; t++) {
+      const o = t * 16;
+      const m = gen.transforms;
+
+      // Where this copy's centre lands, and whether it can reach at all.
+      const tx = m[o] * cx + m[o + 4] * cy + m[o + 8] * cz + m[o + 12];
+      const ty = m[o + 1] * cx + m[o + 5] * cy + m[o + 9] * cz + m[o + 13];
+      const tz = m[o + 2] * cx + m[o + 6] * cy + m[o + 10] * cz + m[o + 14];
+      const shift = Math.hypot(tx - cx, ty - cy, tz - cz);
+      // The identity operator reproduces the deposited chains, already done.
+      if (shift < 1e-3) continue;
+      if (shift > reach) continue;
+
+      for (const b of candidates) {
+        const chainB = s.resChain[s.atomResidue[b]];
+        if (!allowed.has(s.chainLabelId[chainB])) continue;
+
+        const bx = m[o] * s.x[b] + m[o + 4] * s.y[b] + m[o + 8] * s.z[b] + m[o + 12];
+        const by = m[o + 1] * s.x[b] + m[o + 5] * s.y[b] + m[o + 9] * s.z[b] + m[o + 13];
+        const bz = m[o + 2] * s.x[b] + m[o + 6] * s.y[b] + m[o + 10] * s.z[b] + m[o + 14];
+
+        const gx = Math.floor(bx * inv);
+        const gy = Math.floor(by * inv);
+        const gz = Math.floor(bz * inv);
+        for (let dz = -1; dz <= 1; dz++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const bucket = buckets.get(key(gx + dx, gy + dy, gz + dz));
+              if (!bucket) continue;
+              for (const a of bucket) {
+                const ddx = s.x[a] - bx, ddy = s.y[a] - by, ddz = s.z[a] - bz;
+                const d2 = ddx * ddx + ddy * ddy + ddz * ddz;
+                if (d2 > maxSq) continue;
+
+                const chainA = s.chainAuthId[s.resChain[s.atomResidue[a]]];
+                const partner = s.chainAuthId[chainB];
+                const k = `${chainA}|${partner}|${t}`;
+                let entry = found.get(k);
+                if (!entry) {
+                  entry = {
+                    contacts: 0, polar: 0, residuesA: new Set(), copy: t,
+                    chainA, chainB: partner,
+                  };
+                  found.set(k, entry);
+                }
+                entry.contacts++;
+                entry.residuesA.add(s.resSeq[s.atomResidue[a]]);
+                if (d2 <= polarSq) {
+                  const elA = s.element[a], elB = s.element[b];
+                  if ((elA === 7 || elA === 8 || elA === 16)
+                    && (elB === 7 || elB === 8 || elB === 16)) entry.polar++;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // A 2-fold relates two neighbours that present the identical interface, so
+  // the same answer arrives under two operator numbers. Same chains, same
+  // contact count, same residues on our side means the same interface type,
+  // and listing it twice only makes the panel longer.
+  const seen = new Set<string>();
+  const out: ChainInterface[] = [];
+  for (const entry of found.values()) {
+    if (entry.contacts < minContacts) continue;
+    const residues = [...entry.residuesA].sort((x, y) => x - y);
+    const signature = `${entry.chainA}|${entry.chainB}|${entry.contacts}|${residues.join(',')}`;
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    out.push({
+      chainA: entry.chainA,
+      chainB: entry.chainB,
+      copyB: entry.copy + 1,
+      contacts: entry.contacts,
+      polar: entry.polar,
+      residuesA: residues,
+      // The far side lives in a copy that is not in the file, so there are no
+      // residues of it to select. Reporting the near side is the honest half.
+      residuesB: [],
+    });
+  }
   return out;
 }
 
@@ -167,6 +320,8 @@ export function findInterfaces(
  * usually a few loops and the expanded form would be a hundred numbers long.
  */
 export function interfaceSelection(entry: ChainInterface): string {
+  // Only the deposited side of a symmetry interface exists to be selected.
+  if (entry.copyB !== undefined) return side(entry.chainA, entry.residuesA);
   return `(${side(entry.chainA, entry.residuesA)}) or (${side(entry.chainB, entry.residuesB)})`;
 }
 

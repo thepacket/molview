@@ -139,9 +139,21 @@ assembly and the one a viewer usually leaves you to answer by eye. Heavy-atom
 contacts within 4 Å are grouped by chain pair and ranked, and each pair can be
 framed or drawn as its own component in one click. On `4HHB` it recovers the
 architecture unprompted: the α1β1 pairs strongest, the α1β2 sliding interface
-weaker, the α1α2 contact barely there. It is proximity, not buried surface area
-— it says where to look, not how tightly anything binds. A 237k-atom ribosome
-takes about 300 ms and finds 244 pairs.
+weaker, the α1α2 contact barely there.
+
+**Symmetry copies count too**, which for an assembly is usually the whole point.
+Ferritin's asymmetric unit is one chain and touches nothing at all; build the
+24-mer and five interfaces appear, the strongest at 203 contacts. Only the
+copies neighbouring the deposited coordinates are tested — in a symmetric
+assembly every distinct interface already appears there, so a 60-copy capsid
+costs 60 comparisons rather than 3,600. Bluetongue virus takes about 370 ms and
+finds 33 lattice contacts on top of the 28 within its asymmetric unit. The far
+side of such an interface is a matrix rather than a chain in the file, so only
+the near side can be selected, and the panel says which side it is reporting.
+
+It is proximity, not buried surface area — it says where to look, not how
+tightly anything binds. A 237k-atom ribosome takes about 300 ms and finds 244
+pairs.
 
 **Overlay.** A pane can draw other panes' structures inside it, each keeping its
 own superposition, so two folds land on top of each other in one viewport

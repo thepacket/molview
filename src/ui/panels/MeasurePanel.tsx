@@ -147,6 +147,7 @@ export function MeasurePanel() {
  */
 function InterfaceSection({ slot }: { slot: number }) {
   const components = useStore((s) => s.slots[slot].components);
+  const assemblyId = useStore((s) => s.slots[slot].assemblyId);
   const setComponents = useStore((s) => s.setComponents);
   const [list, setList] = useState<ChainInterface[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -154,12 +155,17 @@ function InterfaceSection({ slot }: { slot: number }) {
   const structure = viewer.getStructure(slot);
   if (!structure) return null;
 
+  // With an assembly selected, the interesting contacts are usually the ones
+  // between symmetry copies: a ferritin asymmetric unit is a single chain and
+  // touches nothing at all until its 24-mer is built.
+  const assembly = structure.assemblies.find((a) => a.id === assemblyId) ?? null;
+
   const compute = () => {
     setBusy(true);
     // Yield first: on a large assembly this takes long enough to drop a frame,
     // and a button that looks stuck is worse than one that says it is working.
     window.setTimeout(() => {
-      setList(findInterfaces(structure));
+      setList(findInterfaces(structure, { assembly }));
       setBusy(false);
     }, 0);
   };
@@ -191,6 +197,10 @@ function InterfaceSection({ slot }: { slot: number }) {
           <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
             Heavy atoms within 4 Å, grouped by chain pair. Proximity, not buried
             area — it says where to look, not how tightly anything binds.
+            {assembly
+              ? ' Contacts with symmetry copies are included; only the deposited'
+                + ' side of those can be selected, since the other side is a matrix.'
+              : ''}
           </p>
         </>
       ) : list.length === 0 ? (
@@ -201,10 +211,18 @@ function InterfaceSection({ slot }: { slot: number }) {
       ) : (
         <>
           {list.slice(0, 12).map((entry) => (
-            <div key={`${entry.chainA}-${entry.chainB}`} className="measurement">
+            <div
+              key={`${entry.chainA}-${entry.chainB}-${entry.copyB ?? 0}`}
+              className="measurement"
+            >
               <div className="measurement-head">
                 <span style={{ fontSize: 11.5, marginRight: 'auto' }}>
                   {entry.chainA} · {entry.chainB}
+                  {entry.copyB !== undefined && (
+                    <span style={{ color: 'var(--text-faint)', fontSize: 10 }}>
+                      {' '}copy {entry.copyB}
+                    </span>
+                  )}
                 </span>
                 <Tip label="Frame this interface">
                   <button
@@ -231,7 +249,9 @@ function InterfaceSection({ slot }: { slot: number }) {
               </div>
               <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text-faint)' }}>
                 {entry.contacts.toLocaleString()} contacts · {entry.polar} polar ·{' '}
-                {entry.residuesA.length}+{entry.residuesB.length} residues
+                {entry.copyB === undefined
+                  ? `${entry.residuesA.length}+${entry.residuesB.length} residues`
+                  : `${entry.residuesA.length} residues facing it`}
               </div>
             </div>
           ))}
