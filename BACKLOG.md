@@ -29,11 +29,6 @@ Its seven toolbars read against what MolView has, ranked by payoff per unit of
 work rather than by how large the gap is. Mimicry is not the goal — several of
 these are deliberately declined under "Not planned".
 
-- **Nucleotide representations.** ChimeraX offers eight base styles; MolView has
-  one. Ladder and stubs reuse the ring-plane frame `addBaseSlab` already fits,
-  and per-base A/T/G/C colouring is a new entry in the colour-scheme table over
-  data already parsed. Cheapest real win, and DNA/RNA is where the renderer
-  currently looks weakest — `1BNA` and `7A5R` are both featured entries.
 - **Interfaces.** Chain-chain contact analysis: what touches what, how much
   area, and a way to select the interface between two chains. Fits the neighbour
   search that H-bond detection already uses, and answers the obvious next
@@ -78,6 +73,12 @@ Two that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **Nucleotide representations** (`4856936`) — ladder, stubs and none beside the
+  existing slab, plus colouring by base. Watson-Crick pairing is geometric and
+  validated against known answers: 12/12 in 1BNA, 146/147 in the 1KX5
+  nucleosome. Tube/Ellipsoid and Tube/Muffler were not taken; they are variants
+  of the same idea rather than a different reading of the molecule.
 
 - **Biological assemblies** (`b8daf53`) — operator expressions applied on the
   GPU; a 49k-atom asymmetric unit becomes a 900-chain capsid for the cost of
