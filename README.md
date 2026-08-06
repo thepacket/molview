@@ -179,6 +179,19 @@ against a literature ~25,000. It is still a geometric criterion, not an
 energetic one. A 237k-atom ribosome finds 244 pairs in about 300 ms; areas are
 computed only for the pairs actually reported, since each is four SASA passes.
 
+**Pockets.** Enclosed cavities, ranked by volume, by the LIGSITE buriedness
+scan: a grid point counts as buried when protein lies on both sides of it along
+at least four of seven axes, and connected buried points are a pocket. Each one
+comes with the residues lining it, a ready-made selection, and any ligand
+sitting in it.
+
+That last column is the check on the method rather than a restatement of the
+input, because ligands and waters are excluded from the grid before the scan.
+Myoglobin's top cavity comes back at 410 Å&sup3; containing HEM, lined by Phe43, His64,
+His97, Arg45 — the distal pocket, residue for residue. 1CBS puts retinoic acid
+in its largest, 1EMA puts the GFP chromophore in the barrel. It measures
+concavity, not affinity: a large pocket is not a druggable one.
+
 **Overlay.** A pane can draw other panes' structures inside it, each keeping its
 own superposition, so two folds land on top of each other in one viewport
 rather than side by side.

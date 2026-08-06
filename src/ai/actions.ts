@@ -19,6 +19,7 @@ import { createMeasurement, describeAtom, type MeasurementKind } from '../mol/me
 import {
   findInterfaces, interfaceSelection, measureInterfaceAreas,
 } from '../mol/interfaces';
+import { findPockets, pocketSelection } from '../mol/pockets';
 import { searchUniProt } from '../rcsb/alphafold';
 import { fetchSummaries, searchByShape, searchBySequence } from '../rcsb/api';
 import { MolKind } from '../mol/structure';
@@ -305,6 +306,29 @@ export async function applyAction(action: Action): Promise<string> {
       if (!m) return reject('view takes "orient", or an axis such as "x" or "-z"');
       viewer.viewAlongAxis(slot, m[2] as 'x' | 'y' | 'z', m[1] === '-');
       return `Looking down ${m[1]}${m[2].toUpperCase()}.`;
+    }
+
+    case 'pockets': {
+      const slot = store.activeSlot;
+      const structure = viewer.getStructure(slot);
+      if (!structure) return reject(`pane ${slot + 1} has no structure`);
+
+      const limit = Math.min(8, Number(/(\d+)/.exec(value)?.[1] ?? 5));
+      const pockets = findPockets(structure).slice(0, limit);
+      if (pockets.length === 0) return 'No enclosed cavity above 40 A3 in this structure.';
+
+      const lines = pockets.map((p, i) => {
+        const ligands = p.ligands.length > 0 ? ` containing ${p.ligands.join(', ')}` : '';
+        const lining = p.lining.slice(0, 6).map((r) => `${r.name}${r.seq}`).join(' ');
+        return `${i + 1}. ${Math.round(p.volume)} A3${ligands}, lined by ${lining}`;
+      });
+
+      // The same shape the other query actions use: a ranking plus one string
+      // that can be handed to a component or focus action unchanged.
+      return `Cavities by volume:\n${lines.join('\n')}\n`
+        + `Selection for the largest: ${pocketSelection(pockets[0])}\n`
+        + 'Ligands were excluded from the scan, so any named above were found rather '
+        + 'than assumed. This is concavity, not affinity.';
     }
 
     case 'similar': {

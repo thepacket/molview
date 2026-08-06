@@ -6,6 +6,7 @@ import { describeAtom, type MeasurementKind } from '../../mol/measure';
 import {
   findInterfaces, interfaceSelection, measureInterfaceAreas, type ChainInterface,
 } from '../../mol/interfaces';
+import { findPockets, pocketSelection, type Pocket } from '../../mol/pockets';
 import { makeComponent, Style } from '../../mol/components';
 import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
@@ -126,6 +127,8 @@ export function MeasurePanel() {
       </div>
 
       <InterfaceSection slot={activeSlot} />
+
+      <PocketSection slot={activeSlot} />
 
       <div className="panel-section">
         <div className="section-label"><span>Display</span></div>
@@ -278,6 +281,123 @@ function InterfaceSection({ slot }: { slot: number }) {
             onClick={() => setList(null)}
           >
             Search again
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Cavities, ranked by volume.
+ *
+ * The first question about an unfamiliar structure with a hole in it. What
+ * makes the list trustworthy is the ligand column: a pocket-finder that cannot
+ * find the pocket the ligand is already in is not working, and the ligands are
+ * excluded from the grid before the search, so seeing one named beside the top
+ * pocket is the method reporting on itself rather than a restatement of the
+ * input.
+ */
+function PocketSection({ slot }: { slot: number }) {
+  const components = useStore((s) => s.slots[slot].components);
+  const setComponents = useStore((s) => s.setComponents);
+  const [list, setList] = useState<Pocket[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const structure = viewer.getStructure(slot);
+  if (!structure) return null;
+
+  const compute = () => {
+    setBusy(true);
+    window.setTimeout(() => {
+      setList(findPockets(structure));
+      setBusy(false);
+    }, 0);
+  };
+
+  const draw = (pocket: Pocket, index: number) => {
+    const name = `Pocket ${index + 1}`;
+    const selection = pocketSelection(pocket);
+    const existing = components.findIndex((c) => c.name === name);
+    const next = existing >= 0
+      ? components.map((c, i) => (i === existing ? { ...c, selection, visible: true } : c))
+      : [...components, makeComponent({ name, selection, style: Style.Licorice })];
+    setComponents(slot, next);
+  };
+
+  return (
+    <div className="panel-section">
+      <div className="section-label"><span>Pockets</span></div>
+      {list === null ? (
+        <>
+          <button
+            type="button"
+            className="btn small"
+            style={{ width: '100%' }}
+            disabled={busy}
+            onClick={compute}
+          >
+            <Layers size={12} /> {busy ? 'Scanning…' : 'Find cavities'}
+          </button>
+          <p className="panel-note" style={{ marginTop: 7, marginBottom: 0 }}>
+            Grid points enclosed by protein along at least four of seven axes,
+            clustered. It finds concavity, not affinity — a large pocket is not
+            a druggable one. Ligands are left out of the scan, so any named
+            beside a pocket were found rather than assumed.
+          </p>
+        </>
+      ) : list.length === 0 ? (
+        <p style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+          No enclosed cavity above 40 Å³. A small or very open structure.
+        </p>
+      ) : (
+        <>
+          {list.map((pocket, index) => (
+            <div key={index} className="measurement">
+              <div className="measurement-head">
+                <span style={{ fontSize: 11.5, marginRight: 'auto' }}>
+                  {Math.round(pocket.volume).toLocaleString()} Å³
+                  {pocket.ligands.length > 0 && (
+                    <span style={{ color: 'var(--accent)', fontSize: 10 }}>
+                      {' '}· {pocket.ligands.join(', ')}
+                    </span>
+                  )}
+                </span>
+                <Tip label="Frame this pocket">
+                  <button
+                    type="button"
+                    className="pane-icon-btn"
+                    style={{ width: 20, height: 20 }}
+                    aria-label={`Focus pocket ${index + 1}`}
+                    onClick={() => viewer.focusSelection(slot, pocketSelection(pocket))}
+                  >
+                    <Crosshair size={11} />
+                  </button>
+                </Tip>
+                <Tip label="Draw its lining">
+                  <button
+                    type="button"
+                    className="pane-icon-btn"
+                    style={{ width: 20, height: 20 }}
+                    aria-label={`Show pocket ${index + 1}`}
+                    onClick={() => draw(pocket, index)}
+                  >
+                    <Layers size={11} />
+                  </button>
+                </Tip>
+              </div>
+              <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text-faint)' }}>
+                {pocket.lining.slice(0, 6).map((r) => `${r.name}${r.seq}`).join(' ')}
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn small"
+            style={{ width: '100%', marginTop: 7 }}
+            onClick={() => setList(null)}
+          >
+            Scan again
           </button>
         </>
       )}

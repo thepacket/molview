@@ -16,14 +16,6 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
-### Pocket detection
-
-Where are the cavities, and how big. A LIGSITE-style scan over the same grid
-the molecular surface already builds: count buried directions per empty grid
-point, cluster the buried ones. Reuses the field machinery wholesale, and
-answers the first question anyone asks of an unfamiliar structure with a
-ligand-shaped hole in it.
-
 ### Left from the ChimeraX comparison
 
 - **Electrostatic colouring.** Needs a charge model and a Poisson-Boltzmann
@@ -39,6 +31,24 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **Pocket detection** — the LIGSITE buriedness scan: enclosed along four of
+  seven axes, clustered, ranked by volume, with lining residues and a ready
+  selection.
+
+  The design decision that makes the answer trustworthy is excluding ligands
+  and waters from the grid. It is also what makes the result checkable: a
+  ligand named beside a pocket was *found*, not restated. Myoglobin's top
+  cavity is 410 A3 containing HEM and lined by Phe43, His64, His97 and Arg45 —
+  the distal pocket residue for residue; 1CBS puts retinoic acid in its
+  largest; 1EMA puts the GFP chromophore inside the barrel. 3EIY corrected me
+  rather than the reverse: I expected ATP, the entry has pyrophosphate, and the
+  scan had it right.
+
+  Four of seven rather than LIGSITE's five, because at five only the single
+  deepest cavity survives on most structures — which answers "where is the
+  site" but not "where are the cavities". The ligand pocket still ranks first
+  everywhere it was checked.
 
 - **The alignment a superposition computes** — it was being calculated and then
   reduced to one number. An RMSD is an average, and an average of a bimodal
