@@ -16,14 +16,6 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
-### Morphing between two conformations
-
-Superposition now keeps its residue-by-residue alignment, which is exactly what
-an interpolation needs. Adenylate kinase open to closed, animated, says more in
-two seconds than the 7.13 Å RMSD says at all, and the turntable recorder can
-already export it. Straight-line interpolation between matched anchors is not
-a physical path and would have to say so.
-
 ### Coulombic colouring on the surface
 
 Previously declined as "worse than nothing if presented as the real thing". The
@@ -52,6 +44,19 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **Morphing between two superposed conformations** — nearly free once the
+  superposition kept its alignment. Each aligned residue is translated bodily
+  by its own anchor's displacement, unaligned residues are carried by their
+  nearest neighbours within twenty positions, and identical chains get the same
+  displacement by residue number so a homodimer does not look broken in half.
+  Verified exactly: at full morph the worst-moving anchor travels 18.3 A, which
+  is precisely its measured pair distance, and reset restores the coordinates
+  to zero error. A rebuild is 15 ms, so it plays.
+
+  It is a straight line through space and the panel says so. Bonds stretch on
+  the way through and no barrier is respected; the animation shows what moved,
+  and would be read as how it moves if left unqualified.
 
 - **A command line** — a `/` line in the assistant composer runs as commands
   instead of going to a model. Deferred twice on the grounds that the palette

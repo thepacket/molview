@@ -179,6 +179,15 @@ against a literature ~25,000. It is still a geometric criterion, not an
 energetic one. A 237k-atom ribosome finds 244 pairs in about 300 ms; areas are
 computed only for the pairs actually reported, since each is four SASA passes.
 
+**Morphing between conformations.** With two structures superposed, the mobile
+pane can be slid or played between its own conformation and the reference's,
+along the alignment the fit already computed. Adenylate kinase open to closed
+says in two seconds what its 7.13 Å RMSD cannot say at all. Identical chains
+move together, so a homodimer does not appear to break in half. It is a
+straight line through space and not a physical path — bonds stretch on the way
+through and no barrier is respected — and the panel says so, because an
+animation implies a mechanism whether or not one is claimed.
+
 **Pockets.** Enclosed cavities, ranked by volume, by the LIGSITE buriedness
 scan: a grid point counts as buried when protein lies on both sides of it along
 at least four of seven axes, and connected buried points are a pocket. Each one

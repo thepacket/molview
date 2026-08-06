@@ -66,6 +66,13 @@ interface SlotData {
   builtSignature: string;
   /** Raw bytes of a locally opened file, kept so projects can embed them. */
   sourceFile: { name: string; buffer: ArrayBuffer } | null;
+  /**
+   * Coordinates as loaded, kept only while a morph is running so the pane can
+   * be put back exactly rather than approximately.
+   */
+  morphOrigin: { x: Float32Array; y: Float32Array; z: Float32Array } | null;
+  /** Per-atom displacement towards the reference conformation. */
+  morphDelta: Float32Array | null;
   /** The residue-by-residue result of the last superposition of this pane. */
   alignment: {
     pairs: AlignedPair[];
@@ -179,6 +186,8 @@ function emptySlotData(): SlotData {
     loadHandle: null,
     builtSignature: '',
     sourceFile: null,
+    morphOrigin: null,
+    morphDelta: null,
     alignment: null,
     predictionUrls: null,
     pae: null,
@@ -845,6 +854,176 @@ export class ViewerController {
   /** The last superposition of this pane, residue by residue. */
   getAlignment(slot: number) {
     return this.data[slot].alignment;
+  }
+
+  // -------------------------------------------------------------------------
+  // Morphing between two superposed conformations
+  // -------------------------------------------------------------------------
+
+  /**
+   * Works out where every atom of this pane would have to go to become the
+   * reference conformation.
+   *
+   * Each aligned residue is translated bodily by the displacement of its own
+   * anchor, and residues with no partner are carried by their nearest aligned
+   * neighbours. That is a straight line through space, not a physical path:
+   * bond lengths stretch in the middle of the morph and no barrier is
+   * respected. It shows *what* moved, which is what a 7 Å RMSD cannot say, and
+   * it must not be read as *how*.
+   *
+   * Returns false when there is nothing to morph towards.
+   */
+  prepareMorph(slot: number): boolean {
+    const structure = this.data[slot].structure;
+    const alignment = this.data[slot].alignment;
+    if (!structure || !alignment || alignment.pairs.length < 3) return false;
+    const reference = this.data[alignment.referenceSlot].structure;
+    if (!reference) return false;
+
+    // The pane is already placed on the reference by a rigid transform, and the
+    // shader applies it. Displacements therefore have to be expressed in this
+    // structure's own frame, which means pulling the reference target back
+    // through the inverse of that transform.
+    const inv = this.engine.getSceneTransform(alignment.referenceSlot);
+    const t = this.engine.getSceneTransform(slot);
+    const invT = invertRigid(t);
+
+    const delta = new Float32Array(structure.atomCount * 3);
+    // Per residue first, then spread over its atoms.
+    const residueDelta = new Map<number, [number, number, number]>();
+
+    for (const pair of alignment.pairs) {
+      const refAnchor = reference.resAnchor[pair.referenceResidue];
+      const mobAnchor = structure.resAnchor[pair.mobileResidue];
+      if (refAnchor < 0 || mobAnchor < 0) continue;
+
+      // Reference position in world space, then into this pane's local frame.
+      const rx = inv[0] * reference.x[refAnchor] + inv[4] * reference.y[refAnchor]
+        + inv[8] * reference.z[refAnchor] + inv[12];
+      const ry = inv[1] * reference.x[refAnchor] + inv[5] * reference.y[refAnchor]
+        + inv[9] * reference.z[refAnchor] + inv[13];
+      const rz = inv[2] * reference.x[refAnchor] + inv[6] * reference.y[refAnchor]
+        + inv[10] * reference.z[refAnchor] + inv[14];
+
+      const lx = invT[0] * rx + invT[4] * ry + invT[8] * rz + invT[12];
+      const ly = invT[1] * rx + invT[5] * ry + invT[9] * rz + invT[13];
+      const lz = invT[2] * rx + invT[6] * ry + invT[10] * rz + invT[14];
+
+      residueDelta.set(pair.mobileResidue, [
+        lx - structure.x[mobAnchor],
+        ly - structure.y[mobAnchor],
+        lz - structure.z[mobAnchor],
+      ]);
+    }
+    if (residueDelta.size < 3) return false;
+
+    // A homo-oligomer aligns on one chain, and morphing only that one makes
+    // the other half look broken rather than stationary. Identical chains get
+    // the same displacement, matched by residue number; chains with a
+    // different sequence are left alone, because a displacement computed for
+    // one protein means nothing for another.
+    const chains = alignableChains(structure);
+    const source = chains.find((c) => c.authId === alignment.mobileChain);
+    if (source) {
+      const bySeq = new Map<number, [number, number, number]>();
+      for (const [residue, d] of residueDelta) bySeq.set(structure.resSeq[residue], d);
+      for (const chain of chains) {
+        if (chain.authId === source.authId || chain.sequence !== source.sequence) continue;
+        for (const residue of chain.residues) {
+          if (residueDelta.has(residue)) continue;
+          const d = bySeq.get(structure.resSeq[residue]);
+          if (d) residueDelta.set(residue, d);
+        }
+      }
+    }
+
+    // Unaligned residues follow the nearest aligned one in sequence, so a gap
+    // or a ligand-adjacent loop is carried along rather than left behind while
+    // everything around it moves.
+    const aligned = [...residueDelta.keys()].sort((a, b) => a - b);
+    for (let r = 0; r < structure.residueCount; r++) {
+      let d = residueDelta.get(r);
+      if (!d) {
+        let nearest = aligned[0];
+        let best = Math.abs(r - nearest);
+        for (const candidate of aligned) {
+          const distance = Math.abs(r - candidate);
+          if (distance < best) { best = distance; nearest = candidate; }
+        }
+        // Only within a short reach: a separate chain should not be dragged
+        // across the scene by a displacement computed for another one.
+        d = best <= 20 ? residueDelta.get(nearest)! : [0, 0, 0];
+      }
+      for (let a = structure.resAtomStart[r]; a < structure.resAtomStart[r + 1]; a++) {
+        delta[a * 3] = d[0];
+        delta[a * 3 + 1] = d[1];
+        delta[a * 3 + 2] = d[2];
+      }
+    }
+
+    this.data[slot].morphOrigin = {
+      x: structure.x.slice(), y: structure.y.slice(), z: structure.z.slice(),
+    };
+    this.data[slot].morphDelta = delta;
+    return true;
+  }
+
+  /** Places the pane a fraction of the way to the reference conformation. */
+  setMorph(slot: number, fraction: number): void {
+    const data = this.data[slot];
+    const structure = data.structure;
+    if (!structure || !data.morphOrigin || !data.morphDelta) return;
+
+    const t = Math.min(Math.max(fraction, 0), 1);
+    const { morphOrigin: origin, morphDelta: delta } = data;
+    for (let a = 0; a < structure.atomCount; a++) {
+      structure.x[a] = origin.x[a] + delta[a * 3] * t;
+      structure.y[a] = origin.y[a] + delta[a * 3 + 1] * t;
+      structure.z[a] = origin.z[a] + delta[a * 3 + 2] * t;
+    }
+
+    // Coordinates live in GPU buffers built by the geometry pass, so moving
+    // them means rebuilding. Forced, because none of the settings changed.
+    data.builtSignature = '';
+    this.rebuild(slot);
+  }
+
+  /** Runs the morph back and forth once, for looking at or for recording. */
+  async playMorph(slot: number, seconds = 3, cycles = 1): Promise<void> {
+    if (!this.data[slot].morphDelta && !this.prepareMorph(slot)) return;
+    const started = performance.now();
+    const total = seconds * 1000;
+
+    for (;;) {
+      const elapsed = performance.now() - started;
+      if (elapsed >= total) break;
+      // A cosine sweep rather than a sawtooth: the ends are where the two real
+      // conformations are, and easing into them is what makes the middle read
+      // as a transition rather than as a jump.
+      const phase = (elapsed / total) * cycles * Math.PI * 2;
+      this.setMorph(slot, (1 - Math.cos(phase)) / 2);
+      await new Promise<void>((resolve) => { requestAnimationFrame(() => resolve()); });
+      if (!this.data[slot].morphDelta) return;
+    }
+    this.setMorph(slot, 0);
+  }
+
+  /** Puts the coordinates back exactly as loaded. */
+  clearMorph(slot: number): void {
+    const data = this.data[slot];
+    if (!data.morphOrigin || !data.structure) return;
+    data.structure.x.set(data.morphOrigin.x);
+    data.structure.y.set(data.morphOrigin.y);
+    data.structure.z.set(data.morphOrigin.z);
+    data.morphOrigin = null;
+    data.morphDelta = null;
+    data.builtSignature = '';
+    this.rebuild(slot);
+  }
+
+  canMorph(slot: number): boolean {
+    const alignment = this.data[slot].alignment;
+    return !!alignment && alignment.pairs.length >= 3;
   }
 
   /** Frames one aligned pair in both panes at once, so the eye can compare. */
@@ -1571,6 +1750,7 @@ export class ViewerController {
   clearSuperposition(slot: number): void {
     this.engine.setSceneTransform(slot, IDENTITY);
     this.data[slot].alignment = null;
+    this.clearMorph(slot);
     useStore.getState().patchSlot(slot, {
       superposedOnto: null, superposeRmsd: null, superposePairs: null,
     });
@@ -2304,6 +2484,19 @@ function projectToPane(
   const cy = (m[1] * wx + m[5] * wy + m[9] * wz + m[13]) / cw;
 
   return [(cx * 0.5 + 0.5) * width, (0.5 - cy * 0.5) * height];
+}
+
+/** Inverse of a rigid transform: transpose the rotation, undo the translation. */
+function invertRigid(m: Float32Array): Float32Array {
+  const out = new Float32Array(16);
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) out[c * 4 + r] = m[r * 4 + c];
+  }
+  out[15] = 1;
+  out[12] = -(out[0] * m[12] + out[4] * m[13] + out[8] * m[14]);
+  out[13] = -(out[1] * m[12] + out[5] * m[13] + out[9] * m[14]);
+  out[14] = -(out[2] * m[12] + out[6] * m[13] + out[10] * m[14]);
+  return out;
 }
 
 function describePick(structure: Structure, hit: PickResult): string {

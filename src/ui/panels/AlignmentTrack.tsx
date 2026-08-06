@@ -15,9 +15,73 @@
  */
 
 import { useState } from 'react';
+import { Play } from 'lucide-react';
 import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import type { AlignedPair } from '../../mol/align';
+import { Field, Slider } from '../controls';
+
+/**
+ * Sliding between the two conformations.
+ *
+ * The strip says which residues moved; this says what the movement looks like,
+ * which for a hinge is a different kind of understanding entirely. It is a
+ * straight-line interpolation and therefore not a physical path — bonds
+ * stretch in the middle and no barrier is respected — so the note says so
+ * rather than letting an animation imply a mechanism.
+ */
+function MorphControl({ slot }: { slot: number }) {
+  const [fraction, setFraction] = useState(0);
+  const [playing, setPlaying] = useState(false);
+
+  if (!viewer.canMorph(slot)) return null;
+
+  return (
+    <>
+      <Field label="Morph" value={fraction === 0 ? 'this pane' : `${Math.round(fraction * 100)}%`}>
+        <Slider
+          value={fraction}
+          min={0}
+          max={1}
+          step={0.02}
+          onChange={(v) => {
+            if (v > 0) viewer.prepareMorph(slot);
+            setFraction(v);
+            viewer.setMorph(slot, v);
+          }}
+        />
+      </Field>
+      <div className="similar-buttons">
+        <button
+          type="button"
+          className="btn small"
+          disabled={playing}
+          onClick={() => {
+            setPlaying(true);
+            void viewer.playMorph(slot, 3).finally(() => {
+              setPlaying(false);
+              setFraction(0);
+            });
+          }}
+        >
+          <Play size={11} /> {playing ? 'Playing…' : 'Play'}
+        </button>
+        <button
+          type="button"
+          className="btn ghost small"
+          onClick={() => { viewer.clearMorph(slot); setFraction(0); }}
+        >
+          Reset
+        </button>
+      </div>
+      <p className="panel-note" style={{ marginTop: 7 }}>
+        A straight line between the two conformations, not a physical path:
+        bonds stretch on the way through and no barrier is respected. It shows
+        what moved, not how.
+      </p>
+    </>
+  );
+}
 
 /** Å between the fitted anchors at which a cell reaches full red. */
 const SCALE = 4;
@@ -77,6 +141,8 @@ export function AlignmentTrack({ slot }: { slot: number }) {
         </span>
         <span>{SCALE}+ Å</span>
       </div>
+
+      <MorphControl slot={slot} />
 
       <p className="panel-note" style={{ marginTop: 7, marginBottom: 0 }}>
         {identical} of {pairs.length} positions are the same residue. The worst
