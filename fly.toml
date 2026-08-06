@@ -3,8 +3,8 @@
 # The app is static, so a machine holds no state and can be stopped between
 # visits. `fly launch` will rewrite `app` if the name is already taken.
 
-app = 'molview2'
-primary_region = 'yul'
+app = 'molview'
+primary_region = 'yyz'
 
 [build]
   dockerfile = 'Dockerfile'
@@ -31,6 +31,6 @@ primary_region = 'yul'
 
 [[vm]]
   size = 'shared-cpu-1x'
-  memory = '512mb'
+  memory = '256mb'
   cpu_kind = 'shared'
   cpus = 1

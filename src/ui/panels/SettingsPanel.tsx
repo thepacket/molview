@@ -124,7 +124,9 @@ export function SettingsPanel() {
           </button>
         </div>
 
-        <div className="current-project" style={{ marginBottom: 7 }}>{modelId}</div>
+        <div className="current-project current-model" style={{ marginBottom: 7 }}>
+          {modelId}
+        </div>
 
         <input
           className="text-input"
