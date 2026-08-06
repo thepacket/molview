@@ -86,6 +86,10 @@ ball-and-stick, licorice and spacefill. Colour by chain, element, secondary
 structure, residue type, B-factor/pLDDT, hydrophobicity, entity, nucleotide
 base, or an N→C rainbow — per component or inherited from the pane.
 
+Lone ions are drawn at half their van der Waals radius. At full size a 2.05 Å
+manganese beside a 0.62 Å ribbon is the largest object in the scene, and in a
+tRNA the magnesiums swamp the molecule they sit in.
+
 Nucleic acid bases come in four styles. **Slab** fits a flat box in the base's
 own ring plane, so a double helix reads as one rather than as two bare tubes.
 **Ladder** joins Watson-Crick partners into a single rung — pairing is
@@ -188,12 +192,18 @@ carrying prose plus a list of actions; each action is re-validated against live
 state before it runs, so a wrong chain id becomes a stated rejection rather than
 a silent no-op. Twenty action types cover loading, layout, components, colour,
 assemblies, focus, lighting, background, hydrogen bonds, measurement,
-interfaces, nucleotide styles, superposition, overlay and ensembles. What the actions did comes
-back to the model as a RESULTS message, so a search it ran is something it can
-read rather than something it has to guess at, and a rejected chain id is
-something it can correct on the next turn. Every one is a reversible local view
-change, so they run without a confirmation step. **Clear** discards the rolling
-history as well as the visible transcript, and aborts a request in flight.
+interfaces, nucleotide styles, superposition, overlay and ensembles. Every one
+is a reversible local view change, so they run without a confirmation step.
+**Clear** discards the rolling history as well as the visible transcript, and
+aborts a request in flight.
+
+What the actions did comes back as a RESULTS message, and a turn is re-entered
+once when it needs it. An action that asks a question — an interface search, a
+measurement — returns its answer only after the model has already spoken, so
+without a second pass the reply is "let me check" and the findings are left for
+you to interpret. A rejected action gets the same treatment, told to correct it
+or to say plainly that it cannot be done rather than describe it as done. Both
+happen once, never twice: it is a correction, not a loop.
 
 Where the model supports structured outputs — Claude and GPT do — the reply
 shape is enforced by the API and the prompt does not restate the schema, which
@@ -251,10 +261,13 @@ definition for a whole page of hits.
 
 ```
 src/
-  rcsb/        GraphQL + Search clients, MessagePack, BinaryCIF, mmCIF text parser
+  rcsb/        GraphQL + Search clients, MessagePack, BinaryCIF, mmCIF text
+               parser, wwPDB validation summary
   mol/         Structure model, element data, bond perception, colour schemes,
-               selections, components, measurements, alignment, loading worker
-  gfx/         WebGPU engine, camera, geometry generation, WGSL shaders, text
+               selections, components, measurements, alignment, chain contacts,
+               loading worker
+  gfx/         WebGPU engine, camera, geometry generation, WGSL shaders, text,
+               first-view orientation
   ai/          Action vocabulary and executor, prompt, OpenRouter client,
                reply parser, Markdown/KaTeX renderer
   viewer/      Controller bridging React state to GPU resources
@@ -345,6 +358,14 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
   never included in a shareable link.
 - The deferred pipeline is opaque-only — there is no transparency, and no
   molecular surface representation.
+- Chain contacts are proximity, not buried surface area, and symmetry contacts
+  are found only around the deposited copy — enough to see every distinct
+  interface in a symmetric assembly, not a per-copy census.
+- The assistant is only as good as the model behind it. Models that cannot be
+  held to the reply schema mostly cope, since the shape is described in the
+  prompt and fenced JSON is unwrapped, but a small one will emit prose where an
+  action was wanted and may describe a change it failed to make. The rejection
+  notices below a reply are the record of what actually happened.
 
 ## Deploying
 
