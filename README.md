@@ -185,7 +185,11 @@ sees the summary too, so it will mention a weak model unprompted.
 
 **Inspection.** Hover or click any atom for its residue, chain and atom name.
 The sequence track is built from the loaded coordinates, so gaps in the model
-appear as gaps and every residue you click actually exists in the scene. Chains
+appear as gaps and every residue you click actually exists in the scene. Where
+a depositor left residues unmodelled the ribbon stops and a dashed Catmull-Rom
+curve carries on to the next observed residue — the chain is continuous there,
+the coordinates are not, and neither a solid ribbon nor a bare hole says that.
+The disordered histone tails of `1KX5` are the case to look at. Chains
 can be hidden or focused individually. A front clipping plane slices into the
 interior of large assemblies.
 

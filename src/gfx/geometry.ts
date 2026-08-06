@@ -410,9 +410,20 @@ function buildCartoon(
 
     let segment: number[] = [];
     let prevResidue = -1;
-    const flush = () => {
+    // Segments of this chain, with a note of whether each break was a hole in
+    // the model rather than a style boundary or the end of the chain. Only the
+    // holes get a connector: the others are not gaps in the molecule.
+    const segments: number[][] = [];
+    const gapAfter: boolean[] = [];
+    const flush = (gap = false) => {
       if (segment.length >= 2) {
         emitSegment(segment);
+        segments.push(segment);
+        gapAfter.push(gap);
+      } else if (segments.length > 0) {
+        // A one-residue island cannot be splined through; do not claim the
+        // chain continues past it.
+        gapAfter[gapAfter.length - 1] = false;
       }
       segment = [];
     };
@@ -519,13 +530,18 @@ function buildCartoon(
           s.y[anchor] - s.y[prevAnchor],
           s.z[anchor] - s.z[prevAnchor],
         );
-        if (skipped || d > maxGap) flush();
+        if (skipped || d > maxGap) flush(true);
       }
       prevResidue = r;
       segment.push(r);
       prevAnchor = anchor;
     }
     flush();
+
+    for (let i = 0; i + 1 < segments.length; i++) {
+      if (!gapAfter[i]) continue;
+      addGapDashes(vertices, indices, s, segments[i], segments[i + 1], atomColor);
+    }
   }
 
   // Nucleic acids read as featureless tubes without their bases; drawing the
@@ -554,6 +570,102 @@ function buildCartoon(
 
   if (indices.length === 0) return null;
   return { vertices: Float32Array.from(vertices), indices: Uint32Array.from(indices) };
+}
+
+/** Dash geometry for unmodelled stretches, in Angstrom. */
+const DASH_RADIUS = 0.13;
+const DASH_LENGTH = 0.9;
+const DASH_GAP = 0.7;
+/**
+ * Past this the missing stretch is long enough that a curve through it is
+ * invention rather than a hint, so the gap is left open.
+ */
+const DASH_MAX_SPAN = 30;
+
+/**
+ * A dashed spline across residues the depositor never modelled.
+ *
+ * The chain really is continuous there — the coordinates are not. A solid
+ * ribbon would claim atoms nobody observed; nothing at all reads as debris,
+ * which is what the histone tails of 1KX5 look like. Dashes say "continuous but
+ * unobserved", and the curve is a Catmull-Rom through the two anchors either
+ * side, so it leaves and arrives along the ribbon's own direction rather than
+ * cutting a chord through the molecule.
+ */
+function addGapDashes(
+  vertices: number[], indices: number[],
+  s: Structure, before: number[], after: number[], atomColor: Uint32Array,
+): void {
+  const a0 = s.resAnchor[before[before.length - 2]];
+  const a1 = s.resAnchor[before[before.length - 1]];
+  const a2 = s.resAnchor[after[0]];
+  const a3 = s.resAnchor[after[1]];
+  if (a0 < 0 || a1 < 0 || a2 < 0 || a3 < 0) return;
+
+  const span = Math.hypot(s.x[a2] - s.x[a1], s.y[a2] - s.y[a1], s.z[a2] - s.z[a1]);
+  if (span < 1e-3 || span > DASH_MAX_SPAN) return;
+
+  // Sample finely enough that the dashes follow the curve rather than chord it.
+  const steps = Math.max(8, Math.ceil(span * 3));
+  const pts: [number, number, number][] = [];
+  const out = new Float32Array(3);
+  for (let i = 0; i <= steps; i++) {
+    const u = i / steps;
+    catmullRom(out, s.x[a0], s.x[a1], s.x[a2], s.x[a3], u, 0);
+    catmullRom(out, s.y[a0], s.y[a1], s.y[a2], s.y[a3], u, 1);
+    catmullRom(out, s.z[a0], s.z[a1], s.z[a2], s.z[a3], u, 2);
+    pts.push([out[0], out[1], out[2]]);
+  }
+
+  // Cumulative arc length, so a dash can be cut at an exact distance rather
+  // than at whichever sample happens to fall nearby — quantising to the sample
+  // spacing stretched every dash until the gaps closed up and the line looked
+  // solid.
+  const arc: number[] = [0];
+  for (let i = 1; i < pts.length; i++) {
+    arc.push(arc[i - 1] + Math.hypot(
+      pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2],
+    ));
+  }
+  const total = arc[arc.length - 1];
+  if (total < 1e-3) return;
+
+  const pointAt = (d: number): [number, number, number] => {
+    let hi = 1;
+    while (hi < arc.length - 1 && arc[hi] < d) hi++;
+    const lo = hi - 1;
+    const t01 = (d - arc[lo]) / Math.max(1e-6, arc[hi] - arc[lo]);
+    return [
+      pts[lo][0] + (pts[hi][0] - pts[lo][0]) * t01,
+      pts[lo][1] + (pts[hi][1] - pts[lo][1]) * t01,
+      pts[lo][2] + (pts[hi][2] - pts[lo][2]) * t01,
+    ];
+  };
+
+  const colorA = atomColor[a1] || 0xffffff;
+  const colorB = atomColor[a2] || 0xffffff;
+  const period = DASH_LENGTH + DASH_GAP;
+  // Centre the pattern, so a gap never starts flush against the ribbon end.
+  const count = Math.max(1, Math.round((total + DASH_GAP) / period));
+  const offset = (total - (count * period - DASH_GAP)) / 2;
+
+  for (let i = 0; i < count; i++) {
+    const from = Math.max(0, offset + i * period);
+    const to = Math.min(total, from + DASH_LENGTH);
+    if (to - from < 1e-3) continue;
+    addRod(vertices, indices, pointAt(from), pointAt(to), DASH_RADIUS,
+      mixColor(colorA, colorB, (from + to) / 2 / total));
+  }
+}
+
+/** Straight lerp in packed RGB; the two ends are usually the same colour. */
+function mixColor(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return (r << 16) | (g << 8) | bl;
 }
 
 const PURINE_RING = ['N9', 'C8', 'N7', 'C5', 'C6', 'N1', 'C2', 'N3', 'C4'];
