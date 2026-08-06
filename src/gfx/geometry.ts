@@ -671,6 +671,8 @@ function mixColor(a: number, b: number, t: number): number {
 const PURINE_RING = ['N9', 'C8', 'N7', 'C5', 'C6', 'N1', 'C2', 'N3', 'C4'];
 const PYRIMIDINE_RING = ['N1', 'C2', 'N3', 'C4', 'C5', 'C6'];
 const SLAB_HALF_THICKNESS = 0.2;
+/** How far the outline sits beyond the ring atom centres. */
+const RING_PAD = 0.28;
 const STUB_RADIUS = 0.22;
 /** Thinner than a stub: it only has to bridge C1' to the ring. */
 const SLAB_STUB_RADIUS = 0.15;
@@ -957,84 +959,75 @@ function addBaseSlab(
   // Joins the ring to the sugar it hangs off.
   addRod(vertices, indices, f.backbone, f.attachPos, SLAB_STUB_RADIUS, color);
 
-  // Fit the box to the ring's extent in that frame.
-  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
-  const consider = (a: number) => {
+  // The ring itself, not a box round it. A base is a hexagon or a fused
+  // bicycle; squaring it off adds a fifth to its area and gives it corners no
+  // base has, which is what made the helix read as paddles rather than bases.
+  const poly: [number, number][] = [];
+  for (const a of ring) {
     const dx = s.x[a] - cx, dy = s.y[a] - cy, dz = s.z[a] - cz;
-    const du = dx * ux + dy * uy + dz * uz;
-    const dv = dx * vx + dy * vy + dz * vz;
-    if (du < minU) minU = du; if (du > maxU) maxU = du;
-    if (dv < minV) minV = dv; if (dv > maxV) maxV = dv;
-  };
-  for (const a of ring) consider(a);
-  consider(attach);
+    poly.push([dx * ux + dy * uy + dz * uz, dx * vx + dy * vy + dz * vz]);
+  }
 
-  const pad = 0.35;
-  minU -= pad; maxU += pad; minV -= pad; maxV += pad;
+  // Push the outline out slightly so the plate covers its atoms rather than
+  // ending at their centres.
+  for (const q of poly) {
+    const len = Math.hypot(q[0], q[1]) || 1;
+    q[0] += (q[0] / len) * RING_PAD;
+    q[1] += (q[1] / len) * RING_PAD;
+  }
 
   const cr = ((color >> 16) & 0xff) / 255;
   const cg = ((color >> 8) & 0xff) / 255;
   const cb = (color & 0xff) / 255;
 
-  const corner = (u: number, v: number, w: number, out: number[]) => {
-    out[0] = cx + ux * u + vx * v + nx * w;
-    out[1] = cy + uy * u + vy * v + ny * w;
-    out[2] = cz + uz * u + vz * v + nz * w;
-  };
+  const at = (u: number, v: number, w: number): [number, number, number] => [
+    cx + ux * u + vx * v + nx * w,
+    cy + uy * u + vy * v + ny * w,
+    cz + uz * u + vz * v + nz * w,
+  ];
+  const push = (
+    p: readonly number[], nrm: readonly number[],
+  ) => vertices.push(p[0], p[1], p[2], nrm[0], nrm[1], nrm[2], cr, cg, cb);
 
-  const p = [0, 0, 0];
-  const base = vertices.length / CARTOON_STRIDE;
+  const h = SLAB_HALF_THICKNESS;
 
-  // Six faces, each with its own normal, so the slab has crisp edges.
-  const faces: [number, number, number][][] = [];
-  const signs = [-1, 1];
-  for (const w of signs) {
-    faces.push([
-      [minU, minV, w * SLAB_HALF_THICKNESS], [maxU, minV, w * SLAB_HALF_THICKNESS],
-      [maxU, maxV, w * SLAB_HALF_THICKNESS], [minU, maxV, w * SLAB_HALF_THICKNESS],
-    ]);
-  }
-  for (const u of [minU, maxU]) {
-    faces.push([
-      [u, minV, -SLAB_HALF_THICKNESS], [u, maxV, -SLAB_HALF_THICKNESS],
-      [u, maxV, SLAB_HALF_THICKNESS], [u, minV, SLAB_HALF_THICKNESS],
-    ]);
-  }
-  for (const v of [minV, maxV]) {
-    faces.push([
-      [minU, v, -SLAB_HALF_THICKNESS], [maxU, v, -SLAB_HALF_THICKNESS],
-      [maxU, v, SLAB_HALF_THICKNESS], [minU, v, SLAB_HALF_THICKNESS],
-    ]);
-  }
-
-  let emitted = 0;
-  for (const face of faces) {
-    const quad: number[][] = [];
-    for (const [u, v, w] of face) {
-      corner(u, v, w, p);
-      quad.push([p[0], p[1], p[2]]);
+  // Two faces, each a fan from the ring centre. Purine outlines are star-shaped
+  // about their centroid, so a fan triangulates them without folding over.
+  for (const side of [1, -1]) {
+    const base = vertices.length / CARTOON_STRIDE;
+    const normal = [nx * side, ny * side, nz * side];
+    push(at(0, 0, h * side), normal);
+    for (const [u, v] of poly) push(at(u, v, h * side), normal);
+    for (let i = 0; i < poly.length; i++) {
+      const a = base + 1 + i;
+      const b = base + 1 + ((i + 1) % poly.length);
+      // Wind each face so its outward side is the one that faces the camera.
+      if (side > 0) indices.push(base, a, b);
+      else indices.push(base, b, a);
     }
-    // Face normal from the quad itself; direction is fixed up below.
-    const e1 = [quad[1][0] - quad[0][0], quad[1][1] - quad[0][1], quad[1][2] - quad[0][2]];
-    const e2 = [quad[2][0] - quad[0][0], quad[2][1] - quad[0][1], quad[2][2] - quad[0][2]];
-    let fnx = e1[1] * e2[2] - e1[2] * e2[1];
-    let fny = e1[2] * e2[0] - e1[0] * e2[2];
-    let fnz = e1[0] * e2[1] - e1[1] * e2[0];
-    const flen = Math.hypot(fnx, fny, fnz) || 1;
-    fnx /= flen; fny /= flen; fnz /= flen;
+  }
 
-    // Point normals outward from the slab centre.
-    const mx = (quad[0][0] + quad[2][0]) / 2 - cx;
-    const my = (quad[0][1] + quad[2][1]) / 2 - cy;
-    const mz = (quad[0][2] + quad[2][2]) / 2 - cz;
-    if (fnx * mx + fny * my + fnz * mz < 0) { fnx = -fnx; fny = -fny; fnz = -fnz; }
-
-    for (const vert of quad) {
-      vertices.push(vert[0], vert[1], vert[2], fnx, fny, fnz, cr, cg, cb);
-    }
-    const o = base + emitted * 4;
-    indices.push(o, o + 1, o + 2, o, o + 2, o + 3);
-    emitted++;
+  // Rim, so the plate has an edge rather than being infinitely thin.
+  for (let i = 0; i < poly.length; i++) {
+    const [u0, v0] = poly[i];
+    const [u1, v1] = poly[(i + 1) % poly.length];
+    let ex = u1 - u0, ey = v1 - v0;
+    const elen = Math.hypot(ex, ey) || 1;
+    ex /= elen; ey /= elen;
+    // Outward edge normal in the ring plane.
+    const nu = ey, nv = -ex;
+    const sign = (nu * (u0 + u1) / 2 + nv * (v0 + v1) / 2) >= 0 ? 1 : -1;
+    const rim = [
+      ux * nu * sign + vx * nv * sign,
+      uy * nu * sign + vy * nv * sign,
+      uz * nu * sign + vz * nv * sign,
+    ];
+    const base = vertices.length / CARTOON_STRIDE;
+    push(at(u0, v0, -h), rim);
+    push(at(u1, v1, -h), rim);
+    push(at(u1, v1, h), rim);
+    push(at(u0, v0, h), rim);
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
   }
 }
 
