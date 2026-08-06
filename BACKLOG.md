@@ -22,8 +22,6 @@ Its seven toolbars read against what MolView has, ranked by payoff per unit of
 work rather than by how large the gap is. Mimicry is not the goal — several of
 these are deliberately declined under "Not planned".
 
-- **Shadows.** The deferred pipeline lights once after rasterisation, so a
-  shadow pass is additive rather than invasive.
 - **Camera: orient and side view.** Snap to standard axes; a depth widget for
   setting the clipping plane by eye rather than by slider.
 - **Electrostatic colouring.** Needs a charge model and a Poisson-Boltzmann
@@ -59,6 +57,12 @@ Two that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **Shadows** (`pending`) — screen-space contact shadows marched along the key
+  light, sixteen steps through the existing depth buffer. A shadow map was not
+  taken: it would mean a light's-eye pass over every pane's geometry, for an
+  effect that mostly matters at contact range. Reach follows the scene, so it
+  reads the same on a ligand and a capsid.
 
 - **Validation in the browse results** (`d5c824e`) — one chip per hit naming the
   entry's weakest metric. It rides the existing batched summary query, so it

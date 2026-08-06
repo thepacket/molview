@@ -148,6 +148,61 @@ fn background(ndc: vec2f) -> vec3f {
   return base * vignette;
 }
 
+/**
+ * Contact shadows, marched through the depth buffer along the key light.
+ *
+ * The pipeline lights once after rasterisation and has no light's-eye pass, so
+ * a shadow map would mean rendering every pane's geometry a second time. This
+ * costs sixteen texture loads instead, and buys the thing shadows are actually
+ * for here: telling a crevice from a shallow dip, and telling which of two
+ * strands passes in front of the other.
+ *
+ * It only knows what the camera can see — a shadow cast by geometry off-screen
+ * or hidden behind something else cannot exist. That is the trade.
+ */
+const SHADOW_STEPS: i32 = 16;
+
+fn contactShadow(viewPos: vec3f, lightDir: vec3f, normal: vec3f) -> f32 {
+  let strength = cam.shadow.x;
+  if (strength <= 0.001) { return 1.0; }
+
+  let reach = cam.shadow.y;
+  let step = reach / f32(SHADOW_STEPS);
+  // Start off the surface, or every pixel shadows itself.
+  var pos = viewPos + normal * (step * 0.5);
+  var occluded = 0.0;
+
+  for (var i = 0; i < SHADOW_STEPS; i = i + 1) {
+    pos = pos + lightDir * step;
+
+    let clipPos = cam.proj * vec4f(pos, 1.0);
+    if (clipPos.w <= 0.0) { break; }
+    let sampleNdc = clipPos.xy / clipPos.w;
+    if (abs(sampleNdc.x) > 1.0 || abs(sampleNdc.y) > 1.0) { break; }
+
+    let vp = cam.viewport;
+    let coord = vec2i(
+      i32(vp.x + (sampleNdc.x * 0.5 + 0.5) * vp.z),
+      i32(vp.y + (0.5 - sampleNdc.y * 0.5) * vp.w),
+    );
+    let sampleDepth = textureLoad(gDepth, coord, 0);
+    // 1.0 is the cleared far plane: empty space casts nothing.
+    if (sampleDepth >= 1.0) { continue; }
+    let sampleView = viewPosFromDepth(sampleNdc, sampleDepth);
+
+    // Occluded when real geometry sits in front of the ray, but only just: a
+    // surface far in front is a different object, not a caster.
+    let diff = sampleView.z - pos.z;
+    if (diff > step * 0.35 && diff < reach) {
+      // Fade with distance so a caster at arm's length does not print a hard
+      // edge, which is what makes screen-space shadows look like dirt.
+      occluded = max(occluded, 1.0 - f32(i) / f32(SHADOW_STEPS));
+    }
+  }
+
+  return clamp(1.0 - occluded * strength, 0.0, 1.0);
+}
+
 @fragment
 fn fs(in: VSOut) -> @location(0) vec4f {
   let coord = vec2i(in.position.xy);
@@ -183,11 +238,14 @@ fn fs(in: VSOut) -> @location(0) vec4f {
   // Wrapped ambient: sky above, cooler bounce below.
   let hemi = mix(vec3f(0.16, 0.18, 0.24), vec3f(0.55, 0.58, 0.66), normal.y * 0.5 + 0.5);
 
+  // Only the key light casts: two more shadowing lights would read as noise.
+  let shadow = contactShadow(viewPos, keyDir, normal);
+
   var color = albedo * (hemi * ao * 1.15
-    + nKey * vec3f(1.0, 0.97, 0.92) * 0.85
+    + nKey * shadow * vec3f(1.0, 0.97, 0.92) * 0.85
     + nFill * vec3f(0.35, 0.45, 0.62) * 0.45
     + nRim * vec3f(0.5, 0.55, 0.75) * 0.3);
-  color = color + vec3f(spec) * ao;
+  color = color + vec3f(spec) * ao * shadow;
 
   // Contact darkening: makes cavities and packing read at a glance.
   color = color * mix(0.55, 1.0, ao);

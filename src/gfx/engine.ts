@@ -23,7 +23,8 @@ import labelsWgsl from './shaders/labels.wgsl?raw';
 
 export const MAX_SLOTS = 4;
 const IDENTITY_MATRIX = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
-const UNIFORM_BYTES = 416;
+// 108 floats: the camera block, a 4x4 scene transform, and the shadow vector.
+const UNIFORM_BYTES = 432;
 const CYLINDER_SIDES = 10;
 
 export interface ViewportRect {
@@ -44,6 +45,8 @@ export interface SlotVisualSettings {
   clipNear: number;
   /** Tint each assembly copy by its operator index. */
   colorBySymmetry: boolean;
+  /** Contact shadow strength along the key light, 0 disables. */
+  shadow: number;
 }
 
 export const DEFAULT_VISUAL_SETTINGS: SlotVisualSettings = {
@@ -52,6 +55,7 @@ export const DEFAULT_VISUAL_SETTINGS: SlotVisualSettings = {
   aoIntensity: 1.0,
   outline: 0.85,
   fogDensity: 0.006,
+  shadow: 0.55,
   orthographic: false,
   clipNear: 0,
   colorBySymmetry: false,
@@ -776,6 +780,12 @@ export class Engine {
     uniformData[85] = this.pixelRatio;
     uniformData[86] = visual.colorBySymmetry ? 1 : 0;
     uniformData[87] = visual.clipNear > 0 ? 1 : 0;
+
+    // Contact shadows march the depth buffer, so their reach is in world units
+    // and has to follow the scene: 8% of the radius keeps the same look on a
+    // ligand and on a capsid.
+    uniformData[104] = visual.shadow;
+    uniformData[105] = Math.max(camera.sceneRadius * 0.25, 4);
 
     // Emit one variant per source slot; only the scene transform differs.
     for (let source = 0; source < MAX_SLOTS; source++) {

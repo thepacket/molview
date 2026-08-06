@@ -24,18 +24,24 @@ const NUCLEOTIDE_STYLES: { value: NucleotideStyle; label: string }[] = [
 /** Named shading looks; the sliders below stay available for fine control. */
 const LIGHTING_PRESETS: {
   name: string;
-  values: { aoIntensity: number; aoRadius: number; outline: number; fogDensity: number };
+  values: {
+    aoIntensity: number; aoRadius: number; outline: number; fogDensity: number;
+    shadow: number;
+  };
 }[] = [
-  { name: 'Studio', values: { aoIntensity: 1, aoRadius: 4.5, outline: 0.85, fogDensity: 0.006 } },
-  { name: 'Soft', values: { aoIntensity: 1.45, aoRadius: 8, outline: 0, fogDensity: 0.004 } },
-  { name: 'Flat', values: { aoIntensity: 0, aoRadius: 0, outline: 1.2, fogDensity: 0 } },
-  { name: 'Plain', values: { aoIntensity: 0, aoRadius: 0, outline: 0, fogDensity: 0 } },
+  { name: 'Studio', values: { aoIntensity: 1, aoRadius: 4.5, outline: 0.85, fogDensity: 0.006, shadow: 0.55 } },
+  { name: 'Soft', values: { aoIntensity: 1.45, aoRadius: 8, outline: 0, fogDensity: 0.004, shadow: 0.35 } },
+  { name: 'Flat', values: { aoIntensity: 0, aoRadius: 0, outline: 1.2, fogDensity: 0, shadow: 0 } },
+  { name: 'Plain', values: { aoIntensity: 0, aoRadius: 0, outline: 0, fogDensity: 0, shadow: 0 } },
 ];
 
-function matchPreset(visual: { aoIntensity: number; outline: number; fogDensity: number }): string {
+function matchPreset(visual: {
+  aoIntensity: number; outline: number; fogDensity: number; shadow: number;
+}): string {
   const hit = LIGHTING_PRESETS.find((p) =>
     Math.abs(p.values.aoIntensity - visual.aoIntensity) < 1e-3
     && Math.abs(p.values.outline - visual.outline) < 1e-3
+    && Math.abs(p.values.shadow - visual.shadow) < 1e-3
     && Math.abs(p.values.fogDensity - visual.fogDensity) < 1e-4);
   return hit ? hit.name : 'Custom';
 }
@@ -331,6 +337,15 @@ export function StylePanel() {
             max={1.6}
             step={0.05}
             onChange={(v) => updateVisual(activeSlot, { aoIntensity: v })}
+          />
+        </Field>
+        <Field label="Shadows" value={slot.visual.shadow.toFixed(2)}>
+          <Slider
+            value={slot.visual.shadow}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(v) => updateVisual(activeSlot, { shadow: v })}
           />
         </Field>
         <Field label="Occlusion radius" value={`${slot.visual.aoRadius.toFixed(1)} Å`}>

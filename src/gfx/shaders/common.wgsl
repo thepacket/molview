@@ -18,6 +18,8 @@ struct Camera {
   clip: vec4f,
   // Rigid transform applied to everything in this pane, for superposition.
   scene: mat4x4f,
+  // x = contact shadow strength, y = its reach in world units
+  shadow: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> cam: Camera;

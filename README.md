@@ -105,8 +105,16 @@ halves of a pair always contrast.
 Assembly copies can be tinted by symmetry operator, which is what makes an
 icosahedral capsid's facets and 5-fold vertices visible instead of
 undifferentiated mush. Shading comes as named presets — Studio, Soft, Flat,
-Plain — with the ambient-occlusion, outline and fog sliders still there
+Plain — with the ambient-occlusion, shadow, outline and fog sliders still there
 underneath.
+
+**Shadows** are marched through the depth buffer along the key light rather than
+rendered from a second camera: the pipeline lights once after rasterisation, and
+a shadow map would mean drawing every pane's geometry again. Sixteen texture
+loads per pixel buy the thing shadows are for here — telling a crevice from a
+shallow dip, and telling which of two strands passes in front. The limitation is
+inherent to the method: a caster that is off-screen or hidden behind something
+else cannot cast, because the depth buffer has never seen it.
 
 **NMR ensembles.** Every model at once as backbone traces, which is the usual
 way to read the spread, or one at a time with the camera held still as you step
