@@ -185,6 +185,14 @@ against a literature ~25,000. It is still a geometric criterion, not an
 energetic one. A 237k-atom ribosome finds 244 pairs in about 300 ms; areas are
 computed only for the pairs actually reported, since each is four SASA passes.
 
+Each of those passes measures only the atoms the other side can reach. An atom
+whose probe sphere no partner sphere can touch has the same area apart and
+together and contributes exactly nothing to the difference, which is the whole
+answer — so dropping it is exact rather than approximate, and the occluders
+stay complete regardless. Haemoglobin's α1β1 is 816.4 Å² with or without the
+narrowing and takes 16 ms instead of 72. Bluetongue virus measures twelve pairs
+in 538 ms rather than 2,900.
+
 **Morphing between conformations.** With two structures superposed, the mobile
 pane can be slid or played between its own conformation and the reference's,
 along the alignment the fit already computed. Adenylate kinase open to closed

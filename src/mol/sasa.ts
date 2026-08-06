@@ -196,12 +196,134 @@ export function interfaceArea(
   const both = new Uint8Array(s.atomCount);
   for (let i = 0; i < both.length; i++) both[i] = a[i] || b[i] ? 1 : 0;
 
-  const aAlone = total(atomSasa(s, { atoms: a, occluders: a, points }));
-  const bAlone = total(atomSasa(s, { atoms: b, occluders: b, points }));
-  const aTogether = total(atomSasa(s, { atoms: a, occluders: both, points }));
-  const bTogether = total(atomSasa(s, { atoms: b, occluders: both, points }));
+  // Only the atoms the other side can reach are measured. An atom whose probe
+  // sphere no partner sphere can touch has exactly the same area in both
+  // passes, so it contributes exactly zero to the difference — and the
+  // difference is the entire answer. Occluders stay complete either way, so
+  // this is an exact optimisation and not an approximation: the atoms dropped
+  // could not have changed the result.
+  const aNear = withinReachOfAtoms(s, a, b);
+  const bNear = withinReachOfAtoms(s, b, a);
+
+  const aAlone = total(atomSasa(s, { atoms: aNear, occluders: a, points }));
+  const bAlone = total(atomSasa(s, { atoms: bNear, occluders: b, points }));
+  const aTogether = total(atomSasa(s, { atoms: aNear, occluders: both, points }));
+  const bTogether = total(atomSasa(s, { atoms: bNear, occluders: both, points }));
 
   return Math.max(0, (aAlone - aTogether + bAlone - bTogether) / 2);
+}
+
+/**
+ * The largest distance at which one sphere's probe surface can be occluded by
+ * another: the two van der Waals radii plus two probes.
+ */
+function reachOf(maxA: number, maxB: number, probe: number): number {
+  return maxA + maxB + 2 * probe;
+}
+
+function maxRadiusOf(s: Structure, atoms: Uint8Array): number {
+  let max = 0;
+  for (let i = 0; i < s.atomCount; i++) {
+    if (atoms[i] && VDW_RADII[s.element[i]] > max) max = VDW_RADII[s.element[i]];
+  }
+  return max;
+}
+
+/** Grid lookup shared by both reach filters. */
+function bucketize(
+  count: number, at: (i: number) => [number, number, number], cell: number,
+): Map<number, number[]> {
+  const buckets = new Map<number, number[]>();
+  for (let i = 0; i < count; i++) {
+    const [x, y, z] = at(i);
+    const k = gridKey(Math.floor(x / cell), Math.floor(y / cell), Math.floor(z / cell));
+    const bucket = buckets.get(k);
+    if (bucket) bucket.push(i);
+    else buckets.set(k, [i]);
+  }
+  return buckets;
+}
+
+function gridKey(gx: number, gy: number, gz: number): number {
+  return (gx * 73856093) ^ (gy * 19349663) ^ (gz * 83492791);
+}
+
+/** The subset of `atoms` close enough to `other` to be affected by it. */
+function withinReachOfAtoms(
+  s: Structure, atoms: Uint8Array, other: Uint8Array, probe = PROBE_RADIUS,
+): Uint8Array {
+  const reach = reachOf(maxRadiusOf(s, atoms), maxRadiusOf(s, other), probe);
+  const others: number[] = [];
+  for (let i = 0; i < s.atomCount; i++) if (other[i]) others.push(i);
+
+  const buckets = bucketize(
+    others.length, (i) => [s.x[others[i]], s.y[others[i]], s.z[others[i]]], reach,
+  );
+  const out = new Uint8Array(s.atomCount);
+  const reachSq = reach * reach;
+
+  for (let i = 0; i < s.atomCount; i++) {
+    if (!atoms[i]) continue;
+    const gx = Math.floor(s.x[i] / reach);
+    const gy = Math.floor(s.y[i] / reach);
+    const gz = Math.floor(s.z[i] / reach);
+    let near = false;
+    for (let dz = -1; dz <= 1 && !near; dz++) {
+      for (let dy = -1; dy <= 1 && !near; dy++) {
+        for (let dx = -1; dx <= 1 && !near; dx++) {
+          const bucket = buckets.get(gridKey(gx + dx, gy + dy, gz + dz));
+          if (!bucket) continue;
+          for (const j of bucket) {
+            const o = others[j];
+            const ddx = s.x[o] - s.x[i], ddy = s.y[o] - s.y[i], ddz = s.z[o] - s.z[i];
+            if (ddx * ddx + ddy * ddy + ddz * ddz < reachSq) { near = true; break; }
+          }
+        }
+      }
+    }
+    if (near) out[i] = 1;
+  }
+  return out;
+}
+
+/** The same filter, against transformed spheres rather than atoms. */
+function withinReachOfSpheres(
+  s: Structure, atoms: Uint8Array, spheres: OccluderSpheres, probe = PROBE_RADIUS,
+): Uint8Array {
+  let maxOther = 0;
+  for (const r of spheres.radius) if (r > maxOther) maxOther = r;
+  const reach = reachOf(maxRadiusOf(s, atoms), maxOther, probe);
+  const count = spheres.radius.length;
+
+  const buckets = bucketize(
+    count, (i) => [spheres.xyz[i * 3], spheres.xyz[i * 3 + 1], spheres.xyz[i * 3 + 2]], reach,
+  );
+  const out = new Uint8Array(s.atomCount);
+  const reachSq = reach * reach;
+
+  for (let i = 0; i < s.atomCount; i++) {
+    if (!atoms[i]) continue;
+    const gx = Math.floor(s.x[i] / reach);
+    const gy = Math.floor(s.y[i] / reach);
+    const gz = Math.floor(s.z[i] / reach);
+    let near = false;
+    for (let dz = -1; dz <= 1 && !near; dz++) {
+      for (let dy = -1; dy <= 1 && !near; dy++) {
+        for (let dx = -1; dx <= 1 && !near; dx++) {
+          const bucket = buckets.get(gridKey(gx + dx, gy + dy, gz + dz));
+          if (!bucket) continue;
+          for (const j of bucket) {
+            const ddx = spheres.xyz[j * 3] - s.x[i];
+            const ddy = spheres.xyz[j * 3 + 1] - s.y[i];
+            const ddz = spheres.xyz[j * 3 + 2] - s.z[i];
+            if (ddx * ddx + ddy * ddy + ddz * ddz < reachSq) { near = true; break; }
+          }
+        }
+      }
+    }
+    if (near) out[i] = 1;
+  }
+  return out;
 }
 
 /**
@@ -298,10 +420,15 @@ export function symmetryInterfaceArea(
   const copyOfB = transformedSpheres(s, b, m, offset);
   const copyOfA = transformedSpheres(s, a, inverse, 0);
 
-  const aAlone = total(atomSasa(s, { atoms: a, occluders: a, points }));
-  const bAlone = total(atomSasa(s, { atoms: b, occluders: b, points }));
-  const aTogether = total(atomSasa(s, { atoms: a, occluders: a, extra: copyOfB, points }));
-  const bTogether = total(atomSasa(s, { atoms: b, occluders: b, extra: copyOfA, points }));
+  // Same exact narrowing as the deposited case: only atoms the copy can reach
+  // can differ between the two passes.
+  const aNear = withinReachOfSpheres(s, a, copyOfB);
+  const bNear = withinReachOfSpheres(s, b, copyOfA);
+
+  const aAlone = total(atomSasa(s, { atoms: aNear, occluders: a, points }));
+  const bAlone = total(atomSasa(s, { atoms: bNear, occluders: b, points }));
+  const aTogether = total(atomSasa(s, { atoms: aNear, occluders: a, extra: copyOfB, points }));
+  const bTogether = total(atomSasa(s, { atoms: bNear, occluders: b, extra: copyOfA, points }));
 
   return Math.max(0, (aAlone - aTogether + bAlone - bTogether) / 2);
 }
