@@ -70,6 +70,9 @@ ${grammar}
   each action a short reason. Actions run in order, and later ones see the
   effect of earlier ones — so load before you style, and set the active pane
   before acting on it.
+- After your actions run, their results come back as a RESULTS message. Read
+  it: it says what a search found and which actions were rejected, and it is
+  the difference between answering from the structure and guessing.
 - Only reference panes, entries, chains and assemblies that appear in SCENE.
 - Never wrap the JSON object in Markdown fences, and put no prose outside it.`;
 }

@@ -201,12 +201,30 @@ export function AssistantPanel() {
         { role: 'assistant', content: parsed.message },
       ];
 
+      const results: string[] = [];
       for (const action of parsed.actions) {
         try {
-          append('notice', await applyAction(action));
+          const result = await applyAction(action);
+          append('notice', result);
+          results.push(`${action.type}: ${result}`);
         } catch (err) {
-          append('error', `Action failed: ${err instanceof Error ? err.message : String(err)}`);
+          const message = err instanceof Error ? err.message : String(err);
+          append('error', `Action failed: ${message}`);
+          results.push(`${action.type}: failed — ${message}`);
         }
+      }
+
+      // What the actions actually did goes back into the history, so the next
+      // turn can see that a chain id was rejected, or read what a search
+      // returned. Without this an action whose whole value is its answer —
+      // interfaces, measure — is written into the void, and the model is left
+      // inferring what it could have been told. Capped, because a long result
+      // is resent on every subsequent turn of the window.
+      if (results.length > 0) {
+        conversationRef.current = [
+          ...conversationRef.current,
+          { role: 'user', content: `RESULTS:\n${results.join('\n').slice(0, 1200)}` },
+        ];
       }
 
       if (completion.totalTokens > 0) {

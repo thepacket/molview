@@ -16,6 +16,7 @@ import { Style, makeComponent, STYLE_LABELS } from '../mol/components';
 import { COLOR_SCHEME_LABELS, type ColorScheme } from '../mol/coloring';
 import { evaluateSelection, parseSelection, selectionError } from '../mol/selection';
 import { createMeasurement, describeAtom, type MeasurementKind } from '../mol/measure';
+import { findInterfaces } from '../mol/interfaces';
 import { LAYOUT_SLOT_COUNT, useStore, type LayoutMode } from '../state/store';
 import { viewer } from '../viewer/ViewerController';
 
@@ -258,6 +259,41 @@ export async function applyAction(action: Action): Promise<string> {
       viewer.toggleHydrogenBonds(slot, on);
       const count = useStore.getState().slots[slot].hydrogenBondCount;
       return on ? `Showing ${count.toLocaleString()} hydrogen bonds.` : 'Hydrogen bonds hidden.';
+    }
+
+    case 'interfaces': {
+      const slot = store.activeSlot;
+      const structure = viewer.getStructure(slot);
+      if (!structure) return reject(`pane ${slot + 1} has no structure`);
+
+      // The assembly on screen, so a capsid reports its lattice contacts rather
+      // than only what its asymmetric unit happens to contain.
+      const assemblyId = store.slots[slot].assemblyId;
+      const assembly = structure.assemblies.find((a) => a.id === assemblyId) ?? null;
+      const all = findInterfaces(structure, { assembly });
+      if (all.length === 0) return 'No chain touches another in this pane.';
+
+      const raw = (value ?? '').trim();
+      const limitMatch = /^top\s+(\d+)$/i.exec(raw);
+      const limit = limitMatch ? Math.min(20, Number(limitMatch[1])) : 8;
+      const chainFilter = limitMatch ? '' : raw;
+
+      const matching = chainFilter
+        ? all.filter((i) => i.chainA === chainFilter || i.chainB === chainFilter)
+        : all;
+      if (matching.length === 0) {
+        return reject(`chain ${chainFilter} touches nothing, or is not a chain here`);
+      }
+
+      const lines = matching.slice(0, limit).map((i) => {
+        const partner = i.copyB === undefined ? i.chainB : `${i.chainB} (copy ${i.copyB})`;
+        return `${i.chainA}-${partner}: ${i.contacts} contacts, ${i.polar} polar`;
+      });
+      const more = matching.length > lines.length
+        ? ` (${matching.length - lines.length} weaker pairs omitted)`
+        : '';
+      return `Contacts by chain pair${chainFilter ? ` for chain ${chainFilter}` : ''}: `
+        + `${lines.join('; ')}${more}.`;
     }
 
     case 'measure': {

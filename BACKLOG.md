@@ -51,9 +51,6 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 
 Ideas that surfaced while building the assistant:
 
-- **Feed action results back to the model.** Results are shown to the user but
-  not returned to the model, so it cannot see that a chain id was rejected and
-  correct itself.
 - **A confirmation mode for actions.** Everything the assistant can do is a
   reversible view change, so it runs directly; a toggle for people who want to
   approve each one would be cheap.
@@ -69,6 +66,11 @@ Two that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **Interfaces for the assistant, and results fed back** (`pending`) — an
+  `interfaces` action, and every action's outcome returned to the model as a
+  RESULTS message. Asked what chain A touches, it was reasoning from entity
+  stoichiometry while the answer sat computed in the panel beside it.
 
 - **Interfaces** (`ce8e8b4`) — heavy-atom contacts grouped by chain pair, with
   focus and draw-as-component actions. Validated against known architecture:
