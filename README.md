@@ -1,4 +1,4 @@
-# MolView2
+# MolView
 
 A WebGPU molecular viewer for the RCSB Protein Data Bank. Browse and search the
 PDB, and display up to four structures side by side — including macromolecular
@@ -36,7 +36,7 @@ interface never blocks. The 2.44M-atom HIV-1 capsid (PDB `3J3Q`, a 113 MB
 download) loads and renders in about ten seconds.
 
 **Biological assemblies.** What a depositor deposits is the asymmetric unit,
-which is frequently not the biological molecule. MolView2 reads
+which is frequently not the biological molecule. MolView reads
 `pdbx_struct_assembly_gen` and applies the symmetry operators on the GPU, so
 every assembly the file declares is one dropdown away and costs a list of
 matrices rather than a copy of the atoms:

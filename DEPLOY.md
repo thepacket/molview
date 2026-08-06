@@ -1,6 +1,6 @@
 # Deploying to fly.io
 
-MolView2 has no server component. The Docker image is a Vite build served by
+MolView has no server component. The Docker image is a Vite build served by
 nginx, so a deployment is static files behind Fly's TLS terminator — no secrets,
 no environment variables, no volumes, no database.
 

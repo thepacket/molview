@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
-   MolView2 — application chrome.
+   MolView — application chrome.
 
    This is an application surface, not a document: the shell is fixed to the
    viewport, nothing scrolls except explicitly scrollable regions, and every

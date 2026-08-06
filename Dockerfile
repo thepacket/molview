@@ -1,4 +1,4 @@
-# MolView2 is a pure client-side app: the build produces static files and nginx
+# MolView is a pure client-side app: the build produces static files and nginx
 # serves them. There is no server component and no runtime configuration.
 
 FROM node:22-alpine AS build

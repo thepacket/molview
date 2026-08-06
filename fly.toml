@@ -1,4 +1,4 @@
-# fly.io configuration for MolView2.
+# fly.io configuration for MolView.
 #
 # The app is static, so a machine holds no state and can be stopped between
 # visits. `fly launch` will rewrite `app` if the name is already taken.
