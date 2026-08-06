@@ -10,7 +10,7 @@ export const ACTION_TYPES = [
   'component', 'remove-component', 'color', 'assembly',
   'focus', 'reset-view', 'spin', 'lighting', 'background',
   'hbonds', 'interfaces', 'measure', 'superpose', 'overlay', 'ensemble',
-  'nucleotides', 'view', 'density', 'surface', 'clip',
+  'nucleotides', 'view', 'density', 'surface', 'clip', 'validation',
 ] as const;
 
 export type ActionType = (typeof ACTION_TYPES)[number];
@@ -52,6 +52,7 @@ export const ACTION_REFERENCE: { type: ActionType; value: string; note: string }
   { type: 'nucleotides', value: '"slab" | "ladder" | "stubs" | "none"', note: 'How nucleic acid bases are drawn inside the cartoon. Ladder joins Watson-Crick partners into one rung. To colour by base, use the color action with the "base" scheme — it is not a style.' },
   { type: 'view', value: '"orient" | "x" | "y" | "z" | "-x" | "-y" | "-z"', note: 'Point the camera. "orient" turns the pane to the structure\'s own principal axes and refits it — the view it was given on load, after the user has moved it. The axis values look straight down a world axis instead.' },
   { type: 'ensemble', value: '"on" | "off"', note: 'Draw every model of an NMR ensemble at once, or just one.' },
+  { type: 'validation', value: '"density" | "geometry" | "top 5"', note: 'Ask the wwPDB report which individual residues are suspect, and get back a ranked list plus a ready-made selection covering them — pass that string to a component or focus action. "density" ranks by RSRZ, how badly a residue fits its own experimental density; "geometry" ranks by counted clashes and bond, angle and stereochemistry outliers. Use it whenever the question is which part of a model to distrust: the entry summary only gives a percentage, and this says where.' },
   { type: 'clip', value: '"off" | "front 20" | "back 15" | "slab 10"', note: 'Cut the scene with planes perpendicular to the view, in angstroms measured inward from the front and the back of the structure. "slab N" centres a section N angstroms thick through the middle, which is how to see inside a capsid or down a channel. The planes follow the camera, so rotating rotates the cut.' },
   { type: 'surface', value: '"on" | "off" | a selection | "opacity 0.4" | "wireframe" | "solid" | "probe 1.4"', note: 'A molecular surface over the atoms drawn, or over a selection if one is given — the envelope the molecule presents to the solvent. It is coloured by the pane\'s scheme, so a per-chain surface shows the subunit boundaries. Building it blocks for up to a couple of seconds on a large structure, so do not set it and immediately change it.' },
   { type: 'density', value: '"on" | "off" | "1.5 sigma" | "solid" | "wireframe" | "difference on" | "around 3"', note: 'The experimental density this model was built into: 2Fo-Fc and Fo-Fc for X-ray entries, the deposited map for cryo-EM. "on" fetches and contours it; the other values retune what is already loaded. Contours are in sigma. "difference on" adds the Fo-Fc map, green where the data want atoms the model does not have and red where the model has atoms the data do not support. "around N" keeps only density within N angstroms of the drawn atoms, and "around 0" shows the whole box. Use this whenever the question is whether the model is supported by the evidence rather than what the model looks like.' },

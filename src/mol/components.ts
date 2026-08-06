@@ -8,6 +8,7 @@
  */
 
 import { makeColorProvider, type ColorScheme } from './coloring';
+import type { ResidueValidation } from '../rcsb/residueValidation';
 import { evaluateSelection, parseSelection } from './selection';
 import { MolKind, type Structure } from './structure';
 
@@ -129,6 +130,8 @@ export interface ResolveOptions {
   hiddenChains: ReadonlySet<string>;
   showHydrogens: boolean;
   paletteOffset: number;
+  /** Per-residue wwPDB metrics, for the schemes that colour by them. */
+  residueValidation?: ResidueValidation | null;
 }
 
 export interface ResolvedScene {
@@ -182,6 +185,7 @@ export function resolveComponents(
         ? component.uniformColor
         : options.paneUniformColor,
       paletteOffset: options.paletteOffset,
+      residueValidation: options.residueValidation,
     });
 
     let count = 0;

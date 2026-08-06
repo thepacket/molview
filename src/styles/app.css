@@ -1260,6 +1260,27 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.legend-ramp {
+  display: flex;
+  height: 8px;
+  margin-top: 7px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.legend-ramp span {
+  flex: 1;
+}
+
+.legend-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  font-size: 9.5px;
+  font-family: var(--mono);
+  color: var(--text-faint);
+}
+
 .side-view {
   border: 1px solid var(--line);
   border-radius: 5px;

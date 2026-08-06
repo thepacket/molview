@@ -287,6 +287,47 @@ export async function applyAction(action: Action): Promise<string> {
       return `Looking down ${m[1]}${m[2].toUpperCase()}.`;
     }
 
+    case 'validation': {
+      const slot = store.activeSlot;
+      const state = store.slots[slot];
+      if (!viewer.getStructure(slot)) return reject(`pane ${slot + 1} has no structure`);
+      if (!state.entryId || state.sourceFileName) {
+        return reject('a local file has no wwPDB report');
+      }
+
+      const raw = value.toLowerCase();
+      const metric = /geom|clash|bond|angle|rotamer|rama/.test(raw) ? 'outliers' : 'rsrz';
+      const limitMatch = /top\s+(\d+)/.exec(raw);
+      const limit = limitMatch ? Math.min(25, Number(limitMatch[1])) : 8;
+
+      const validation = await viewer.loadResidueValidation(slot);
+      if (!validation) return reject('the per-residue report could not be fetched');
+      if (metric === 'rsrz' && !validation.hasDensityFit) {
+        return 'This entry has no per-residue fit to density: structure factors '
+          + 'were never deposited, so only geometry can be checked.';
+      }
+
+      const worst = viewer.worstResidues(slot, metric, limit);
+      if (worst.length === 0) {
+        return metric === 'rsrz'
+          ? 'No residue in this entry is an outlier by fit to density.'
+          : 'The report lists no geometry outliers in this entry.';
+      }
+
+      const lines = worst.map((r) => `${r.chain} ${r.seq}: ${
+        metric === 'rsrz'
+          ? `RSRZ ${r.value.toFixed(1)}`
+          : `${r.value} outlier${r.value === 1 ? '' : 's'}`}`);
+      // The same shape the interfaces action returns: a ranked list and one
+      // string that can be handed straight to a component or focus action.
+      const selection = worst
+        .map((r) => `(/${r.chain} and ${r.seq})`)
+        .join(' or ');
+
+      return `Worst residues by ${metric === 'rsrz' ? 'fit to density' : 'geometry'}:\n`
+        + `${lines.join('\n')}\nSelection covering them: ${selection}`;
+    }
+
     case 'clip': {
       const slot = store.activeSlot;
       const structure = viewer.getStructure(slot);

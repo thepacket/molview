@@ -275,6 +275,16 @@ tell you. The pair defines a slab, so a section through a capsid stays a
 section instead of becoming a silhouette against everything behind it. The
 planes follow the camera, so rotating rotates the cut.
 
+**Validation, per residue.** The entry summary says "9.5% rotamer outliers";
+two colour schemes say *which* residues. **Fit to density (RSRZ)** shows how
+badly each residue matches its own experimental density, and **Geometry
+outliers** counts clashes and bond, angle and stereochemistry faults together.
+Both ramps are anchored to fixed thresholds rather than to each entry's range,
+so the same colour means the same thing in two structures, and the legend says
+where the thresholds are. A ranked list of the worst residues sits under it;
+clicking one flies there. Paired with the density map this is the whole loop —
+colour by fit, find the worst residue, look at the evidence under it.
+
 **Molecular surfaces.** The envelope a molecule presents to the solvent, as a
 Gaussian surface over the atoms currently drawn or over any selection, blended
 so the cartoon stays visible through it. It carries the pane's colour scheme, so
@@ -316,6 +326,12 @@ the Panes tool. Nothing is uploaded.
 | Coordinates (BinaryCIF) | `models.rcsb.org/{id}.bcif` |
 | Coordinates (mmCIF fallback) | `files.rcsb.org/download/{ID}.cif` |
 | Density maps (BinaryCIF) | `maps.rcsb.org/{x-ray\|em}/{id}/box/...` |
+
+Per-residue validation comes from the same GraphQL endpoint, as polymer
+*instance features* rather than as a validation category — `RSRZ`, `RSCC` and
+`OWAB` as arrays along the entity sequence, faults as one position per residue.
+They are numbered in entity sequence, so `auth_to_entity_poly_seq_mapping`
+converts before anything is coloured.
 
 Search returns identifiers only; a single batched GraphQL query then fetches the
 definition for a whole page of hits.

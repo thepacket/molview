@@ -7,11 +7,6 @@ already exists are documented at the end of [README.md](README.md) instead.
 
 ## Open
 
-- **Per-residue validation.** Entry-level numbers say "9.5% rotamer outliers"
-  but not which residues, so the structure cannot be coloured by fault. The
-  per-residue data is in the validation XML; whether RCSB exposes it through
-  GraphQL is unverified.
-
 Ideas that came up along the way and were deliberately not taken are under "Not
 planned" below; current limitations of what exists are at the end of
 [README.md](README.md).
@@ -46,6 +41,30 @@ One that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **Per-residue validation** — two colour schemes, fit to density (RSRZ) and
+  counted geometry faults, plus a legend, a ranked worst-residues list that
+  focuses on click, and a `validation` action that hands the assistant the same
+  ranking with a ready-made selection.
+
+  RCSB does expose it, which the earlier note doubted: not as a validation
+  category but as polymer *instance features*, `RSRZ` and `RSCC` and `OWAB` as
+  one array running along the entity sequence, clashes and bond/angle/stereo
+  outliers as one position per affected residue. Two things had to be right or
+  the picture lies quietly:
+
+  - **Entity numbering is not auth numbering.** `auth_to_entity_poly_seq_mapping`
+    converts; without it the colours land on the wrong residues in every entry
+    whose chains do not start at 1.
+  - **Every covered residue needs a row, including the clean ones.** Filling the
+    map from features alone leaves a residue with nothing wrong with it
+    indistinguishable from one nobody checked — and on a well-refined structure
+    that is almost all of them. 4HHB went from 142 rows to its full 574.
+
+  Both ramps are anchored to fixed thresholds (2 sigma is an outlier, 4 is bad)
+  rather than to each entry's own range, so the same colour means the same
+  thing between two structures. That only pays off if the thresholds are
+  stated, hence the legend.
 
 - **Turntable recording** — a pane exported as WebM. Not a screen capture: the
   camera is stepped as a function of frame number and the recorder is fed one

@@ -4,6 +4,7 @@ import {
   ELEMENT_COLORS, HYDROPATHY, unpackColor,
 } from './elements';
 import { MolKind, SS, resNameOf, type Structure } from './structure';
+import type { ResidueValidation } from '../rcsb/residueValidation';
 
 export type ColorScheme =
   | 'chain'
@@ -15,6 +16,8 @@ export type ColorScheme =
   | 'rainbow'
   | 'entity'
   | 'base'
+  | 'rsrz'
+  | 'outliers'
   | 'uniform';
 
 export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
@@ -27,8 +30,16 @@ export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
   rainbow: 'Rainbow (N→C)',
   entity: 'Entity',
   base: 'Nucleotide base',
+  rsrz: 'Fit to density (RSRZ)',
+  outliers: 'Geometry outliers',
   uniform: 'Uniform',
 };
+
+/** Schemes that need per-residue validation fetched before they mean anything. */
+export const VALIDATION_SCHEMES: ReadonlySet<ColorScheme> = new Set(['rsrz', 'outliers']);
+
+/** Residues the validation report says nothing about — ligands, waters, gaps. */
+const UNMEASURED = 0x5b6472;
 
 /**
  * Nucleotide bases. Purines warm, pyrimidines cool, so a strand reads as its
@@ -104,6 +115,8 @@ export interface ColorOptions {
   uniformColor: number;
   /** Chain palette offset so stacked structures do not all start on cyan. */
   paletteOffset: number;
+  /** Needed by the validation schemes; they fall back to grey without it. */
+  residueValidation?: ResidueValidation | null;
 }
 
 export function makeColorProvider(s: Structure, options: ColorOptions): ColorProvider {
@@ -171,6 +184,22 @@ export function makeColorProvider(s: Structure, options: ColorOptions): ColorPro
       case 'base':
         color = BASE_COLORS[comp] ?? KIND_FALLBACK[s.resKind[r]];
         break;
+      case 'rsrz': {
+        const m = metricsFor(s, r, options.residueValidation);
+        // 2 sigma is the conventional outlier threshold and 4 is bad by any
+        // reading, so the ramp is anchored there rather than to the entry's
+        // own range: the same colour then means the same thing between two
+        // structures, which is the point of a standardised score.
+        color = m?.rsrz == null ? UNMEASURED : rainbow(Math.min(Math.max(m.rsrz, 0), 4) / 4);
+        break;
+      }
+      case 'outliers': {
+        const m = metricsFor(s, r, options.residueValidation);
+        if (!m) color = UNMEASURED;
+        else if (m.outliers === 0) color = 0x4a7fb5;
+        else color = rainbow(0.45 + Math.min(m.outliers, 6) / 12);
+        break;
+      }
       case 'uniform':
       default:
         color = uniformColor;
@@ -185,6 +214,19 @@ export function makeColorProvider(s: Structure, options: ColorOptions): ColorPro
     residue: (r) => table[r],
     atom: (a) => (byElement ? ELEMENT_COLORS[s.element[a]] : table[s.atomResidue[a]]),
   };
+}
+
+/**
+ * The report's row for a residue, keyed the way a user names it. Insertion
+ * codes are not part of the key: RCSB reports against the entity sequence, and
+ * the auth mapping it publishes carries the number without the code.
+ */
+function metricsFor(
+  s: Structure, residue: number, validation: ResidueValidation | null | undefined,
+) {
+  if (!validation) return null;
+  const chain = s.chainAuthId[s.resChain[residue]];
+  return validation.byResidue.get(`${chain}:${s.resSeq[residue]}`) ?? null;
 }
 
 export { unpackColor };

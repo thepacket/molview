@@ -3,7 +3,9 @@
 import { Crosshair, Eye, EyeOff } from 'lucide-react';
 import type { Assembly } from '../../mol/assembly';
 import type { NucleotideStyle } from '../../gfx/geometry';
-import { COLOR_SCHEME_LABELS, CHAIN_PALETTE, type ColorScheme } from '../../mol/coloring';
+import {
+  COLOR_SCHEME_LABELS, CHAIN_PALETTE, VALIDATION_SCHEMES, type ColorScheme,
+} from '../../mol/coloring';
 import { MolKind } from '../../mol/structure';
 
 import { useStore } from '../../state/store';
@@ -11,6 +13,7 @@ import { viewer } from '../../viewer/ViewerController';
 import { Field, Segmented, Select, Slider, Toggle, Tip } from '../controls';
 import { ComponentList } from './ComponentList';
 import { SideView } from './SideView';
+import { ValidationLegend } from './ValidationLegend';
 
 const COLOR_SCHEMES = (Object.keys(COLOR_SCHEME_LABELS) as ColorScheme[])
   .map((value) => ({ value, label: COLOR_SCHEME_LABELS[value] }));
@@ -238,6 +241,9 @@ export function StylePanel() {
             onChange={(v) => patchSlot(activeSlot, { colorScheme: v })}
           />
         </Field>
+        {VALIDATION_SCHEMES.has(slot.colorScheme) && (
+          <ValidationLegend scheme={slot.colorScheme} slot={activeSlot} />
+        )}
         {slot.colorScheme === 'uniform' && (
           <Field label="Colour">
             <div className="chip-row">

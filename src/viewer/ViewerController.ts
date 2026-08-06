@@ -33,6 +33,10 @@ import { DEFAULT_SURFACE_OPTIONS, gaussianSurface } from '../gfx/surface';
 import { VDW_RADII } from '../mol/elements';
 import type { VolumeStyle } from '../gfx/engine';
 import { recordTurntable } from './recorder';
+import { VALIDATION_SCHEMES } from '../mol/coloring';
+import {
+  fetchResidueValidation, worstResidues, type ResidueValidation,
+} from '../rcsb/residueValidation';
 import {
   NoVolumeError, fetchVolumes, sampleSigma,
   type Box, type MapKind, type VolumeGrid, type VolumeSet,
@@ -52,6 +56,9 @@ interface SlotData {
   builtSignature: string;
   /** Raw bytes of a locally opened file, kept so projects can embed them. */
   sourceFile: { name: string; buffer: ArrayBuffer } | null;
+  /** Per-residue wwPDB metrics, fetched the first time a scheme wants them. */
+  residueValidation: ResidueValidation | null;
+  residueValidationRequest: Promise<void> | null;
   /** Fetched density grids, kept so the contour can move without refetching. */
   volumes: VolumeSet | null;
   volumeRequest: AbortController | null;
@@ -151,6 +158,8 @@ function emptySlotData(): SlotData {
     loadHandle: null,
     builtSignature: '',
     sourceFile: null,
+    residueValidation: null,
+    residueValidationRequest: null,
     volumes: null,
     volumeRequest: null,
     surfaceMesh: null,
@@ -585,12 +594,17 @@ export class ViewerController {
     if (signature === data.builtSignature && data.geometry) return;
 
     const rep = state.representation;
+    // A validation scheme without its data would draw the whole structure the
+    // colour of "not measured", so the fetch is kicked off here and the
+    // rebuild repeats when it lands.
+    this.ensureResidueValidation(slot, state);
     const resolved = resolveComponents(structure, state.components, {
       paneColorScheme: state.colorScheme,
       paneUniformColor: state.uniformColor,
       hiddenChains: rep.hiddenChains,
       showHydrogens: rep.showHydrogens,
       paletteOffset: slot * 3,
+      residueValidation: data.residueValidation,
     });
 
     // Whole-structure connectivity is only needed when a component covering
@@ -639,6 +653,78 @@ export class ViewerController {
     this.refreshOverlay(slot);
 
     this.invalidate();
+  }
+
+  /**
+   * Fetches per-residue validation once, if any layer wants to colour by it.
+   *
+   * Deliberately lazy: it is a second GraphQL round trip carrying a value per
+   * residue, and most sessions never ask for it.
+   */
+  private ensureResidueValidation(slot: number, state: SlotState): void {
+    const wanted = VALIDATION_SCHEMES.has(state.colorScheme)
+      || state.components.some((c) => c.colorScheme && VALIDATION_SCHEMES.has(c.colorScheme));
+    const data = this.data[slot];
+    if (!wanted || data.residueValidation || data.residueValidationRequest) return;
+    if (!state.entryId || state.sourceFileName) return;
+
+    const entryId = state.entryId;
+    data.residueValidationRequest = fetchResidueValidation(entryId)
+      .then((validation) => {
+        // The pane may have been reloaded with something else meanwhile.
+        if (useStore.getState().slots[slot].entryId !== entryId) return;
+        this.data[slot].residueValidation = validation;
+        // Force the rebuild past its signature check: the settings did not
+        // change, only what they can be evaluated against.
+        this.data[slot].builtSignature = '';
+        this.rebuild(slot);
+      })
+      .catch((err: unknown) => {
+        useStore.getState().patchSlot(slot, {
+          error: `Per-residue validation could not be fetched: ${
+            err instanceof Error ? err.message : String(err)}`,
+        });
+      })
+      .finally(() => { this.data[slot].residueValidationRequest = null; });
+  }
+
+  /** Per-residue metrics for a pane, once a validation scheme has loaded them. */
+  getResidueValidation(slot: number): ResidueValidation | null {
+    return this.data[slot].residueValidation;
+  }
+
+  /** The same data, fetched on demand rather than as a side effect of colouring. */
+  async loadResidueValidation(slot: number): Promise<ResidueValidation | null> {
+    const data = this.data[slot];
+    if (data.residueValidation) return data.residueValidation;
+    const entryId = useStore.getState().slots[slot].entryId;
+    if (!entryId) return null;
+    if (data.residueValidationRequest) await data.residueValidationRequest;
+    if (data.residueValidation) return data.residueValidation;
+
+    try {
+      const validation = await fetchResidueValidation(entryId);
+      if (useStore.getState().slots[slot].entryId !== entryId) return null;
+      data.residueValidation = validation;
+      return validation;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The residues a report singles out, as selection-ready descriptions. This
+   * is what turns "9.5% rotamer outliers" into somewhere to look.
+   */
+  worstResidues(
+    slot: number, metric: 'rsrz' | 'outliers', limit = 10,
+  ): { chain: string; seq: number; value: number }[] {
+    const validation = this.data[slot].residueValidation;
+    if (!validation) return [];
+    return worstResidues(validation, metric, limit).map(({ key, value }) => {
+      const [chain, seq] = key.split(':');
+      return { chain, seq: Number(seq), value };
+    });
   }
 
   syncSettings(): void {
