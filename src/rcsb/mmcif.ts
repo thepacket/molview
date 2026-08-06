@@ -230,4 +230,8 @@ export const STRUCTURE_CATEGORIES: ReadonlySet<string> = new Set([
   'pdbx_struct_assembly',
   'pdbx_struct_assembly_gen',
   'pdbx_struct_oper_list',
+  // Crystal lattice, for packing contacts. Cheap to keep — one row each — and
+  // absent from anything that was not crystallised.
+  'cell',
+  'symmetry',
 ]);

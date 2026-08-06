@@ -8,6 +8,7 @@
 
 import type { CifBlock } from '../rcsb/cif';
 import { parseAssemblies, type Assembly } from './assembly';
+import type { UnitCell } from './spacegroup';
 import { elementIndex, isAminoAcid, isNucleotide, isWater } from './elements';
 
 export const enum SS {
@@ -75,9 +76,60 @@ export interface Structure {
 
   /** Biological assemblies declared in the file; empty if none. */
   readonly assemblies: Assembly[];
+  /**
+   * Unit cell and space group, when the entry is a crystal structure. Null for
+   * NMR, cryo-EM and predictions, which have no lattice to speak of — some of
+   * them still carry a placeholder P 1 cell of 1 Å, which is why this is
+   * rejected rather than trusted.
+   */
+  readonly crystal: CrystalInfo | null;
   /** Model actually built, and how many the file contains (NMR ensembles). */
   readonly modelNum: number;
   readonly modelCount: number;
+}
+
+export interface CrystalInfo {
+  cell: UnitCell;
+  /** International Tables number, the key the operator table uses. */
+  spaceGroupNumber: number;
+  /** As deposited, for display. */
+  spaceGroupName: string;
+}
+
+/**
+ * Cell and space group, or null when there is no usable lattice.
+ *
+ * The placeholder check matters: structures solved by NMR or cryo-EM, and
+ * every prediction, are written with `P 1` and a 1 Å cell so the columns are
+ * not empty. Taking that at face value would surround the model with copies
+ * one Ångström away, which is not a crystal contact but a pile-up.
+ */
+function parseCrystal(block: CifBlock): CrystalInfo | null {
+  if (!block.hasCategory('cell') || !block.hasCategory('symmetry')) return null;
+  const cellCat = block.category('cell');
+  const symCat = block.category('symmetry');
+
+  const cell: UnitCell = {
+    a: cellCat.field('length_a').num(0),
+    b: cellCat.field('length_b').num(0),
+    c: cellCat.field('length_c').num(0),
+    alpha: cellCat.field('angle_alpha').num(0),
+    beta: cellCat.field('angle_beta').num(0),
+    gamma: cellCat.field('angle_gamma').num(0),
+  };
+  // A real protein cell is tens of Ångström on a side. The 1 Å placeholder and
+  // any zero or missing edge fail this together.
+  if (!(cell.a > 2 && cell.b > 2 && cell.c > 2)) return null;
+  if (!(cell.alpha > 0 && cell.beta > 0 && cell.gamma > 0)) return null;
+
+  const number = symCat.field('Int_Tables_number').num(0);
+  if (!Number.isFinite(number) || number < 1 || number > 230) return null;
+
+  return {
+    cell,
+    spaceGroupNumber: number,
+    spaceGroupName: symCat.field('space_group_name_H-M').str(0) || `#${number}`,
+  };
 }
 
 export function atomNameOf(s: Structure, atom: number): string {
@@ -397,6 +449,7 @@ export function buildStructure(
     bMin: Number.isFinite(bMin) ? bMin : 0,
     bMax: Number.isFinite(bMax) ? bMax : 100,
     assemblies: parseAssemblies(block),
+    crystal: parseCrystal(block),
     modelNum: allModels ? 0 : targetModel,
     modelCount: models.length,
   };

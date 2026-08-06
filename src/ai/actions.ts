@@ -668,7 +668,7 @@ export async function applyAction(action: Action): Promise<string> {
       // than only what its asymmetric unit happens to contain.
       const assemblyId = store.slots[slot].assemblyId;
       const assembly = structure.assemblies.find((a) => a.id === assemblyId) ?? null;
-      const all = findInterfaces(structure, { assembly });
+      const all = findInterfaces(structure, { assembly, lattice: true });
       if (all.length === 0) return 'No chain touches another in this pane.';
 
       const raw = (value ?? '').trim();
@@ -703,7 +703,9 @@ export async function applyAction(action: Action): Promise<string> {
       measureInterfaceAreas(structure, reported);
 
       const lines = reported.map((i) => {
-        const partner = i.copyB === undefined ? i.chainB : `${i.chainB} (copy ${i.copyB})`;
+        const partner = i.copyB === undefined
+          ? i.chainB
+          : `${i.chainB} (${i.latticeB ? 'crystal neighbour' : `assembly copy ${i.copyB}`})`;
         const area = i.area != null ? `, buries ${Math.round(i.area)} A2` : '';
         return `${i.chainA}-${partner}: ${i.contacts} contacts, ${i.polar} polar${area}`;
       });

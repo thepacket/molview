@@ -170,7 +170,7 @@ function InterfaceSection({ slot }: { slot: number }) {
     // Yield first: on a large assembly this takes long enough to drop a frame,
     // and a button that looks stuck is worse than one that says it is working.
     window.setTimeout(() => {
-      const found = findInterfaces(structure, { assembly });
+      const found = findInterfaces(structure, { assembly, lattice: true });
       // Areas for the ones that will actually be shown. Measuring all of them
       // on a capsid would be a hundred SASA passes for a list nobody reads
       // past the top of.
@@ -210,13 +210,12 @@ function InterfaceSection({ slot }: { slot: number }) {
             and the two disagree more often than you would think — a flat patch
             and a knob in a socket can touch equally and bury three times as
             differently.
-            {assembly
-              ? ' Contacts with symmetry copies are included and measured — the'
-                + ' copy blocks the probe like any neighbour, even though only the'
-                + ' deposited side of it can be selected. Note these are the'
-                + " assembly's own operators, so a dimer built from a 2-fold gets"
-                + ' an area; contacts with the wider crystal lattice are not built.'
-              : ''}
+            {' '}Neighbours made by symmetry are included and measured too — the
+            copy blocks the probe like any other, though only the deposited side
+            of it can be selected. Ones from the crystal lattice are tagged
+            {' '}<em>crystal</em>, and comparing those with the rest is how
+            packing is told from biology: a crystal contact is usually a few
+            hundred Å², a real interface usually well past that.
           </p>
         </>
       ) : list.length === 0 ? (
@@ -235,8 +234,13 @@ function InterfaceSection({ slot }: { slot: number }) {
                 <span style={{ fontSize: 11.5, marginRight: 'auto' }}>
                   {entry.chainA} · {entry.chainB}
                   {entry.copyB !== undefined && (
-                    <span style={{ color: 'var(--text-faint)', fontSize: 10 }}>
-                      {' '}copy {entry.copyB}
+                    <span
+                      className={entry.latticeB ? 'iface-tag lattice' : 'iface-tag'}
+                      title={entry.latticeB
+                        ? 'A neighbour in the crystal, not part of the deposited assembly'
+                        : `Copy ${entry.copyB} of the biological assembly`}
+                    >
+                      {entry.latticeB ? 'crystal' : `copy ${entry.copyB}`}
                     </span>
                   )}
                 </span>

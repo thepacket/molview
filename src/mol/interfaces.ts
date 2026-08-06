@@ -17,6 +17,7 @@
 import type { Assembly } from './assembly';
 import { MolKind, type Structure } from './structure';
 import { chainAtoms, interfaceArea, symmetryInterfaceArea } from './sasa';
+import { latticeOperators } from './spacegroup';
 
 export interface ChainInterface {
   /** Auth chain ids, ordered so the pair reads the same way every time. */
@@ -35,6 +36,12 @@ export interface ChainInterface {
    * actually needs.
    */
   transformB?: Float32Array;
+  /**
+   * True when the copy came from the crystal lattice rather than the
+   * biological assembly — the distinction the whole exercise is about, so it
+   * travels with the interface rather than being inferred later.
+   */
+  latticeB?: boolean;
   /** Heavy-atom pairs within the cutoff. */
   contacts: number;
   /** Residues involved on each side, as sequence numbers. */
@@ -64,6 +71,26 @@ export interface InterfaceOptions {
   minContacts?: number;
   /** Only consider these atoms, so a hidden chain does not appear. */
   mask?: Uint8Array | null;
+  /**
+   * When true, the crystal lattice is generated and its packing contacts are
+   * reported alongside. This is the set the assembly cannot give: a monomeric
+   * entry has no assembly copies at all and is still surrounded in the crystal.
+   * Ignored for anything without a usable cell, or in a space group the
+   * operator table refuses.
+   */
+  lattice?: boolean;
+}
+
+/** One neighbouring copy to test: an operator and which chains it applies to. */
+interface Copy {
+  /** Column-major 4x4. */
+  transform: Float32Array;
+  /** label_asym_ids this operator replicates, or null for all of them. */
+  asymIds: Set<string> | null;
+  /** Stable number for display; distinguishes copies in the panel. */
+  index: number;
+  /** Set for lattice copies, so the panel can say which kind of neighbour. */
+  lattice: boolean;
 }
 
 /**
@@ -185,8 +212,30 @@ export function findInterfaces(
       residuesB: [...entry.residuesB].sort((x, y) => x - y),
     });
   }
+  const copies: Copy[] = [];
   if (options.assembly) {
-    out.push(...symmetryContacts(s, candidates, options.assembly, cutoff, minContacts));
+    let index = 0;
+    for (const gen of options.assembly.gens) {
+      const asymIds = new Set(gen.asymIds);
+      for (let t = 0; t < gen.count; t++) {
+        copies.push({
+          transform: gen.transforms.slice(t * 16, t * 16 + 16),
+          asymIds, index: ++index, lattice: false,
+        });
+      }
+    }
+  }
+  if (options.lattice && s.crystal) {
+    const ops = latticeOperators(s.crystal.spaceGroupNumber, s.crystal.cell);
+    if (ops) {
+      let index = 0;
+      for (const transform of ops) {
+        copies.push({ transform, asymIds: null, index: ++index, lattice: true });
+      }
+    }
+  }
+  if (copies.length > 0) {
+    out.push(...copyContacts(s, candidates, copies, cutoff, minContacts));
   }
 
   out.sort((p, q) => q.contacts - p.contacts);
@@ -203,8 +252,8 @@ export function findInterfaces(
  * are rejected before any atom is transformed, which is what keeps a capsid
  * affordable.
  */
-function symmetryContacts(
-  s: Structure, candidates: number[], assembly: Assembly,
+function copyContacts(
+  s: Structure, candidates: number[], copies: Copy[],
   cutoff: number, minContacts: number,
 ): ChainInterface[] {
   // Bounding sphere of the reference coordinates, to reject distant copies.
@@ -236,14 +285,15 @@ function symmetryContacts(
   const reach = 2 * radius + cutoff;
   const found = new Map<string, {
     contacts: number; polar: number; residuesA: Set<number>; copy: number;
-    chainA: string; chainB: string; transform: Float32Array;
+    chainA: string; chainB: string; transform: Float32Array; lattice: boolean;
   }>();
 
-  for (const gen of assembly.gens) {
-    const allowed = new Set(gen.asymIds);
-    for (let t = 0; t < gen.count; t++) {
-      const o = t * 16;
-      const m = gen.transforms;
+  {
+    for (const copy of copies) {
+      const allowed = copy.asymIds;
+      const t = copy.index;
+      const o = 0;
+      const m = copy.transform;
 
       // Where this copy's centre lands, and whether it can reach at all.
       const tx = m[o] * cx + m[o + 4] * cy + m[o + 8] * cz + m[o + 12];
@@ -256,7 +306,7 @@ function symmetryContacts(
 
       for (const b of candidates) {
         const chainB = s.resChain[s.atomResidue[b]];
-        if (!allowed.has(s.chainLabelId[chainB])) continue;
+        if (allowed && !allowed.has(s.chainLabelId[chainB])) continue;
 
         const bx = m[o] * s.x[b] + m[o + 4] * s.y[b] + m[o + 8] * s.z[b] + m[o + 12];
         const by = m[o + 1] * s.x[b] + m[o + 5] * s.y[b] + m[o + 9] * s.z[b] + m[o + 13];
@@ -283,7 +333,7 @@ function symmetryContacts(
                   entry = {
                     contacts: 0, polar: 0, residuesA: new Set(), copy: t,
                     chainA, chainB: partner,
-                    transform: m.slice(o, o + 16),
+                    transform: m, lattice: copy.lattice,
                   };
                   found.set(k, entry);
                 }
@@ -317,8 +367,9 @@ function symmetryContacts(
     out.push({
       chainA: entry.chainA,
       chainB: entry.chainB,
-      copyB: entry.copy + 1,
+      copyB: entry.copy,
       transformB: entry.transform,
+      latticeB: entry.lattice,
       contacts: entry.contacts,
       polar: entry.polar,
       residuesA: residues,

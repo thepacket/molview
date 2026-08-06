@@ -1767,6 +1767,26 @@ textarea {
 
 /* --- measurements ---------------------------------------------------------- */
 
+/* Provenance of an interface partner. A lattice neighbour and an assembly copy
+   are both "not in the file", but they mean opposite things about whether the
+   contact is real biology, so they must not read alike. */
+.iface-tag {
+  margin-left: 5px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-size: 9px;
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+  background: var(--bg-hover);
+  vertical-align: 1px;
+}
+
+.iface-tag.lattice {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
 .measurement {
   border: 1px solid var(--line);
   border-radius: var(--radius);
