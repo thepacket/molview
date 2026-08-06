@@ -1677,6 +1677,55 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* The one place in the app that is prose. The body sets user-select: none to
+     keep the viewport feeling like an instrument rather than a document, but a
+     reply is text to be quoted, pasted into a paper, and checked. */
+  user-select: text;
+  cursor: auto;
+}
+
+.assistant-entry {
+  position: relative;
+}
+
+/* Reserved so a wrapped line never runs under the button. */
+.assistant-entry:has(.assistant-copy) { padding-right: 22px; }
+
+.assistant-copy {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg-raised);
+  color: var(--text-faint);
+  cursor: pointer;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s, border-color 0.12s;
+}
+
+/* Revealed on hover, and on keyboard focus so it is reachable without a mouse.
+   Kept visible while it reads "copied" so the confirmation is not missed. */
+.assistant-entry:hover .assistant-copy,
+.assistant-copy:focus-visible,
+.assistant-copy[data-copied='true'] {
+  opacity: 1;
+}
+
+.assistant-copy[data-copied='true'] {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.assistant-copy:hover {
+  color: var(--accent);
+  border-color: var(--accent-dim);
 }
 
 .assistant-empty {

@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Bot, ChevronDown, ChevronUp, Eraser, Send, Settings2, Square,
+  Bot, Check, ChevronDown, ChevronUp, Copy, Eraser, Send, Settings2, Square,
 } from 'lucide-react';
 import { applyAction } from '../ai/actions';
 import { parseReply } from '../ai/parse';
@@ -333,12 +333,53 @@ export function AssistantPanel() {
 }
 
 function Message({ entry }: { entry: Entry }) {
-  if (entry.role === 'assistant') return <AssistantMessage markdown={entry.content} />;
   return (
-    <div className={`assistant-row ${entry.role}`}>
-      {entry.role === 'user' && <span className="assistant-who">You</span>}
-      <span>{entry.content}</span>
+    <div className="assistant-entry">
+      {entry.role === 'assistant' ? (
+        <AssistantMessage markdown={entry.content} />
+      ) : (
+        <div className={`assistant-row ${entry.role}`}>
+          {entry.role === 'user' && <span className="assistant-who">You</span>}
+          <span>{entry.content}</span>
+        </div>
+      )}
+      {/* The Markdown source, not the rendered text: a table pasted elsewhere
+          should still be a table, and an equation still LaTeX. */}
+      <CopyButton text={entry.content} />
     </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      // Denied clipboard permission is not worth an error row; the text is
+      // selectable, so there is always a way through.
+    }
+  };
+
+  return (
+    <Tip label={copied ? 'Copied' : 'Copy this message'}>
+      <button
+        type="button"
+        className="assistant-copy"
+        data-copied={copied}
+        aria-label="Copy this message"
+        onClick={copy}
+      >
+        {copied ? <Check size={11} /> : <Copy size={11} />}
+      </button>
+    </Tip>
   );
 }
 
