@@ -275,3 +275,13 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
   never included in a shareable link.
 - The deferred pipeline is opaque-only — there is no transparency, and no
   molecular surface representation.
+
+## Contributions
+
+**Pull requests are closed automatically.** MolView is a personal project, so
+this is not a judgement on any particular change — nothing gets merged, and a PR
+left open would only waste the time of whoever wrote it. Fork it and take it
+where you like.
+
+Issues are a different matter: a bug report, or a structure that renders wrong,
+is genuinely useful and gets read.
