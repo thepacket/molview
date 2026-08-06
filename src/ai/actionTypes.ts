@@ -11,7 +11,7 @@ export const ACTION_TYPES = [
   'focus', 'reset-view', 'spin', 'lighting', 'background',
   'hbonds', 'interfaces', 'measure', 'superpose', 'overlay', 'ensemble',
   'nucleotides', 'view', 'density', 'surface', 'clip', 'validation', 'predicted',
-  'similar', 'pockets', 'annotations',
+  'similar', 'pockets', 'annotations', 'palette',
 ] as const;
 
 export type ActionType = (typeof ACTION_TYPES)[number];
@@ -44,6 +44,7 @@ export const ACTION_REFERENCE: { type: ActionType; value: string; note: string }
   { type: 'reset-view', value: 'null', note: 'Frame the whole structure again.' },
   { type: 'spin', value: '"on" | "off"', note: 'Auto-rotate the active pane.' },
   { type: 'lighting', value: '"studio" | "soft" | "flat" | "plain"', note: 'Shading preset.' },
+  { type: 'palette', value: '"saturation 0.6" | "intensity 1.3" | "reset"', note: 'Adjust how strong the pane\'s colours are, without changing the colour scheme itself. 1 is the scheme as authored, 0 saturation is greyscale, above 1 pushes further from grey. Applies to every representation and to a molecular surface, but never to a density map, whose colours identify which map and which sign of the difference.' },
   { type: 'background', value: '"void" | "slate" | "ink" | "bone"', note: 'Background colour.' },
   { type: 'hbonds', value: '"on" | "off"', note: 'Show hydrogen bonds among the visible atoms.' },
   { type: 'interfaces', value: '"A,B" for one pair, "A" for one chain, "" for all, or "top 5"', note: 'Find which chains touch which, by heavy-atom contact and by the area each pair buries (Shrake-Rupley SASA, reported as interface area — half the total change, the convention PISA uses), including symmetry copies when an assembly is shown. Use it instead of reasoning from stoichiometry about what packs against what. Naming a pair also returns a ready-made selection covering the contact residues on both sides: pass that string to a component action to draw the interface itself. There is no distance operator in the selection grammar, so this is the only way to select an interface.' },

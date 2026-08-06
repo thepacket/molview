@@ -43,10 +43,48 @@ const SS_KEY: KeySwatch[] = [
 /** The elements worth naming; everything rarer is left to the CPK convention. */
 const ELEMENT_KEY = ['C', 'N', 'O', 'S', 'P', 'FE', 'ZN', 'MG'];
 
+/**
+ * The pane's saturation and intensity, applied to a swatch.
+ *
+ * The legend has to be the colour the picture actually is, not the colour the
+ * scheme nominally assigns — and it matters most in an export, where the key
+ * is painted into the image beside the molecule it is explaining.
+ */
+function adjust(color: number, saturation: number, intensity: number): number {
+  if (saturation === 1 && intensity === 1) return color;
+  const r = (color >> 16) & 0xff, g = (color >> 8) & 0xff, b = color & 0xff;
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const ch = (v: number) => Math.round(
+    Math.min(Math.max(luma + (v - luma) * saturation, 0) * intensity, 255),
+  );
+  return (ch(r) << 16) | (ch(g) << 8) | ch(b);
+}
+
+export interface ColorKeyOptions {
+  paletteOffset: number;
+  uniformColor: number;
+  saturation?: number;
+  intensity?: number;
+}
+
 export function colorKeyFor(
   s: Structure,
   scheme: ColorScheme,
-  options: { paletteOffset: number; uniformColor: number },
+  options: ColorKeyOptions,
+): ColorKey {
+  const key = buildKey(s, scheme, options);
+  const saturation = options.saturation ?? 1;
+  const intensity = options.intensity ?? 1;
+  if (!key || (saturation === 1 && intensity === 1)) return key;
+  return key.kind === 'swatches'
+    ? { ...key, items: key.items.map((i) => ({ ...i, color: adjust(i.color, saturation, intensity) })) }
+    : { ...key, stops: key.stops.map((c) => adjust(c, saturation, intensity)) };
+}
+
+function buildKey(
+  s: Structure,
+  scheme: ColorScheme,
+  options: ColorKeyOptions,
 ): ColorKey {
   const title = COLOR_SCHEME_LABELS[scheme];
 

@@ -325,6 +325,20 @@ tell you. The pair defines a slab, so a section through a capsid stays a
 section instead of becoming a silhouette against everything behind it. The
 planes follow the camera, so rotating rotates the cut.
 
+**Saturation and intensity.** Two sliders per pane adjust how strong the
+colours are without changing the scheme itself — 1 is the scheme as authored, 0
+saturation is greyscale, above 1 pushes further from grey. They are applied to
+the material colour in the resolve pass, before lighting, so they retune the
+palette rather than the exposure and cost nothing: no geometry rebuild, and the
+frame stays at 0.10 ms while you drag.
+
+They reach a molecular surface, because a chain-coloured envelope has to match
+the cartoon inside it, and the colour key, because a legend that no longer
+matches the picture is worse in an export than no legend. They deliberately do
+*not* reach a density map: its blue, green and red identify which map and which
+sign of the difference, and desaturating those would erase the distinction the
+colours exist to make.
+
 **Colour-blind-safe palette.** The default chain palette runs cyan, orange,
 purple, green, pink — and the green/pink pair is the classic deuteranopia
 collision, which makes a per-chain figure read as one colour to about eight per

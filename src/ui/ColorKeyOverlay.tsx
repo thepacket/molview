@@ -24,6 +24,8 @@ export function ColorKeyOverlay({ slot }: { slot: number }) {
   const key = colorKeyFor(structure, state.colorScheme, {
     paletteOffset: slot * 3,
     uniformColor: state.uniformColor,
+    saturation: state.visual.saturation,
+    intensity: state.visual.intensity,
   });
   if (!key) return null;
 

@@ -1265,7 +1265,10 @@ export class ViewerController {
       truncated = truncated || mesh.truncated;
       entries.push({
         mesh,
-        style: { color, opacity: d.opacity, wireframe: d.wireframe, silhouette: 1 },
+        style: {
+          color, opacity: d.opacity, wireframe: d.wireframe,
+          silhouette: 1, followsPalette: false,
+        },
       });
     };
 
@@ -1320,6 +1323,7 @@ export class ViewerController {
           opacity: s.opacity,
           wireframe: s.wireframe,
           silhouette: 0.2,
+          followsPalette: true,
         },
       });
     }
@@ -2428,6 +2432,8 @@ export class ViewerController {
     return colorKeyFor(structure, state.colorScheme, {
       paletteOffset: slot * 3,
       uniformColor: state.uniformColor,
+      saturation: state.visual.saturation,
+      intensity: state.visual.intensity,
     });
   }
 

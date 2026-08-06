@@ -379,6 +379,24 @@ export function StylePanel() {
             onChange={(v) => updateVisual(activeSlot, { outline: v })}
           />
         </Field>
+        <Field label="Colour saturation" value={slot.visual.saturation.toFixed(2)}>
+          <Slider
+            value={slot.visual.saturation}
+            min={0}
+            max={2}
+            step={0.05}
+            onChange={(v) => updateVisual(activeSlot, { saturation: v })}
+          />
+        </Field>
+        <Field label="Colour intensity" value={slot.visual.intensity.toFixed(2)}>
+          <Slider
+            value={slot.visual.intensity}
+            min={0.2}
+            max={2}
+            step={0.05}
+            onChange={(v) => updateVisual(activeSlot, { intensity: v })}
+          />
+        </Field>
         <Field label="Depth fog" value={slot.visual.fogDensity.toFixed(3)}>
           <Slider
             value={slot.visual.fogDensity}

@@ -21,9 +21,28 @@ struct Camera {
   // x = contact shadow strength, y = its reach in world units,
   // z = rear clip distance, w = rear clip enabled
   shadow: vec4f,
+  // x = colour saturation, y = colour intensity, z and w spare
+  palette: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> cam: Camera;
+
+/**
+ * The pane's saturation and intensity, applied to a material colour before it
+ * is lit.
+ *
+ * Before lighting rather than after, because these are meant to adjust the
+ * *palette* — what colour the molecule is — not the exposure of the finished
+ * image. Applying them at the end would fight the tone curve and wash out the
+ * specular highlights instead of muting the hues.
+ *
+ * Saturation above 1 extrapolates away from grey and can push a channel
+ * negative, hence the clamp.
+ */
+fn adjustPalette(c: vec3f) -> vec3f {
+  let luma = dot(c, vec3f(0.2126, 0.7152, 0.0722));
+  return max(mix(vec3f(luma), c, cam.palette.x) * cam.palette.y, vec3f(0.0));
+}
 
 struct GBufferOut {
   @location(0) albedo: vec4f,

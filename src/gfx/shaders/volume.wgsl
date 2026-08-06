@@ -16,10 +16,26 @@ struct Style {
   // rgb colour, a = opacity
   color: vec4f,
   // x = silhouette weighting, 0 = uniform opacity
+  // y = 1 when this surface follows the pane's palette controls
   params: vec4f,
 };
 
 @group(1) @binding(0) var<uniform> style: Style;
+
+/**
+ * A molecular surface is part of the molecule and has to move with the pane's
+ * saturation and intensity, or a chain-coloured envelope drifts away from the
+ * cartoon inside it. A density contour is not: its blue, green and red carry
+ * meaning — which map, and which sign of the difference — and desaturating
+ * them would erase the distinction the colours exist to make.
+ */
+fn styleColor(vertexColor: vec3f) -> vec3f {
+  let c = style.color.rgb * vertexColor;
+  if (style.params.y > 0.5) {
+    return adjustPalette(c);
+  }
+  return c;
+}
 
 struct Vertex {
   @location(0) position: vec3f,
@@ -74,7 +90,7 @@ fn fsSolid(in: VSOut, @builtin(front_facing) frontFacing: bool) -> @location(0) 
   let nFill = max(dot(n, fillDir), 0.0);
   let hemi = mix(vec3f(0.16, 0.18, 0.24), vec3f(0.55, 0.58, 0.66), n.y * 0.5 + 0.5);
 
-  var color = style.color.rgb * in.color * (hemi * 0.9 + nKey * 0.75 + nFill * 0.3);
+  var color = styleColor(in.color) * (hemi * 0.9 + nKey * 0.75 + nFill * 0.3);
 
   // Silhouette weighting: a shell seen face-on fades and its rim stays solid,
   // which is how a soap bubble reads and is what stops a density contour
@@ -98,5 +114,5 @@ fn fsWire(in: VSOut) -> @location(0) vec4f {
   // it belongs to turns away — just enough to give the mesh depth.
   let n = normalize(in.normalView);
   let lit = 0.55 + 0.45 * abs(dot(n, normalize(vec3f(0.45, 0.55, 0.75))));
-  return vec4f(fogged(style.color.rgb * in.color * lit, in.viewPos), style.color.a);
+  return vec4f(fogged(styleColor(in.color) * lit, in.viewPos), style.color.a);
 }

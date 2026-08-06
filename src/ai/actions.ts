@@ -279,6 +279,28 @@ export async function applyAction(action: Action): Promise<string> {
       return `Lighting set to ${value.toLowerCase()}.`;
     }
 
+    case 'palette': {
+      const slot = store.activeSlot;
+      const want = value.toLowerCase().trim();
+      if (/^(reset|default|off)$/.test(want)) {
+        store.updateVisual(slot, { saturation: 1, intensity: 1 });
+        return 'Colour saturation and intensity back to 1.';
+      }
+      const m = /^(saturation|sat|intensity|brightness)\s+([\d.]+)$/.exec(want);
+      if (!m) {
+        return reject('palette takes "saturation N", "intensity N" or "reset", '
+          + 'where 1 is the scheme as authored');
+      }
+      const amount = Number(m[2]);
+      if (!Number.isFinite(amount) || amount < 0 || amount > 2) {
+        return reject('the value must be between 0 and 2');
+      }
+      const key = /^(sat)/.test(m[1]) ? 'saturation' : 'intensity';
+      store.updateVisual(slot, { [key]: amount });
+      const v = useStore.getState().slots[slot].visual;
+      return `Colour saturation ${v.saturation.toFixed(2)}, intensity ${v.intensity.toFixed(2)}.`;
+    }
+
     case 'background': {
       const background = BACKGROUNDS[value.toLowerCase()];
       if (!background) return reject(`unknown background "${value}"`);

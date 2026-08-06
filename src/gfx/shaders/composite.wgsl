@@ -215,7 +215,7 @@ fn fs(in: VSOut) -> @location(0) vec4f {
   }
 
   let depth = textureLoad(gDepth, coord, 0);
-  let albedo = textureLoad(gAlbedo, coord, 0).rgb;
+  let albedo = adjustPalette(textureLoad(gAlbedo, coord, 0).rgb);
   let normal = normalize(normalSample.xyz);
   let viewPos = viewPosFromDepth(ndc, depth);
   let viewDir = normalize(-viewPos);

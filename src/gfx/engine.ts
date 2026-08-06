@@ -26,8 +26,8 @@ import { ISOSURFACE_STRIDE, type IsoMesh } from './isosurface';
 
 export const MAX_SLOTS = 4;
 const IDENTITY_MATRIX = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
-// 108 floats: the camera block, a 4x4 scene transform, and the shadow vector.
-const UNIFORM_BYTES = 432;
+// 112 floats: the camera block, a 4x4 scene transform, shadow and palette.
+const UNIFORM_BYTES = 448;
 const CYLINDER_SIDES = 10;
 
 export interface ViewportRect {
@@ -56,6 +56,12 @@ export interface SlotVisualSettings {
   colorBySymmetry: boolean;
   /** Contact shadow strength along the key light, 0 disables. */
   shadow: number;
+  /**
+   * Palette adjustment applied to every material colour before lighting.
+   * 1 leaves the scheme as authored; 0 saturation is greyscale.
+   */
+  saturation: number;
+  intensity: number;
 }
 
 export const DEFAULT_VISUAL_SETTINGS: SlotVisualSettings = {
@@ -65,6 +71,8 @@ export const DEFAULT_VISUAL_SETTINGS: SlotVisualSettings = {
   outline: 0.85,
   fogDensity: 0.006,
   shadow: 0.55,
+  saturation: 1,
+  intensity: 1,
   orthographic: false,
   clipNear: 0,
   clipFar: 0,
@@ -83,6 +91,8 @@ export interface VolumeStyle {
    * is a boundary rather than a shell, wants it near zero.
    */
   silhouette: number;
+  /** Whether the pane's saturation and intensity apply. Surfaces yes, maps no. */
+  followsPalette: boolean;
 }
 
 /** GPU resources for one isosurface. */
@@ -536,7 +546,7 @@ export class Engine {
       this.device.queue.writeBuffer(styleBuffer, 0, Float32Array.from([
         style.color[0], style.color[1], style.color[2],
         style.wireframe ? 1 : style.opacity,
-        style.silhouette, 0, 0, 0,
+        style.silhouette, style.followsPalette ? 1 : 0, 0, 0,
       ]));
 
       s.volumes.push({
@@ -952,6 +962,9 @@ export class Engine {
     // Contact shadows march the depth buffer, so their reach is in world units
     // and has to follow the scene: 8% of the radius keeps the same look on a
     // ligand and on a capsid.
+    uniformData[108] = visual.saturation;
+    uniformData[109] = visual.intensity;
+
     uniformData[104] = visual.shadow;
     uniformData[105] = Math.max(camera.sceneRadius * 0.25, 4);
 
