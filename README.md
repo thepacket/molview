@@ -1,5 +1,11 @@
 # MolView
 
+![Four structures side by side in MolView, with the assistant describing the active pane](docs/hero.png)
+
+<sub>Four panes — 4HHB, 5ADH, 1FE3 and 2FT9 — 13,058 atoms at 0.26 ms/frame,
+with the assistant reading the active pane and the oleic acid buried in 1FE3's
+β-barrel.</sub>
+
 A WebGPU molecular viewer for the RCSB Protein Data Bank. Browse and search the
 PDB, and display up to four structures side by side — including macromolecular
 assemblies of millions of atoms.
