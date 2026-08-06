@@ -58,7 +58,8 @@ export interface SlotVisualSettings {
   shadow: number;
   /**
    * Palette adjustment applied to every material colour before lighting.
-   * 1 leaves the scheme as authored; 0 saturation is greyscale.
+   * 1 leaves the scheme as authored; 0 saturation is greyscale. The default
+   * is not 1 — see DEFAULT_VISUAL_SETTINGS.
    */
   saturation: number;
   intensity: number;
@@ -71,8 +72,14 @@ export const DEFAULT_VISUAL_SETTINGS: SlotVisualSettings = {
   outline: 0.85,
   fogDensity: 0.006,
   shadow: 0.55,
-  saturation: 1,
-  intensity: 1,
+  // The schemes are authored at 1, and at 1 they read as washed out against a
+  // near-black canvas: element and chain colours were chosen to be
+  // distinguishable, not vivid, and the fog and hemispheric ambient both pull
+  // them further towards the background. 2 is what the panes are actually
+  // meant to look like; 1 is where a "reset" now returns to only in the sense
+  // of returning to this default.
+  saturation: 2,
+  intensity: 2,
   orthographic: false,
   clipNear: 0,
   clipFar: 0,

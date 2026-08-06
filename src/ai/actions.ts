@@ -30,6 +30,7 @@ import {
   type DensityState, type LayoutMode, type SurfaceState,
 } from '../state/store';
 import { viewer } from '../viewer/ViewerController';
+import { DEFAULT_VISUAL_SETTINGS } from '../gfx/engine';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -283,17 +284,18 @@ export async function applyAction(action: Action): Promise<string> {
       const slot = store.activeSlot;
       const want = value.toLowerCase().trim();
       if (/^(reset|default|off)$/.test(want)) {
-        store.updateVisual(slot, { saturation: 1, intensity: 1 });
-        return 'Colour saturation and intensity back to 1.';
+        const { saturation, intensity } = DEFAULT_VISUAL_SETTINGS;
+        store.updateVisual(slot, { saturation, intensity });
+        return `Colour saturation and intensity back to the default ${saturation}.`;
       }
       const m = /^(saturation|sat|intensity|brightness)\s+([\d.]+)$/.exec(want);
       if (!m) {
         return reject('palette takes "saturation N", "intensity N" or "reset", '
-          + 'where 1 is the scheme as authored');
+          + 'where 1 is the scheme as authored and 2 is the default');
       }
       const amount = Number(m[2]);
-      if (!Number.isFinite(amount) || amount < 0 || amount > 2) {
-        return reject('the value must be between 0 and 2');
+      if (!Number.isFinite(amount) || amount < 0 || amount > 3) {
+        return reject('the value must be between 0 and 3');
       }
       const key = /^(sat)/.test(m[1]) ? 'saturation' : 'intensity';
       store.updateVisual(slot, { [key]: amount });

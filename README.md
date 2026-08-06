@@ -327,7 +327,10 @@ planes follow the camera, so rotating rotates the cut.
 
 **Saturation and intensity.** Two sliders per pane adjust how strong the
 colours are without changing the scheme itself — 1 is the scheme as authored, 0
-saturation is greyscale, above 1 pushes further from grey. They are applied to
+saturation is greyscale, above 1 pushes further from grey. Both default to 2,
+not 1: the schemes were authored to be *distinguishable*, and against a
+near-black canvas with fog and ambient pulling everything towards the
+background, "distinguishable" arrives looking washed out. They are applied to
 the material colour in the resolve pass, before lighting, so they retune the
 palette rather than the exposure and cost nothing: no geometry rebuild, and the
 frame stays at 0.10 ms while you drag.

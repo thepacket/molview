@@ -383,7 +383,7 @@ export function StylePanel() {
           <Slider
             value={slot.visual.saturation}
             min={0}
-            max={2}
+            max={3}
             step={0.05}
             onChange={(v) => updateVisual(activeSlot, { saturation: v })}
           />
@@ -392,7 +392,7 @@ export function StylePanel() {
           <Slider
             value={slot.visual.intensity}
             min={0.2}
-            max={2}
+            max={3}
             step={0.05}
             onChange={(v) => updateVisual(activeSlot, { intensity: v })}
           />
