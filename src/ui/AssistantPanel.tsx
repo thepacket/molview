@@ -16,7 +16,7 @@ import { parseReply } from '../ai/parse';
 import { sceneContext, systemPrompt } from '../ai/prompt';
 import {
   ensureModels, getApiKey, getModel, requestCompletion, SETTINGS_EVENT,
-  type ChatMessage,
+  type ChatMessage, type Completion,
 } from '../ai/openrouter';
 import { useStore } from '../state/store';
 import { Tip } from './controls';
@@ -55,6 +55,23 @@ function readNumber(key: string, fallback: number): number {
 
 function clampHeight(px: number): number {
   return Math.min(Math.max(px, MIN_HEIGHT), Math.round(window.innerHeight * 0.72));
+}
+
+/**
+ * Input and output separately, because they are not priced alike — output
+ * typically costs several times input, so a single total hides the number that
+ * drives the bill. Reasoning is called out when there is any: it is billed as
+ * output but never appears in the reply.
+ */
+function formatUsage(usage: Completion): string {
+  const n = (v: number) => v.toLocaleString();
+  if (!usage.promptTokens && !usage.completionTokens) {
+    return `${n(usage.totalTokens)} tokens`;
+  }
+  const reasoning = usage.reasoningTokens > 0
+    ? ` (${n(usage.reasoningTokens)} reasoning)`
+    : '';
+  return `${n(usage.promptTokens)} in · ${n(usage.completionTokens)} out${reasoning}`;
 }
 
 export function AssistantPanel() {
@@ -193,7 +210,7 @@ export function AssistantPanel() {
       }
 
       if (completion.totalTokens > 0) {
-        append('notice', `${completion.model} · ${completion.totalTokens} tokens`);
+        append('notice', `${completion.model} · ${formatUsage(completion)}`);
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') append('notice', 'Stopped.');

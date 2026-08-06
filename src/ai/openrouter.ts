@@ -168,6 +168,12 @@ export interface Completion {
   model: string;
   promptTokens: number;
   completionTokens: number;
+  /**
+   * Reasoning is requested with `exclude: true`, so it never reaches `content`
+   * — but it is billed as output all the same. It is counted inside
+   * `completionTokens`; this is the part of that figure you cannot read.
+   */
+  reasoningTokens: number;
   totalTokens: number;
 }
 
@@ -236,6 +242,7 @@ export async function requestCompletion(
     model: json?.model ?? model,
     promptTokens: usage.prompt_tokens ?? 0,
     completionTokens: usage.completion_tokens ?? 0,
+    reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? 0,
     totalTokens: usage.total_tokens ?? 0,
   };
 }

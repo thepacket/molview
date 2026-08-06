@@ -144,6 +144,12 @@ The API key is typed into Settings, held in that tab's `sessionStorage`, and sen
 only to openrouter.ai — MolView has no server to send it to. It is never written
 into a project or a shareable link.
 
+Each reply is followed by its cost — `model · 1,340 in · 382 out`, with
+reasoning tokens called out when the model bills for thinking it does not show.
+A turn starts at about 1,300 input tokens; what grows it is the rolling history
+of three exchanges, not the size of the structure, since the scene is counts and
+chain names rather than coordinates. **Clear** is what resets it.
+
 **Inspection.** Hover or click any atom for its residue, chain and atom name.
 The sequence track is built from the loaded coordinates, so gaps in the model
 appear as gaps and every residue you click actually exists in the scene. Chains

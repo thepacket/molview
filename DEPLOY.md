@@ -53,6 +53,45 @@ directly from `models.rcsb.org`. This deployment serves about 1 MB of
 JavaScript and CSS per cold visit and nothing else, whatever the size of the
 structures people open.
 
+## The cost that is not hosting
+
+Hosting this is rounding error. The only meaningful running cost is OpenRouter
+tokens — and deploying does not change who pays them: the key lives in the
+visitor's own `sessionStorage`, so every user spends their own credit and there
+is no shared key to drain.
+
+What each turn sends, measured against the running app:
+
+| | |
+| --- | --- |
+| System prompt, structured outputs on | 4,190 chars ≈ 1,130 tokens |
+| System prompt, structured outputs off | 4,733 chars ≈ 1,275 tokens |
+| Scene, 4HHB (4 chains) | 543 chars ≈ 150 tokens |
+| Scene, 1AON (21 chains, 59k atoms) | 785 chars ≈ 210 tokens |
+| Rolling history | last 6 messages — 3 exchanges |
+
+A first turn is about 1,300–1,400 input tokens. The scene stays small even for
+enormous structures because it carries counts and chain names, never
+coordinates, and assembly copies are matrices rather than chains — a 900-chain
+capsid still describes itself with 15.
+
+**History is what grows the bill**, not the structure. Six messages means up to
+three previous replies are resent verbatim every turn, each up to the 2,400
+token cap, so a fourth turn can carry 4,000–5,000 input tokens without anything
+new having happened. **Clear** is the cost control.
+
+Two things worth knowing before changing any of this:
+
+- On reasoning models the request sets `reasoning: { effort: 'low', exclude:
+  true }`. Excluded reasoning is hidden from the reply but still **billed as
+  output**, which is why the usage line reports it separately.
+- The `max_completion_tokens` cap (2,400, or 3,200 with reasoning) is a ceiling,
+  not a target — a truncated reply loses its closing brace and becomes
+  unparseable, so lowering it to save money trades cost for failed turns.
+
+Each reply is followed by `model · N in · N out`, so the price of a
+conversation is visible as it accumulates rather than at the end of the month.
+
 ## Caching
 
 `/assets/*` is fingerprinted by Vite and served `immutable` for a year;
