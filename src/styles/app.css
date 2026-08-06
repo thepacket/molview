@@ -1726,6 +1726,14 @@ textarea {
   border-left: 2px solid var(--error);
 }
 
+/* Provider errors quote raw JSON and urls, which have no spaces to break at.
+   An error the panel cannot show is the same as no error at all. */
+.assistant-row.error,
+.assistant-row.notice {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
 .assistant-composer {
   display: flex;
   gap: 6px;

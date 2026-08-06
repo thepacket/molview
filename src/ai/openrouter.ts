@@ -231,7 +231,10 @@ export async function requestCompletion(
       ? raw.map((part: { text?: string }) => part?.text ?? '').join('')
       : '';
 
-  if (!content.trim()) throw new Error('The model returned an empty reply.');
+  // A provider failure arrives as HTTP 200 with the error inside the choice, so
+  // it has to be read here as well as at the top level.
+  if (choice?.error) throw new Error(formatError(response.status, choice));
+  if (!content.trim()) throw new Error(formatEmptyReply(choice, json));
   if (choice?.finish_reason === 'length' || choice?.finish_reason === 'max_tokens') {
     throw new Error('The reply was cut off before it finished. Ask for something shorter.');
   }
@@ -245,6 +248,62 @@ export async function requestCompletion(
     reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? 0,
     totalTokens: usage.total_tokens ?? 0,
   };
+}
+
+/**
+ * An empty reply is a symptom, not a cause. Everything the response says about
+ * why it came back empty is reported here rather than collapsed into one
+ * sentence — a refusal, a content filter, a truncation that left nothing behind,
+ * a reasoning model that spent its whole budget thinking.
+ */
+function formatEmptyReply(choice: unknown, json: unknown): string {
+  const c = choice as {
+    message?: { refusal?: unknown; reasoning?: unknown };
+    finish_reason?: unknown;
+    native_finish_reason?: unknown;
+  } | undefined;
+
+  const refusal = c?.message?.refusal;
+  if (typeof refusal === 'string' && refusal.trim()) {
+    return `The model declined: ${refusal.trim()}`;
+  }
+
+  const finish = typeof c?.finish_reason === 'string' ? c.finish_reason : '';
+  const native = typeof c?.native_finish_reason === 'string' ? c.native_finish_reason : '';
+
+  if (finish === 'content_filter') {
+    return 'The provider’s content filter blocked the reply.';
+  }
+  if (finish === 'length' || finish === 'max_tokens') {
+    return 'The model hit the token cap before writing anything. On a reasoning '
+      + 'model, lower the reasoning effort or ask something narrower.';
+  }
+
+  const usage = (json as { usage?: Record<string, number> } | null)?.usage;
+  const reasoning = (usage as { completion_tokens_details?: { reasoning_tokens?: number } })
+    ?.completion_tokens_details?.reasoning_tokens ?? 0;
+  if (reasoning > 0) {
+    return `The model returned ${reasoning} reasoning tokens and no reply. `
+      + 'It spent the whole output budget thinking; ask something narrower.';
+  }
+
+  // Nothing explained itself, so say exactly what came back instead of guessing.
+  // The message's field names are the useful part: they say whether the reply
+  // went somewhere other than content, such as tool_calls or reasoning.
+  const fields = c?.message && typeof c.message === 'object'
+    ? Object.keys(c.message).filter((k) => k !== 'role').join(', ')
+    : '';
+
+  const detail = [
+    finish && `finish_reason: ${finish}`,
+    native && native !== finish && `provider: ${native}`,
+    fields && `message fields: ${fields}`,
+    !c && 'no choices in the response',
+  ].filter(Boolean).join(', ');
+
+  return detail
+    ? `The model returned an empty reply (${detail}).`
+    : 'The model returned an empty reply, and said nothing about why.';
 }
 
 function formatError(status: number, json: unknown): string {
