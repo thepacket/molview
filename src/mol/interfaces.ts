@@ -16,7 +16,7 @@
 
 import type { Assembly } from './assembly';
 import { MolKind, type Structure } from './structure';
-import { chainAtoms, interfaceArea } from './sasa';
+import { chainAtoms, interfaceArea, symmetryInterfaceArea } from './sasa';
 
 export interface ChainInterface {
   /** Auth chain ids, ordered so the pair reads the same way every time. */
@@ -28,6 +28,13 @@ export interface ChainInterface {
    * be written as a selection, because the second half is not in the file.
    */
   copyB?: number;
+  /**
+   * The operator that produced the copy, column-major 4x4. Carried rather than
+   * looked up again from the generator index: with more than one generator the
+   * copy number is ambiguous, and the matrix is what the area calculation
+   * actually needs.
+   */
+  transformB?: Float32Array;
   /** Heavy-atom pairs within the cutoff. */
   contacts: number;
   /** Residues involved on each side, as sequence numbers. */
@@ -36,9 +43,9 @@ export interface ChainInterface {
   /** Hydrogen-bond-range contacts, a crude polar/apolar hint. */
   polar: number;
   /**
-   * Buried area in Å², computed on demand. Null until asked for, and null
-   * forever for a symmetry pair — the second half of that interface is not in
-   * the file, so there is nothing to compute an area against.
+   * Buried area in Å², computed on demand. Undefined until asked for; null if
+   * it could not be computed, which now means only that the operator was not a
+   * rigid motion.
    */
   area?: number | null;
 }
@@ -229,7 +236,7 @@ function symmetryContacts(
   const reach = 2 * radius + cutoff;
   const found = new Map<string, {
     contacts: number; polar: number; residuesA: Set<number>; copy: number;
-    chainA: string; chainB: string;
+    chainA: string; chainB: string; transform: Float32Array;
   }>();
 
   for (const gen of assembly.gens) {
@@ -276,6 +283,7 @@ function symmetryContacts(
                   entry = {
                     contacts: 0, polar: 0, residuesA: new Set(), copy: t,
                     chainA, chainB: partner,
+                    transform: m.slice(o, o + 16),
                   };
                   found.set(k, entry);
                 }
@@ -310,6 +318,7 @@ function symmetryContacts(
       chainA: entry.chainA,
       chainB: entry.chainB,
       copyB: entry.copy + 1,
+      transformB: entry.transform,
       contacts: entry.contacts,
       polar: entry.polar,
       residuesA: residues,
@@ -349,8 +358,15 @@ export function measureInterfaceAreas(
   };
 
   for (const entry of entries) {
-    if (entry.copyB !== undefined) { entry.area = null; continue; }
-    entry.area = interfaceArea(s, atomsOf(entry.chainA), atomsOf(entry.chainB));
+    if (entry.transformB) {
+      entry.area = symmetryInterfaceArea(
+        s, atomsOf(entry.chainA), atomsOf(entry.chainB), entry.transformB, 0,
+      );
+    } else if (entry.copyB !== undefined) {
+      entry.area = null;
+    } else {
+      entry.area = interfaceArea(s, atomsOf(entry.chainA), atomsOf(entry.chainB));
+    }
   }
 }
 

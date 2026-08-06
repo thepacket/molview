@@ -29,6 +29,29 @@ Something specific to that entry or that map is unaccounted for. Worth
 resolving because whatever it is presumably affects other entries silently;
 the same statistic is the only check the density path has.
 
+### Crystal lattice contacts, to finish the interface story
+
+Buried area now works for symmetry copies, so an assembly built from operators
+reports real numbers — HIV-1 protease's dimer, which does not exist inside its
+asymmetric unit at all, measures 1,614 A². What that does *not* give is the
+thing it was wanted for: telling crystal packing from a biological interface.
+The copies come from `pdbx_struct_assembly_gen`, which is the *biological*
+assembly. A monomeric entry like 1UBQ generates one copy — itself — and reports
+no contacts, when in the crystal it is surrounded.
+
+The classification wants the opposite set: the lattice neighbours, whose areas
+are small and mostly polar, against a biological interface's larger and more
+hydrophobic one. Both `symmetry.space_group_name_H-M` and the full `cell` are
+in the file (1UBQ: P 21 21 21, 50.84 x 42.77 x 28.95), but RCSB does not ship
+`space_group_symop.operation_xyz` with the coordinates, so the operators have
+to come from a space-group table keyed by the Int Tables number. That table is
+the real cost — 230 groups, and getting it wrong produces plausible contacts
+rather than absent ones, which is the failure mode worth fearing.
+
+Then: generate the 26 neighbouring cells around the reference, keep copies
+whose bounding sphere can reach, and the existing contact and area machinery
+already handles the rest.
+
 ### Blocked for now
 
 - **Conservation colouring.** ConSurf-DB has precomputed profiles for most PDB

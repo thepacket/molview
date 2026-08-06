@@ -211,8 +211,11 @@ function InterfaceSection({ slot }: { slot: number }) {
             and a knob in a socket can touch equally and bury three times as
             differently.
             {assembly
-              ? ' Contacts with symmetry copies are included; only the deposited'
-                + ' side of those can be selected, since the other side is a matrix.'
+              ? ' Contacts with symmetry copies are included and measured — the'
+                + ' copy blocks the probe like any neighbour, even though only the'
+                + ' deposited side of it can be selected. Note these are the'
+                + " assembly's own operators, so a dimer built from a 2-fold gets"
+                + ' an area; contacts with the wider crystal lattice are not built.'
               : ''}
           </p>
         </>
