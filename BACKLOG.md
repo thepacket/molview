@@ -16,15 +16,67 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
+### What the residues are *for*
+
+MolView can now say a great deal about a structure's geometry — what touches
+what, how much it buries, where the cavities are, how well the model fits its
+density, how confident a prediction is. It says almost nothing about function.
+The active site, the catalytic residues, the glycosylation, the disease
+variants: all of that is annotation, all of it is keyed to UniProt, and none of
+it is on screen.
+
+Confirmed reachable through the GraphQL endpoint already in use:
+
+- `rcsb_uniprot_feature` gives typed, positioned annotations — `BINDING_SITE`,
+  `ACTIVE_SITE`, `MUTAGENESIS_SITE`, `MODIFIED_RESIDUE`, `DISULFIDE_BOND`,
+  `SHORT_SEQUENCE_MOTIF`, `CROSS_LINK` and more. 1CBS returns five kinds.
+- `rcsb_polymer_entity_align` gives the entity-to-UniProt offset as aligned
+  regions, which is what makes the positions land on the right residues. 1CBS
+  is offset by one, and an off-by-one in an active site is worse than nothing.
+
+Combined with `auth_to_entity_poly_seq_mapping`, already used by the per-residue
+validation, the chain from a UniProt feature to a residue in the pane is
+complete. Selectable and drawable annotations are the deliverable, not a list.
+
+### A real command line
+
+Deferred twice on the grounds that the palette and the selection grammar cover
+most of it. They no longer do: there are twenty-six actions, and the assistant
+can reach all of them while a person cannot without a panel visit each. A
+command line over the *same* executor the assistant uses costs a parser for
+`verb value` and gets composition, history, and a scriptable session for free —
+and every command already returns a sentence saying what it did.
+
+### Morphing between two conformations
+
+Superposition now keeps its residue-by-residue alignment, which is exactly what
+an interpolation needs. Adenylate kinase open to closed, animated, says more in
+two seconds than the 7.13 Å RMSD says at all, and the turntable recorder can
+already export it. Straight-line interpolation between matched anchors is not
+a physical path and would have to say so.
+
+### Coulombic colouring on the surface
+
+Previously declined as "worse than nothing if presented as the real thing". The
+qualifier is the whole point: ChimeraX ships Coulombic colouring, labels it
+Coulombic, and nobody is misled. With a molecular surface already in place, a
+distance-dependent-dielectric Coulombic potential at each surface vertex is a
+sum over nearby charges — and honest naming does the rest. A Poisson-Boltzmann
+solve remains out of scope.
+
+### Blocked for now
+
+- **Conservation colouring.** ConSurf-DB has precomputed profiles for most PDB
+  chains, which is exactly what is wanted, but the host did not respond to a
+  probe and does not appear to send CORS headers. Without a server there is no
+  way to reach it, and computing conservation client-side means fetching and
+  aligning a homologue set, which is a different project.
+
 ### Left from the ChimeraX comparison
 
 - **Electrostatic colouring.** Needs a charge model and a Poisson-Boltzmann
   solve, or a crude Coulombic approximation that would be worse than nothing if
   presented as the real thing.
-- **A real command line** — the ⌘K palette and the selection grammar between
-  them cover most of what a command line would, but typed commands compose in a
-  way menus cannot.
-
 Not taken: structure editing and dynamics (bond rotation, swapaa, tug,
 minimize), markers, and the map tab's analysis tools — see "Not planned".
 
