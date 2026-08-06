@@ -34,9 +34,34 @@ these are deliberately declined under "Not planned".
 - **Density maps.** The largest coherent absence: no volumetric data at all — no
   map fetch, no isosurface, no contour level, no slices. It changes what the app
   is for, since it is what lets you check a model against evidence rather than
-  admire it. It is a project rather than a work item: a new fetch and parse path
-  (CCP4/MRC), marching cubes or a volume raycaster, and the transparency work
-  that already blocks molecular surfaces.
+  admire it, and it pairs with the validation summary that already says which
+  residues to distrust.
+
+  Groundwork, probed and confirmed rather than assumed:
+
+  - **The maps are BinaryCIF.** `https://maps.rcsb.org/x-ray/{id}/cell?detail=1`
+    and `https://maps.rcsb.org/em/emd-{n}/cell?detail=1` both return MessagePack
+    from VolumeServer 0.9.7 — the same encoding `src/rcsb/msgpack.ts` and
+    `src/rcsb/bcif.ts` already decode. No CCP4/MRC parser is needed. 1UBQ is
+    590 kB, an EM entry about 1 MB.
+  - **Three data blocks per file**: `SERVER`, then `2FO-FC` and `FO-FC` for
+    X-ray. Each map block holds `_volume_data_3d_info` (origin, dimensions,
+    `sample_count[0..2]`, spacegroup cell, and `mean_sampled` / `sigma_sampled`
+    / `min` / `max`) and `_volume_data_3d` with a single `values` column —
+    290,304 samples for 1UBQ.
+  - **The existing parser will not read it as-is.** `parseBinaryCif` returned
+    zero rows: it takes the first data block only, and these category names
+    carry a leading underscore. Both are small fixes in `bcif.ts`, and doing
+    them there means the volume path reuses the decoder that is already
+    exercised by every structure load.
+  - `sigma_sampled` is what makes "contour at 1.5 σ" mean anything, and it
+    arrives in the file.
+
+  What remains is the graphics, and it is the real work: marching cubes over the
+  sampled grid, or a volume raycaster; a contour control; and transparency,
+  which the deferred opaque-only pipeline does not have and which also blocks
+  molecular surfaces. Whichever comes first should probably solve transparency,
+  since both features wait on it.
 
 Not taken: structure editing and dynamics (bond rotation, swapaa, tug,
 minimize), markers, and the map tab's analysis tools — see "Not planned".
