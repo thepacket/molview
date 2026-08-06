@@ -2,7 +2,7 @@
 
 **[molview.fly.dev](https://molview.fly.dev)**
 
-![MolView showing a SARS-CoV-2 spike/Fab complex beside haemoglobin, with the wwPDB validation summary and the assistant answering in a Markdown table](docs/hero.png)
+![MolView showing a SARS-CoV-2 spike/Fab complex beside haemoglobin, with the wwPDB validation summary and the assistant answering in a Markdown table](docs/hero-live.png)
 
 <sub>7A5R beside 4HHB — 15,387 atoms at 0.14 ms/frame. The definition panel
 carries the wwPDB validation summary (83% of this 3.7 Å cryo-EM model's backbone
