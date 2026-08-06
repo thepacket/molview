@@ -24,6 +24,7 @@ import {
   AlignmentError, alignableChains, superposeChains, type AlignableChain,
 } from '../mol/align';
 import { fetchEntryDetail } from '../rcsb/api';
+import { orientationFor } from '../gfx/orient';
 import { useStore, visibleSlotCount, type SlotState } from '../state/store';
 
 interface SlotData {
@@ -264,7 +265,10 @@ export class ViewerController {
       // have built this slot's geometry, and that path must never move a
       // camera the user is driving. Switching between models of one ensemble
       // keeps the current view, since the members are already superposed.
-      if (!keepCamera) this.frameSlot(slot);
+      if (!keepCamera) {
+        this.orientSlot(slot);
+        this.frameSlot(slot);
+      }
     } catch (err) {
       if (useStore.getState().slots[slot].entryId !== id) return;
       useStore.getState().patchSlot(slot, {
@@ -357,6 +361,38 @@ export class ViewerController {
    * Points a slot's camera at its geometry, plus anything overlaid onto it.
    * Overlaid bounds are pushed through their own scene transform first.
    */
+  /**
+   * Points the camera down the structure's shortest principal axis, once, when
+   * it first loads. A deposited frame is an accident of the crystal, so the
+   * default view is otherwise whatever the cell happened to give — 1BNA arrives
+   * end-on down its own helix axis. Reset view deliberately does not do this:
+   * once someone has turned a structure, snapping it back to a computed pose
+   * would be the app overruling them.
+   */
+  private orientSlot(slot: number): void {
+    const s = this.data[slot].structure;
+    const geometry = this.data[slot].geometry;
+    if (!s || !geometry) return;
+
+    // Judge the assembly as displayed, not the asymmetric unit: one group's
+    // transforms are representative, and the largest group dominates the shape.
+    let group = geometry.groups[0];
+    for (const g of geometry.groups) {
+      if (g.transformCount > group.transformCount) group = g;
+    }
+
+    const q = orientationFor(
+      s.x, s.y, s.z, s.atomCount,
+      group ? group.transforms : new Float32Array(0),
+      group ? group.transformCount : 0,
+    );
+    if (!q) return;
+
+    const camera = this.engine.getCamera(slot);
+    const state = camera.getState();
+    camera.setState({ ...state, orientation: [q[0], q[1], q[2], q[3]] });
+  }
+
   frameSlot(slot: number, animate = false): void {
     const geometry = this.data[slot].geometry;
     const sources = [slot, ...useStore.getState().slots[slot].overlaySlots];
