@@ -23,6 +23,41 @@ Ideas that came up along the way and were deliberately not taken are under "Not
 planned" below; current limitations of what exists are at the end of
 [README.md](README.md).
 
+### From the ChimeraX comparison
+
+Its seven toolbars read against what MolView has, ranked by payoff per unit of
+work rather than by how large the gap is. Mimicry is not the goal — several of
+these are deliberately declined under "Not planned".
+
+- **Nucleotide representations.** ChimeraX offers eight base styles; MolView has
+  one. Ladder and stubs reuse the ring-plane frame `addBaseSlab` already fits,
+  and per-base A/T/G/C colouring is a new entry in the colour-scheme table over
+  data already parsed. Cheapest real win, and DNA/RNA is where the renderer
+  currently looks weakest — `1BNA` and `7A5R` are both featured entries.
+- **Interfaces.** Chain-chain contact analysis: what touches what, how much
+  area, and a way to select the interface between two chains. Fits the neighbour
+  search that H-bond detection already uses, and answers the obvious next
+  question about an assembly — which is the thing MolView is unusually good at.
+- **Shadows.** The deferred pipeline lights once after rasterisation, so a
+  shadow pass is additive rather than invasive.
+- **Camera: orient and side view.** Snap to standard axes; a depth widget for
+  setting the clipping plane by eye rather than by slider.
+- **Electrostatic colouring.** Needs a charge model and a Poisson-Boltzmann
+  solve, or a crude Coulombic approximation that would be worse than nothing if
+  presented as the real thing.
+- **Movie recording.** Auto-rotate exists; capturing it does not.
+- **Per-model interactive transforms, settable pivot, draggable labels, a colour
+  key.** Small, individually unremarkable, and each one is a real gap.
+- **Density maps.** The largest coherent absence: no volumetric data at all — no
+  map fetch, no isosurface, no contour level, no slices. It changes what the app
+  is for, since it is what lets you check a model against evidence rather than
+  admire it. It is a project rather than a work item: a new fetch and parse path
+  (CCP4/MRC), marching cubes or a volume raycaster, and the transparency work
+  that already blocks molecular surfaces.
+
+Not taken: structure editing and dynamics (bond rotation, swapaa, tug,
+minimize), markers, and the map tab's analysis tools — see "Not planned".
+
 Ideas that surfaced while building the assistant:
 
 - **Feed action results back to the model.** Results are shown to the user but
