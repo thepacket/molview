@@ -223,18 +223,19 @@ export function AssistantPanel() {
 
       const results: string[] = [];
       let answered = false;
+      let rejected = false;
       for (const action of parsed.actions) {
         try {
           const result = await applyAction(action);
           append('notice', result);
           results.push(`${action.type}: ${result}`);
-          if (QUERY_ACTIONS.has(action.type) && !result.startsWith('Rejected:')) {
-            answered = true;
-          }
+          if (result.startsWith('Rejected:')) rejected = true;
+          else if (QUERY_ACTIONS.has(action.type)) answered = true;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           append('error', `Action failed: ${message}`);
           results.push(`${action.type}: failed — ${message}`);
+          rejected = true;
         }
       }
 
@@ -255,15 +256,20 @@ export function AssistantPanel() {
         append('notice', `${completion.model} · ${formatUsage(completion)}`);
       }
 
-      // Only for questions, only once, and only when one actually answered:
-      // a styling command has nothing to add, and a second pass on every turn
-      // would double the bill for nothing.
-      if (!isFollowUp && answered) {
+      // A second pass when the first one either asked a question or got
+      // something wrong. A weaker model will happily write "the DNA is now shown
+      // as a ladder" while every action it emitted was rejected, and the reader
+      // has only the notices to tell them otherwise. Once, never twice.
+      if (!isFollowUp && (answered || rejected)) {
         await runTurn(
-          'Those are the results of what you just ran. Answer the question from '
-          + 'them, briefly. If the request needed those results before it could '
-          + 'be carried out — drawing what a search found, for instance — do that '
-          + 'now. Do not run the same search again.',
+          rejected
+            ? 'Some of those actions were rejected — the results say why. Correct '
+              + 'them if you can, using the action list exactly. If it cannot be '
+              + 'done, say so plainly and do not describe it as done.'
+            : 'Those are the results of what you just ran. Answer the question from '
+              + 'them, briefly. If the request needed those results before it could '
+              + 'be carried out — drawing what a search found, for instance — do that '
+              + 'now. Do not run the same search again.',
           true,
         );
       }
