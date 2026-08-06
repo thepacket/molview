@@ -10,8 +10,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, ExternalLink, KeyRound, RefreshCw, Trash2 } from 'lucide-react';
 import {
-  DEFAULT_MODEL, fetchModels, getApiKey, getModel, getStructuredOutputs,
-  setApiKey, setModel, setStructuredOutputs, type OpenRouterModel,
+  DEFAULT_MODEL, fetchModels, getApiKey, getConfirmActions, getModel,
+  getStructuredOutputs, setApiKey, setConfirmActions, setModel,
+  setStructuredOutputs, type OpenRouterModel,
 } from '../../ai/openrouter';
 import { Field, Toggle } from '../controls';
 
@@ -24,6 +25,7 @@ export function SettingsPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [structured, setStructured] = useState(getStructuredOutputs());
+  const [confirm, setConfirm] = useState(getConfirmActions());
 
   const load = (force = false) => {
     setLoading(true);
@@ -200,6 +202,24 @@ export function SettingsPanel() {
             : 'The schema is spelled out in the prompt instead. Slower and more '
               + 'expensive, but it is the fallback when a provider mishandles '
               + 'schema-constrained requests.'}
+        </p>
+      </div>
+
+      <div className="panel-section">
+        <div className="section-label"><span>Actions</span></div>
+        <Toggle
+          label="Confirm before running"
+          checked={confirm}
+          onChange={(v) => { setConfirmActions(v); setConfirm(v); }}
+          hint="Each reply's actions wait in the transcript until you approve them"
+        />
+        <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
+          {confirm
+            ? 'Actions are listed with a tick each and run only when you say so. '
+              + 'Untick the one that is wrong and keep the rest.'
+            : 'Actions run as soon as they arrive. Everything the assistant can do '
+              + 'is a reversible view change — nothing is written, sent or deleted '
+              + 'anywhere — so the default is to let it work.'}
         </p>
       </div>
     </>

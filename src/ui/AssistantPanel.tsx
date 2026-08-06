@@ -12,11 +12,12 @@ import {
   Bot, Check, ChevronDown, ChevronUp, Copy, Eraser, Send, Settings2, Square,
 } from 'lucide-react';
 import { applyAction } from '../ai/actions';
+import type { Action } from '../ai/actionTypes';
 import { parseReply } from '../ai/parse';
 import { sceneContext, systemPrompt } from '../ai/prompt';
 import {
-  ensureModels, getApiKey, getModel, requestCompletion, SETTINGS_EVENT,
-  type ChatMessage, type Completion,
+  ensureModels, getApiKey, getConfirmActions, getModel, requestCompletion,
+  SETTINGS_EVENT, type ChatMessage, type Completion,
 } from '../ai/openrouter';
 import { useStore } from '../state/store';
 import { Tip } from './controls';
@@ -30,6 +31,13 @@ const MIN_HEIGHT = 160;
 const COLLAPSED_HEIGHT = 32;
 
 type Role = 'user' | 'assistant' | 'notice' | 'error';
+
+interface PendingApproval {
+  actions: Action[];
+  /** Indices still ticked. */
+  chosen: Set<number>;
+  decide: (actions: Action[]) => void;
+}
 
 interface Entry {
   id: number;
@@ -65,6 +73,63 @@ function clampHeight(px: number): number {
  * drives the bill. Reasoning is called out when there is any: it is billed as
  * output but never appears in the reply.
  */
+/**
+ * The actions a turn wants to run, waiting to be let through.
+ *
+ * Per action rather than all-or-nothing: the case this is really for is a
+ * reply that gets three things right and one wrong, and being able to keep the
+ * three is the difference between a review step and an obstacle.
+ */
+function ApprovalRow({ pending, onChange }: {
+  pending: PendingApproval;
+  onChange: (next: PendingApproval) => void;
+}) {
+  const toggle = (index: number) => {
+    const chosen = new Set(pending.chosen);
+    if (chosen.has(index)) chosen.delete(index);
+    else chosen.add(index);
+    onChange({ ...pending, chosen });
+  };
+
+  return (
+    <div className="assistant-row approval">
+      <div className="approval-head">
+        {pending.actions.length === 1
+          ? 'One action is waiting'
+          : `${pending.actions.length} actions are waiting`}
+      </div>
+      {pending.actions.map((action, index) => (
+        <label key={index} className="approval-item">
+          <input
+            type="checkbox"
+            checked={pending.chosen.has(index)}
+            onChange={() => toggle(index)}
+          />
+          <span className="approval-type">{action.type}</span>
+          <span className="approval-value">{action.value ?? ''}</span>
+        </label>
+      ))}
+      <div className="approval-buttons">
+        <button
+          type="button"
+          className="btn primary small"
+          onClick={() => pending.decide(
+            pending.actions.filter((_, i) => pending.chosen.has(i)),
+          )}
+        >
+          <Check size={11} />
+          {pending.chosen.size === pending.actions.length
+            ? 'Run all'
+            : `Run ${pending.chosen.size}`}
+        </button>
+        <button type="button" className="btn ghost small" onClick={() => pending.decide([])}>
+          Skip
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function formatUsage(usage: Completion): string {
   const n = (v: number) => v.toLocaleString();
   if (!usage.promptTokens && !usage.completionTokens) {
@@ -86,8 +151,12 @@ export function AssistantPanel() {
     try { return sessionStorage.getItem(COLLAPSED_KEY) === '1'; } catch { return false; }
   });
   const [height, setHeight] = useState(() => readNumber(HEIGHT_KEY, DEFAULT_HEIGHT));
+  /** Actions waiting on approval, when confirmation mode is on. */
+  const [pending, setPending] = useState<PendingApproval | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  /** Resolves the approval promise if the turn is cancelled while it waits. */
+  const approvalRef = useRef<((chosen: Action[]) => void) | null>(null);
   const conversationRef = useRef<ChatMessage[]>([]);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const nextId = useRef(1);
@@ -124,6 +193,10 @@ export function AssistantPanel() {
   const clearContext = () => {
     abortRef.current?.abort();
     abortRef.current = null;
+    // A turn parked on the approval promise would never finish otherwise.
+    approvalRef.current?.([]);
+    approvalRef.current = null;
+    setPending(null);
     conversationRef.current = [];
     setEntries([]);
     setBusy(false);
@@ -184,6 +257,31 @@ export function AssistantPanel() {
   };
 
   /**
+   * Which of the proposed actions to run.
+   *
+   * Straight through unless confirmation mode is on, in which case the turn
+   * parks on a promise until the buttons below resolve it. Skipped actions are
+   * never reported to the model as failures: it did nothing wrong, and telling
+   * it an action was rejected would make it try to fix a decision that was the
+   * user's to make.
+   */
+  const approve = async (actions: Action[]): Promise<Action[]> => {
+    if (actions.length === 0 || !getConfirmActions()) return actions;
+    return new Promise<Action[]>((resolve) => {
+      approvalRef.current = resolve;
+      setPending({
+        actions,
+        chosen: new Set(actions.map((_, i) => i)),
+        decide: (chosen) => {
+          approvalRef.current = null;
+          setPending(null);
+          resolve(chosen);
+        },
+      });
+    });
+  };
+
+  /**
    * One exchange. Re-entered once when an action was a question rather than a
    * change: a search returns its answer *after* the model has already spoken,
    * so without a second pass the reply is "let me check" and the findings are
@@ -221,10 +319,17 @@ export function AssistantPanel() {
         { role: 'assistant', content: parsed.message },
       ];
 
+      const approved = await approve(parsed.actions);
+      // Not an early return: the turn was paid for either way, and the token
+      // line below is the record of that.
+      if (parsed.actions.length > 0 && approved.length === 0) {
+        append('notice', 'No actions were run.');
+      }
+
       const results: string[] = [];
       let answered = false;
       let rejected = false;
-      for (const action of parsed.actions) {
+      for (const action of approved) {
         try {
           const result = await applyAction(action);
           append('notice', result);
@@ -349,7 +454,10 @@ export function AssistantPanel() {
           </div>
         )}
         {entries.map((entry) => <Message key={entry.id} entry={entry} />)}
-        {busy && <div className="assistant-row notice">Thinking…</div>}
+        {pending && (
+          <ApprovalRow pending={pending} onChange={setPending} />
+        )}
+        {busy && !pending && <div className="assistant-row notice">Thinking…</div>}
       </div>
 
       <form
@@ -376,7 +484,14 @@ export function AssistantPanel() {
           <button
             type="button"
             className="btn"
-            onClick={() => abortRef.current?.abort()}
+            onClick={() => {
+              abortRef.current?.abort();
+              // Stop has to release a turn parked on approval too, or the
+              // button does nothing at the one moment it looks most needed.
+              approvalRef.current?.([]);
+              approvalRef.current = null;
+              setPending(null);
+            }}
           >
             <Square size={11} /> Stop
           </button>

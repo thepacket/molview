@@ -26,12 +26,6 @@ these are deliberately declined under "Not planned".
 Not taken: structure editing and dynamics (bond rotation, swapaa, tug,
 minimize), markers, and the map tab's analysis tools — see "Not planned".
 
-Ideas that surfaced while building the assistant:
-
-- **A confirmation mode for actions.** Everything the assistant can do is a
-  reversible view change, so it runs directly; a toggle for people who want to
-  approve each one would be cheap.
-
 One that would be worth revisiting if the app grows:
 
 - **A real command line** — the ⌘K palette and the selection grammar between
@@ -41,6 +35,18 @@ One that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **A confirmation mode for assistant actions** — off by default, and that is a
+  position rather than laziness: everything the assistant can do is a
+  reversible view change, so a confirmation on each one protects against
+  nothing. It exists because "it moved my scene without asking" is a reasonable
+  objection even when nothing was at stake, and because watching what a weak
+  model *wanted* to do is the fastest way to see why it went wrong. Approval is
+  per action rather than all-or-nothing: the case it is really for is a reply
+  that gets three things right and one wrong, and keeping the three is what
+  makes it a review step instead of an obstacle. A skipped action is never
+  reported back as a rejection — the model did nothing wrong, and telling it
+  otherwise would send it off correcting the user's decision.
 
 - **Per-residue validation** — two colour schemes, fit to density (RSRZ) and
   counted geometry faults, plus a legend, a ranked worst-residues list that

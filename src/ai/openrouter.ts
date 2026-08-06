@@ -11,6 +11,7 @@ import { ACTION_TYPES } from './actionTypes';
 const KEY_STORAGE = 'molview-openrouter-key';
 const MODEL_STORAGE = 'molview-openrouter-model';
 const STRUCTURED_STORAGE = 'molview-openrouter-structured';
+const CONFIRM_STORAGE = 'molview-assistant-confirm';
 export const SETTINGS_EVENT = 'molview:openrouter-settings';
 
 /** A capable default; the picker is populated from the live catalogue. */
@@ -56,6 +57,24 @@ export function getStructuredOutputs(): boolean {
 
 export function setStructuredOutputs(enabled: boolean): void {
   sessionSet(STRUCTURED_STORAGE, enabled ? '' : '0');
+}
+
+/**
+ * Whether actions wait for approval before they run.
+ *
+ * Off by default, and that is a considered position rather than laziness:
+ * everything the assistant can do is a reversible view change, so a
+ * confirmation on each one is a click that protects against nothing. It exists
+ * because "an AI moved my scene without asking" is a reasonable thing to
+ * object to even when nothing was at stake, and because watching what a weak
+ * model *wanted* to do is the fastest way to understand why it went wrong.
+ */
+export function getConfirmActions(): boolean {
+  return sessionGet(CONFIRM_STORAGE) === '1';
+}
+
+export function setConfirmActions(enabled: boolean): void {
+  sessionSet(CONFIRM_STORAGE, enabled ? '1' : '');
 }
 
 /** Whether the catalogue says this model can be held to a JSON schema. */
