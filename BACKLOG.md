@@ -70,7 +70,7 @@ Two that would be worth revisiting if the app grows:
 
 ## Done
 
-- **Interfaces** (`pending`) — heavy-atom contacts grouped by chain pair, with
+- **Interfaces** (`ce8e8b4`) — heavy-atom contacts grouped by chain pair, with
   focus and draw-as-component actions. Validated against known architecture:
   4HHB's alpha1beta1 pairs rank above alpha1beta2 above alpha1alpha2, 1AF6's
   trimer is three equal interfaces, 1KX5 finds the DNA duplex then the four
