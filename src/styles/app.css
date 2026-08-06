@@ -1618,8 +1618,11 @@ textarea {
   z-index: 15;
 }
 
+/* One track, because the splitter below is display:none when collapsed and so
+   leaves the grid entirely — with two tracks the header dropped into the
+   splitter's 0px row and was clipped to its own border. */
 .assistant[data-collapsed='true'] {
-  grid-template-rows: 0 30px;
+  grid-template-rows: 30px;
 }
 
 .assistant[data-collapsed='true'] .assistant-splitter,
