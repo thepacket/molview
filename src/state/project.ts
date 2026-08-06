@@ -16,6 +16,7 @@ import type { ColorScheme } from '../mol/coloring';
 import { createMeasurement, type Measurement, type MeasurementKind } from '../mol/measure';
 import { atomNameOf, resNameOf, type Structure } from '../mol/structure';
 import type { SlotVisualSettings } from '../gfx/engine';
+import type { NucleotideStyle } from '../gfx/geometry';
 import { LAYOUT_SLOT_COUNT, useStore, type LayoutMode } from './store';
 import { viewer } from '../viewer/ViewerController';
 
@@ -58,6 +59,8 @@ interface PaneDocument {
     atomScale: number;
     bondRadius: number;
     hiddenChains: string[];
+    /** Absent in projects saved before nucleotide styles existed. */
+    nucleotideStyle?: NucleotideStyle;
   };
   colorScheme: ColorScheme;
   uniformColor: number;
@@ -152,6 +155,7 @@ export function serialiseProject(_options: SerialiseOptions = {}): ProjectDocume
         atomScale: slot.representation.atomScale,
         bondRadius: slot.representation.bondRadius,
         hiddenChains: [...slot.representation.hiddenChains],
+        nucleotideStyle: slot.representation.nucleotideStyle,
       },
       colorScheme: slot.colorScheme,
       uniformColor: slot.uniformColor,
@@ -323,6 +327,7 @@ export async function restoreProject(doc: ProjectDocument): Promise<RestoreRepor
         atomScale: pane.representation.atomScale,
         bondRadius: pane.representation.bondRadius,
         hiddenChains: new Set(pane.representation.hiddenChains ?? []),
+        nucleotideStyle: pane.representation.nucleotideStyle ?? 'slab',
       },
     });
 

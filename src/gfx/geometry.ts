@@ -24,13 +24,25 @@ export interface Representation {
   bondRadius: number;
   /** Chains hidden by the user, by auth id. */
   hiddenChains: ReadonlySet<string>;
+  /** How nucleotide bases are drawn inside the cartoon representation. */
+  nucleotideStyle: NucleotideStyle;
 }
+
+/**
+ * Slab is the flat box in the base's own ring plane. Stubs replaces it with a
+ * rod from the sugar to the base centre, which is far cheaper to read on a
+ * crowded ribosome. Ladder joins Watson-Crick partners into one rung, so a
+ * duplex reads as a ladder rather than as two decorated strands. None leaves
+ * the bare backbone tube.
+ */
+export type NucleotideStyle = 'slab' | 'stubs' | 'ladder' | 'none';
 
 export const DEFAULT_REPRESENTATION: Representation = {
   showHydrogens: false,
   atomScale: 1,
   bondRadius: 0.16,
   hiddenChains: new Set(),
+  nucleotideStyle: 'slab',
 };
 
 export const SPHERE_STRIDE = 8; // pos(3) radius(1) color(3) pick(1)
@@ -285,7 +297,7 @@ function buildGroup(
   }
 
   // ---- cartoon ----
-  let cartoon: MeshData | null = buildCartoon(s, resolved, allowedAsyms);
+  let cartoon: MeshData | null = buildCartoon(s, resolved, allowedAsyms, rep);
   {
     if (cartoon) {
       const v = cartoon.vertices;
@@ -373,6 +385,7 @@ function catmullRom(
 
 function buildCartoon(
   s: Structure, resolved: ResolvedScene, allowedAsyms: ReadonlySet<string> | null,
+  rep: Representation,
 ): MeshData | null {
   const { residueStyle, atomColor } = resolved;
   const { subdiv, sides } = quality(s.residueCount);
@@ -508,14 +521,27 @@ function buildCartoon(
     flush();
   }
 
-  // Nucleic acids read as featureless tubes without their bases; the slab is
-  // what makes a double helix look like one. Backbone-trace style stays bare.
-  {
+  // Nucleic acids read as featureless tubes without their bases; drawing the
+  // base is what makes a double helix look like one. Backbone-trace stays bare.
+  if (rep.nucleotideStyle !== 'none') {
+    const drawn: number[] = [];
     for (let r = 0; r < s.residueCount; r++) {
       if (residueStyle[r] !== Style.Cartoon) continue;
       if (s.resKind[r] !== MolKind.Nucleic) continue;
       if (!chainVisible(s, s.resChain[r], allowedAsyms)) continue;
-      addBaseSlab(vertices, indices, s, r, atomColor);
+      drawn.push(r);
+    }
+
+    if (rep.nucleotideStyle === 'slab') {
+      for (const r of drawn) addBaseSlab(vertices, indices, s, r, atomColor);
+    } else if (rep.nucleotideStyle === 'stubs') {
+      for (const r of drawn) {
+        const f = baseFrame(s, r);
+        if (f) addRod(vertices, indices, f.attachPos, f.centre, STUB_RADIUS,
+          atomColor[f.attach] || 0xffffff);
+      }
+    } else {
+      addLadder(vertices, indices, s, drawn, atomColor);
     }
   }
 
@@ -526,6 +552,257 @@ function buildCartoon(
 const PURINE_RING = ['N9', 'C8', 'N7', 'C5', 'C6', 'N1', 'C2', 'N3', 'C4'];
 const PYRIMIDINE_RING = ['N1', 'C2', 'N3', 'C4', 'C5', 'C6'];
 const SLAB_HALF_THICKNESS = 0.2;
+const STUB_RADIUS = 0.22;
+const LADDER_RADIUS = 0.28;
+/** Watson-Crick N1(purine)–N3(pyrimidine) hydrogen bond, generously bounded. */
+const PAIR_MAX = 3.5;
+
+interface BaseFrame {
+  ring: number[];
+  purine: boolean;
+  /** Ring atom the sugar hangs off: N9 for purines, N1 for pyrimidines. */
+  attach: number;
+  attachPos: [number, number, number];
+  /** Where a rod should start — the sugar C1' when present. */
+  sugar: [number, number, number];
+  centre: [number, number, number];
+  normal: [number, number, number];
+  u: [number, number, number];
+  v: [number, number, number];
+  /** The Watson-Crick donor/acceptor: N1 on purines, N3 on pyrimidines. */
+  pairAtom: number | null;
+}
+
+/**
+ * The base's own ring plane, fitted rather than assumed, so modified and
+ * puckered bases still come out sensible. Every nucleotide style is built on
+ * this frame — the slab is a box in it, a stub is a rod towards its centre.
+ */
+function baseFrame(s: Structure, residue: number): BaseFrame | null {
+  const start = s.resAtomStart[residue];
+  const end = s.resAtomStart[residue + 1];
+
+  const byName = new Map<string, number>();
+  for (let a = start; a < end; a++) byName.set(atomNameOf(s, a).toUpperCase(), a);
+
+  const purine = byName.has('N9');
+  const ringNames = purine ? PURINE_RING : PYRIMIDINE_RING;
+  const ring: number[] = [];
+  for (const name of ringNames) {
+    const a = byName.get(name);
+    if (a !== undefined) ring.push(a);
+  }
+  if (ring.length < 4) return null;
+
+  // Newell's method: a plane normal that tolerates a slightly puckered ring.
+  let nx = 0, ny = 0, nz = 0;
+  let cx = 0, cy = 0, cz = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    nx += (s.y[a] - s.y[b]) * (s.z[a] + s.z[b]);
+    ny += (s.z[a] - s.z[b]) * (s.x[a] + s.x[b]);
+    nz += (s.x[a] - s.x[b]) * (s.y[a] + s.y[b]);
+    cx += s.x[a]; cy += s.y[a]; cz += s.z[a];
+  }
+  const nlen = Math.hypot(nx, ny, nz);
+  if (nlen < 1e-5) return null;
+  nx /= nlen; ny /= nlen; nz /= nlen;
+  cx /= ring.length; cy /= ring.length; cz /= ring.length;
+
+  // In-plane frame, seeded from the first ring bond.
+  let ux = s.x[ring[1]] - s.x[ring[0]];
+  let uy = s.y[ring[1]] - s.y[ring[0]];
+  let uz = s.z[ring[1]] - s.z[ring[0]];
+  const dotU = ux * nx + uy * ny + uz * nz;
+  ux -= nx * dotU; uy -= ny * dotU; uz -= nz * dotU;
+  const ulen = Math.hypot(ux, uy, uz);
+  if (ulen < 1e-5) return null;
+  ux /= ulen; uy /= ulen; uz /= ulen;
+
+  const attach = byName.get(purine ? 'N9' : 'N1') ?? ring[0];
+  const sugarAtom = byName.get("C1'") ?? byName.get('C1*') ?? attach;
+  const pairAtom = byName.get(purine ? 'N1' : 'N3') ?? null;
+
+  return {
+    ring,
+    purine,
+    attach,
+    attachPos: [s.x[attach], s.y[attach], s.z[attach]],
+    sugar: [s.x[sugarAtom], s.y[sugarAtom], s.z[sugarAtom]],
+    centre: [cx, cy, cz],
+    normal: [nx, ny, nz],
+    u: [ux, uy, uz],
+    v: [ny * uz - nz * uy, nz * ux - nx * uz, nx * uy - ny * ux],
+    pairAtom,
+  };
+}
+
+/** A capped prism along an axis. Six sides is plenty at nucleotide scale. */
+function addRod(
+  vertices: number[], indices: number[],
+  from: readonly number[], to: readonly number[], radius: number, color: number,
+): void {
+  let ax = to[0] - from[0], ay = to[1] - from[1], az = to[2] - from[2];
+  const len = Math.hypot(ax, ay, az);
+  if (len < 1e-4) return;
+  ax /= len; ay /= len; az /= len;
+
+  // Any perpendicular will do; pick the axis the rod is least aligned with.
+  const seed = Math.abs(ax) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+  let px = ay * seed[2] - az * seed[1];
+  let py = az * seed[0] - ax * seed[2];
+  let pz = ax * seed[1] - ay * seed[0];
+  const plen = Math.hypot(px, py, pz) || 1;
+  px /= plen; py /= plen; pz /= plen;
+  const qx = ay * pz - az * py;
+  const qy = az * px - ax * pz;
+  const qz = ax * py - ay * px;
+
+  const cr = ((color >> 16) & 0xff) / 255;
+  const cg = ((color >> 8) & 0xff) / 255;
+  const cb = (color & 0xff) / 255;
+
+  const SIDES = 6;
+  const base = vertices.length / CARTOON_STRIDE;
+  for (let i = 0; i < SIDES; i++) {
+    const a = (i / SIDES) * Math.PI * 2;
+    const ox = px * Math.cos(a) + qx * Math.sin(a);
+    const oy = py * Math.cos(a) + qy * Math.sin(a);
+    const oz = pz * Math.cos(a) + qz * Math.sin(a);
+    vertices.push(
+      from[0] + ox * radius, from[1] + oy * radius, from[2] + oz * radius,
+      ox, oy, oz, cr, cg, cb,
+    );
+    vertices.push(
+      to[0] + ox * radius, to[1] + oy * radius, to[2] + oz * radius,
+      ox, oy, oz, cr, cg, cb,
+    );
+  }
+  for (let i = 0; i < SIDES; i++) {
+    const a = base + i * 2;
+    const b = base + ((i + 1) % SIDES) * 2;
+    indices.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+
+  // Flat caps, so a rod seen end-on is not hollow.
+  for (const [origin, nx, ny, nz] of [
+    [from, -ax, -ay, -az] as const, [to, ax, ay, az] as const,
+  ]) {
+    const capBase = vertices.length / CARTOON_STRIDE;
+    const o = origin as readonly number[];
+    vertices.push(o[0], o[1], o[2], nx as number, ny as number, nz as number, cr, cg, cb);
+    for (let i = 0; i < SIDES; i++) {
+      const a = (i / SIDES) * Math.PI * 2;
+      const ox = px * Math.cos(a) + qx * Math.sin(a);
+      const oy = py * Math.cos(a) + qy * Math.sin(a);
+      const oz = pz * Math.cos(a) + qz * Math.sin(a);
+      vertices.push(
+        o[0] + ox * radius, o[1] + oy * radius, o[2] + oz * radius,
+        nx as number, ny as number, nz as number, cr, cg, cb,
+      );
+    }
+    for (let i = 0; i < SIDES; i++) {
+      indices.push(capBase, capBase + 1 + i, capBase + 1 + ((i + 1) % SIDES));
+    }
+  }
+}
+
+/**
+ * Watson-Crick partners joined into a single rung, so a duplex reads as a
+ * ladder instead of as two separately decorated strands. Pairing is geometric —
+ * a purine N1 within hydrogen-bonding distance of a pyrimidine N3, with the two
+ * ring planes roughly parallel, which is what excludes stacked neighbours.
+ * Anything unpaired keeps a stub, so single strands do not silently vanish.
+ */
+function addLadder(
+  vertices: number[], indices: number[],
+  s: Structure, residues: number[], atomColor: Uint32Array,
+): void {
+  const frames = new Map<number, BaseFrame>();
+  for (const r of residues) {
+    const f = baseFrame(s, r);
+    if (f) frames.set(r, f);
+  }
+
+  // Spatial hash on the pairing atom: a ribosome has thousands of nucleotides
+  // and the quadratic version is not worth the simplicity.
+  const CELL = PAIR_MAX;
+  const grid = new Map<string, number[]>();
+  const key = (x: number, y: number, z: number) =>
+    `${Math.floor(x / CELL)},${Math.floor(y / CELL)},${Math.floor(z / CELL)}`;
+  for (const [r, f] of frames) {
+    if (f.pairAtom === null) continue;
+    const a = f.pairAtom;
+    const k = key(s.x[a], s.y[a], s.z[a]);
+    const cell = grid.get(k);
+    if (cell) cell.push(r); else grid.set(k, [r]);
+  }
+
+  const partner = new Map<number, number>();
+  for (const [r, f] of frames) {
+    if (partner.has(r) || f.pairAtom === null || !f.purine) continue;
+    const a = f.pairAtom;
+    let best = -1;
+    let bestDist = PAIR_MAX;
+    const bx = Math.floor(s.x[a] / CELL);
+    const by = Math.floor(s.y[a] / CELL);
+    const bz = Math.floor(s.z[a] / CELL);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const cell = grid.get(`${bx + dx},${by + dy},${bz + dz}`);
+          if (!cell) continue;
+          for (const other of cell) {
+            if (other === r || partner.has(other)) continue;
+            const g = frames.get(other);
+            if (!g || g.purine || g.pairAtom === null) continue;
+            const b = g.pairAtom;
+            const d = Math.hypot(s.x[a] - s.x[b], s.y[a] - s.y[b], s.z[a] - s.z[b]);
+            if (d >= bestDist) continue;
+            // Stacked bases sit 3.4 Å apart too, but their planes are parallel
+            // *and* offset along the normal; partners lie side by side in one
+            // plane, so the vector between them is perpendicular to it.
+            const along = Math.abs(
+              (s.x[b] - s.x[a]) * f.normal[0]
+              + (s.y[b] - s.y[a]) * f.normal[1]
+              + (s.z[b] - s.z[a]) * f.normal[2],
+            );
+            if (along > 1.5) continue;
+            best = other;
+            bestDist = d;
+          }
+        }
+      }
+    }
+    if (best >= 0) partner.set(r, best);
+  }
+
+  const paired = new Set<number>();
+  for (const [r, other] of partner) { paired.add(r); paired.add(other); }
+
+  for (const [r, other] of partner) {
+    const f = frames.get(r)!;
+    const g = frames.get(other)!;
+    const mid: [number, number, number] = [
+      (f.sugar[0] + g.sugar[0]) / 2,
+      (f.sugar[1] + g.sugar[1]) / 2,
+      (f.sugar[2] + g.sugar[2]) / 2,
+    ];
+    // Two halves rather than one rod, so each base keeps its own colour.
+    addRod(vertices, indices, f.sugar, mid, LADDER_RADIUS,
+      atomColor[f.attach] || 0xffffff);
+    addRod(vertices, indices, g.sugar, mid, LADDER_RADIUS,
+      atomColor[g.attach] || 0xffffff);
+  }
+
+  for (const [r, f] of frames) {
+    if (paired.has(r)) continue;
+    addRod(vertices, indices, f.sugar, f.centre, STUB_RADIUS,
+      atomColor[f.attach] || 0xffffff);
+  }
+}
+
 
 /**
  * A flat box covering the base ring, plus a stub joining it to the sugar.

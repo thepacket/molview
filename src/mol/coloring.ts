@@ -14,6 +14,7 @@ export type ColorScheme =
   | 'hydrophobicity'
   | 'rainbow'
   | 'entity'
+  | 'base'
   | 'uniform';
 
 export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
@@ -25,7 +26,23 @@ export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
   hydrophobicity: 'Hydrophobicity',
   rainbow: 'Rainbow (N→C)',
   entity: 'Entity',
+  base: 'Nucleotide base',
   uniform: 'Uniform',
+};
+
+/**
+ * Nucleotide bases. Purines warm, pyrimidines cool, so a strand reads as its
+ * purine/pyrimidine pattern even before you can tell A from G — and the two
+ * members of a Watson-Crick pair always contrast. Covers DNA and RNA residue
+ * names, including the deoxy- forms deposited as DA/DC/DG/DT.
+ */
+export const BASE_COLORS: Record<string, number> = {
+  A: 0xff9e4a, DA: 0xff9e4a,
+  G: 0xffd94a, DG: 0xffd94a,
+  C: 0x4cc9f0, DC: 0x4cc9f0,
+  T: 0x5ddb9a, DT: 0x5ddb9a,
+  U: 0x9d7bf5, DU: 0x9d7bf5,
+  I: 0xc78cff, DI: 0xc78cff,
 };
 
 /** Qualitative palette — distinguishable, and legible against a dark scene. */
@@ -151,6 +168,9 @@ export function makeColorProvider(s: Structure, options: ColorOptions): ColorPro
         color = rainbow(1 - (mean - s.bMin) / bRange);
         break;
       }
+      case 'base':
+        color = BASE_COLORS[comp] ?? KIND_FALLBACK[s.resKind[r]];
+        break;
       case 'uniform':
       default:
         color = uniformColor;

@@ -67,8 +67,17 @@ ball-and-stick, licorice and spacefill. Colour by chain, element, secondary
 structure, residue type, B-factor/pLDDT, hydrophobicity, entity, or an N→C
 rainbow — per component or inherited from the pane.
 
-Nucleic acid bases are drawn as slabs fitted in their own ring plane, so a
-double helix reads as one rather than as two bare tubes. Assembly copies can be
+Nucleic acid bases come in four styles. **Slab** fits a flat box in the base's
+own ring plane, so a double helix reads as one rather than as two bare tubes.
+**Ladder** joins Watson-Crick partners into a single rung — pairing is
+geometric, a purine N1 within hydrogen-bonding distance of a pyrimidine N3 with
+the ring planes side by side rather than stacked, which finds 12 of 12 pairs in
+`1BNA` and 146 of the nucleosome's 147 in `1KX5`. **Stubs** reduces each base to
+a rod, which is what stays readable on a ribosome. **None** leaves the bare
+backbone. Anything unpaired keeps a stub under Ladder, so a single strand never
+silently disappears. Colouring by nucleotide base puts purines warm and
+pyrimidines cool, so a strand reads as its purine/pyrimidine pattern and the two
+halves of a pair always contrast. Assembly copies can be
 tinted by symmetry operator, which is what makes an icosahedral capsid's facets
 and 5-fold vertices visible instead of undifferentiated mush. Shading comes as
 named presets — Studio, Soft, Flat, Plain — with the ambient-occlusion, outline

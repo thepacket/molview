@@ -331,7 +331,7 @@ export class ViewerController {
   private signatureOf(state: SlotState): string {
     const r = state.representation;
     return [
-      r.showHydrogens, r.atomScale, r.bondRadius,
+      r.showHydrogens, r.atomScale, r.bondRadius, r.nucleotideStyle,
       [...r.hiddenChains].sort().join(','),
       state.colorScheme, state.uniformColor, state.assemblyId,
       state.components.map((c) => [

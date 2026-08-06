@@ -39,7 +39,7 @@ const FEATURED: { id: string; note: string; size?: string }[] = [
   { id: '1UBQ', note: 'Ubiquitin — small, crisp β-grasp fold' },
   { id: '6VXX', note: 'SARS-CoV-2 spike — large glycosylated trimer' },
   { id: '1BNA', note: 'B-DNA dodecamer — double helix' },
-  { id: '7A5R', note: 'Nucleosome — protein/DNA complex' },
+  { id: '1KX5', note: 'Nucleosome — 147 bp of DNA wound on a histone octamer' },
   { id: '1AON', note: 'GroEL/GroES — 58-chain chaperonin assembly' },
   { id: '5XNL', note: 'Photosystem II — large membrane complex' },
   { id: '2BTV', note: 'Bluetongue virus — 15 chains become a 900-chain capsid' },

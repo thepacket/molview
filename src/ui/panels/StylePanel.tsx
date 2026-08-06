@@ -2,6 +2,7 @@
 
 import { Crosshair, Eye, EyeOff } from 'lucide-react';
 import type { Assembly } from '../../mol/assembly';
+import type { NucleotideStyle } from '../../gfx/geometry';
 import { COLOR_SCHEME_LABELS, CHAIN_PALETTE, type ColorScheme } from '../../mol/coloring';
 import { MolKind } from '../../mol/structure';
 
@@ -12,6 +13,13 @@ import { ComponentList } from './ComponentList';
 
 const COLOR_SCHEMES = (Object.keys(COLOR_SCHEME_LABELS) as ColorScheme[])
   .map((value) => ({ value, label: COLOR_SCHEME_LABELS[value] }));
+
+const NUCLEOTIDE_STYLES: { value: NucleotideStyle; label: string }[] = [
+  { value: 'slab', label: 'Slab' },
+  { value: 'ladder', label: 'Ladder' },
+  { value: 'stubs', label: 'Stubs' },
+  { value: 'none', label: 'None' },
+];
 
 /** Named shading looks; the sliders below stay available for fine control. */
 const LIGHTING_PRESETS: {
@@ -57,6 +65,12 @@ export function StylePanel() {
   }
 
   const rep = slot.representation;
+  // Not memoised: this sits after an early return, so a hook here would change
+  // the hook order between an empty pane and a loaded one.
+  let hasNucleic = false;
+  for (let c = 0; c < structure.chainCount; c++) {
+    if (structure.chainKind[c] === MolKind.Nucleic) { hasNucleic = true; break; }
+  }
 
   const setChainHidden = (authId: string, hidden: boolean) => {
     const next = new Set(rep.hiddenChains);
@@ -193,6 +207,18 @@ export function StylePanel() {
           onChange={(v) => updateRepresentation(activeSlot, { showHydrogens: v })}
           hint="Only present in neutron and very high resolution structures"
         />
+        {/* Only shown when there is nucleic acid to apply it to — the control
+            is meaningless on a protein-only structure. */}
+        {hasNucleic && (
+          <Field label="Nucleotide bases">
+            <Select
+              ariaLabel="Nucleotide base style"
+              value={rep.nucleotideStyle}
+              options={NUCLEOTIDE_STYLES}
+              onChange={(v) => updateRepresentation(activeSlot, { nucleotideStyle: v })}
+            />
+          </Field>
+        )}
       </div>
 
       <div className="panel-section">
