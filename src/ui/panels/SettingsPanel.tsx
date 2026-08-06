@@ -36,13 +36,13 @@ export function SettingsPanel() {
 
   useEffect(() => { load(); }, []);
 
+  // The whole catalogue, not a page of it: a list that silently stops after the
+  // first n entries makes a model that is present look absent.
   const visible = useMemo(() => {
     const needle = filter.trim().toLowerCase();
-    const list = needle
-      ? models.filter((m) =>
-          m.id.toLowerCase().includes(needle) || m.name.toLowerCase().includes(needle))
-      : models;
-    return list.slice(0, 60);
+    if (!needle) return models;
+    return models.filter((m) =>
+      m.id.toLowerCase().includes(needle) || m.name.toLowerCase().includes(needle));
   }, [models, filter]);
 
   const selectedSupports = models.length === 0
@@ -165,6 +165,14 @@ export function SettingsPanel() {
             <p style={{ fontSize: 10.5, color: 'var(--text-faint)' }}>Nothing matches.</p>
           )}
         </div>
+
+        {models.length > 0 && (
+          <p style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 5 }}>
+            {filter.trim()
+              ? `${visible.length} of ${models.length} models`
+              : `${models.length} models`}
+          </p>
+        )}
 
         <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 8, lineHeight: 1.5 }}>
           Models marked <em>structured</em> can be held to the reply schema

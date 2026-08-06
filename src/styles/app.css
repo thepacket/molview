@@ -1816,7 +1816,9 @@ textarea {
 /* --- model picker --------------------------------------------------------- */
 
 .model-list {
-  max-height: 260px;
+  /* Rows are two lines now and the list is the whole catalogue, so it earns
+     more of the panel than it did as a truncated 60. */
+  max-height: 340px;
   overflow-y: auto;
   margin-top: 7px;
   display: flex;
