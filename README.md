@@ -609,6 +609,10 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
   no re-entrant saddles.
 - Recording produces WebM, the only format browsers encode natively, and the
   pane has to stay visible while it runs.
+- The production Content-Security-Policy pins `connect-src` to an explicit host
+  list, so an endpoint added without updating `security-headers.conf` works in
+  development and is blocked once deployed. `npm run check:csp` diffs the source
+  against that list and runs as part of `npm run build`.
 - Dragged label positions last for the session. A saved project restores its
   measurements by atom reference and gives them new ids, so the offsets have
   nothing to reattach to.

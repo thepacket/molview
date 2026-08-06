@@ -6,9 +6,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run check:csp && tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "check:csp": "node scripts/check-csp.mjs"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.2.6",
