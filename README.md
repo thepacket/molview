@@ -363,6 +363,19 @@ where a mutation would matter, which is a different question from where the
 model is confident — p53 shows it plainly, with the DNA-binding domain scored
 pathogenic and the disordered tails benign.
 
+**A command line.** A line beginning with `/` in the assistant's composer runs
+as commands rather than going to a model — the same twenty-seven verbs the
+assistant has, executed by the same function, so a second vocabulary cannot
+drift from the first. Several at once, separated by newlines or semicolons:
+
+```
+/load 4HHB; /color chain; /view orient; /clip slab 25
+```
+
+It needs no API key and no account, which is half the point: the app is
+drivable by typing whether or not you have an assistant. `/help` prints the
+vocabulary, and an unrecognised verb suggests the nearest one.
+
 **What the residues are for.** Everything else here is geometry; this is
 function. UniProt's positioned annotations — active and binding sites, modified
 residues, motifs, domains, mutagenesis results, natural variants — landed on the

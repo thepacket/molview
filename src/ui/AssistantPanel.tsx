@@ -12,7 +12,7 @@ import {
   Bot, Check, ChevronDown, ChevronUp, Copy, Eraser, Send, Settings2, Square,
 } from 'lucide-react';
 import { applyAction } from '../ai/actions';
-import type { Action } from '../ai/actionTypes';
+import { ACTION_REFERENCE, ACTION_TYPES, type Action } from '../ai/actionTypes';
 import { parseReply } from '../ai/parse';
 import { sceneContext, systemPrompt } from '../ai/prompt';
 import {
@@ -46,6 +46,7 @@ interface Entry {
 }
 
 const EXAMPLES = [
+  '/load 4HHB; /color chain; /view orient',
   'What is this structure and what should I be looking at?',
   'Show the haem groups as ball and stick and colour the protein by chain',
   'Measure the iron to proximal histidine distance',
@@ -130,6 +131,15 @@ function ApprovalRow({ pending, onChange }: {
  * drives the bill. Reasoning is called out when there is any: it is billed as
  * output but never appears in the reply.
  */
+/** The vocabulary, as the command line's own help. */
+function commandHelp(): string {
+  const width = Math.max(...ACTION_REFERENCE.map((a) => a.type.length)) + 1;
+  const lines = ACTION_REFERENCE.map((a) => `/${a.type.padEnd(width)} ${a.value}`);
+  return 'Commands run the same actions the assistant does and take the same '
+    + 'values.\nSeveral at once, separated by a newline or a semicolon.\n\n'
+    + lines.join('\n');
+}
+
 function formatUsage(usage: Completion): string {
   const n = (v: number) => v.toLocaleString();
   if (!usage.promptTokens && !usage.completionTokens) {
@@ -239,6 +249,22 @@ export function AssistantPanel() {
     const text = draft.trim();
     if (!text || busy) return;
 
+    // A leading slash runs the line as commands instead of sending it to a
+    // model. Same composer, same transcript, and it works with no API key —
+    // which is the point as much as the composition is: the app should be
+    // drivable by typing without an account anywhere.
+    if (text.startsWith('/')) {
+      setDraft('');
+      append('user', text);
+      setBusy(true);
+      try {
+        await runCommands(text);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     if (!getApiKey()) {
       append('error', 'Add an OpenRouter API key in Settings first.');
       setPanel('settings');
@@ -253,6 +279,49 @@ export function AssistantPanel() {
     } finally {
       setBusy(false);
       abortRef.current = null;
+    }
+  };
+
+  /**
+   * Runs a typed command line.
+   *
+   * The verbs are exactly the actions the assistant has, executed by exactly
+   * the same function — a second vocabulary that drifted from the first would
+   * be worse than none, and every action already returns a sentence saying
+   * what it did, which is the whole output format.
+   */
+  const runCommands = async (line: string): Promise<void> => {
+    const commands = line
+      .split(/[\n;]+/)
+      .map((part) => part.trim().replace(/^\//, '').trim())
+      .filter(Boolean);
+
+    for (const command of commands) {
+      const [verb, ...rest] = command.split(/\s+/);
+      const type = verb.toLowerCase();
+
+      if (type === 'help' || type === '?') {
+        append('notice', commandHelp());
+        continue;
+      }
+      if (!(ACTION_TYPES as readonly string[]).includes(type)) {
+        const near = ACTION_TYPES.filter((a) => a.startsWith(type.slice(0, 3)));
+        append('error', `Unknown command "${verb}". ${near.length > 0
+          ? `Did you mean ${near.join(' or ')}?`
+          : 'Type /help for the list.'}`);
+        continue;
+      }
+
+      try {
+        const result = await applyAction({
+          type: type as Action['type'],
+          reason: 'typed',
+          value: rest.join(' ') || null,
+        });
+        append(result.startsWith('Rejected:') ? 'error' : 'notice', result);
+      } catch (err) {
+        append('error', `${type} failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   };
 
@@ -439,6 +508,11 @@ export function AssistantPanel() {
               Ask about what is on screen, or tell the assistant to change it. It
               can load entries, build representations, measure, superpose and more.
             </p>
+            <p style={{ marginTop: 6 }}>
+              A line starting with <code>/</code> runs as a command instead —
+              same vocabulary, no model and no API key involved. Try{' '}
+              <code>/help</code>.
+            </p>
             <div className="chip-row">
               {EXAMPLES.map((example) => (
                 <button
@@ -467,7 +541,7 @@ export function AssistantPanel() {
         <textarea
           rows={2}
           className="text-input"
-          placeholder="Ask about the structure, or say what to show…"
+          placeholder="Ask about the structure, or type /command…"
           value={draft}
           spellCheck={false}
           onChange={(e) => setDraft(e.target.value)}

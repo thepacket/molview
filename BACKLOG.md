@@ -16,15 +16,6 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
-### A real command line
-
-Deferred twice on the grounds that the palette and the selection grammar cover
-most of it. They no longer do: there are twenty-six actions, and the assistant
-can reach all of them while a person cannot without a panel visit each. A
-command line over the *same* executor the assistant uses costs a parser for
-`verb value` and gets composition, history, and a scriptable session for free —
-and every command already returns a sentence saying what it did.
-
 ### Morphing between two conformations
 
 Superposition now keeps its residue-by-residue alignment, which is exactly what
@@ -61,6 +52,18 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **A command line** — a `/` line in the assistant composer runs as commands
+  instead of going to a model. Deferred twice on the grounds that the palette
+  covered it; twenty-seven actions later it did not.
+
+  The decision that matters is that it executes *the same* actions through the
+  same function rather than defining verbs of its own — a second vocabulary
+  would drift from the first, and every action already returns a sentence
+  saying what it did, which is the entire output format. Reusing the composer
+  and the transcript meant no new surface at all. It also works with no API
+  key, which is half the point: the app should be drivable by typing whether or
+  not you have an account anywhere.
 
 - **UniProt functional annotations, on the residues** — active and binding
   sites, modified residues, motifs, domains, mutagenesis results, each selectable

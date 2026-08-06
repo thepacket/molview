@@ -2061,6 +2061,10 @@ textarea {
 }
 
 .assistant-row.notice {
+  /* Command output is laid out with newlines and padding, and collapsing them
+     turns /help into a paragraph. */
+  white-space: pre-wrap;
+  font-variant-numeric: tabular-nums;
   font-family: var(--mono);
   font-size: 12px;
   color: var(--text-faint);
