@@ -78,6 +78,7 @@ interface PaneDocument {
   measurements: MeasurementDocument[];
   showHydrogenBonds: boolean;
   showLabels: boolean;
+  showColorKey?: boolean;
   spinning: boolean;
   /**
    * Density settings, when a map was on screen. The map itself is refetched on
@@ -207,6 +208,7 @@ export function serialiseProject(_options: SerialiseOptions = {}): ProjectDocume
         : [],
       showHydrogenBonds: slot.showHydrogenBonds,
       showLabels: slot.showLabels,
+      showColorKey: slot.showColorKey,
       spinning: slot.spinning,
       density: slot.density.status === 'ready'
         ? {
@@ -368,6 +370,7 @@ export async function restoreProject(doc: ProjectDocument): Promise<RestoreRepor
       visual: { ...DEFAULT_VISUAL_SETTINGS, ...pane.visual },
       showHydrogenBonds: false,
       showLabels: pane.showLabels ?? true,
+      showColorKey: pane.showColorKey ?? false,
       spinning: pane.spinning ?? false,
       superposedOnto: pane.superposedOnto ?? null,
       superposeRmsd: pane.superposeRmsd ?? null,

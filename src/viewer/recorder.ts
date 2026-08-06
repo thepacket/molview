@@ -33,6 +33,12 @@ export interface RecordingSource {
   rect: { x: number; y: number; width: number; height: number };
   /** Turns the camera by this fraction of a full revolution and redraws. */
   step: (turnFraction: number) => void;
+  /**
+   * Draws anything that lives outside the WebGPU canvas, such as a colour key.
+   * `zoom` is output pixels per source pixel, so the caller can keep an
+   * overlay the same apparent size whatever the export resolution.
+   */
+  paintOverlay?: (ctx: CanvasRenderingContext2D, height: number, zoom: number) => void;
 }
 
 export class RecordingError extends Error {}
@@ -105,6 +111,7 @@ export async function recordTurntable(
         rect.x, rect.y, rect.width, rect.height,
         0, 0, width, height,
       );
+      source.paintOverlay?.(ctx, height, height / rect.height);
       track.requestFrame();
       request.onProgress?.((i + 1) / request.frames);
       // The recorder timestamps by wall clock, so frames have to be spaced in

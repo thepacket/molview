@@ -1260,6 +1260,62 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+/* Legend over the canvas. Bottom left, where the pane footer's readout is
+   right-aligned, so the two never collide. */
+.color-key {
+  position: absolute;
+  left: 10px;
+  bottom: 34px;
+  z-index: 3;
+  padding: 8px 10px;
+  border: 1px solid rgba(120, 140, 170, 0.35);
+  border-radius: 4px;
+  background: rgba(10, 13, 18, 0.72);
+  backdrop-filter: blur(3px);
+  pointer-events: none;
+}
+
+.color-key-title {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.color-key-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.color-key-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.color-key-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.color-key-ramp {
+  width: 132px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.color-key-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
 .assistant-row.approval {
   border: 1px solid var(--accent-dim);
   border-radius: var(--radius);

@@ -7,7 +7,7 @@
  */
 
 import { Engine, MAX_SLOTS, type PickResult, type ViewportRect } from '../gfx/engine';
-import type { CameraState } from '../gfx/camera';
+import type { Camera, CameraState } from '../gfx/camera';
 import { buildGeometry, type SceneGeometry } from '../gfx/geometry';
 import { computeBonds, type BondList } from '../mol/bonds';
 import {
@@ -33,6 +33,12 @@ import { DEFAULT_SURFACE_OPTIONS, gaussianSurface } from '../gfx/surface';
 import { VDW_RADII } from '../mol/elements';
 import type { VolumeStyle } from '../gfx/engine';
 import { recordTurntable } from './recorder';
+import {
+  mat4, mat4FromQuat, multiply, quat, quatFromAxisAngle, quatMultiply,
+  quatNormalize, quatRotateInverse,
+} from '../gfx/math';
+import { colorKeyFor, type ColorKey } from '../mol/colorKey';
+import { paintColorKey } from '../ui/colorKeyPainter';
 import { VALIDATION_SCHEMES } from '../mol/coloring';
 import {
   fetchResidueValidation, worstResidues, type ResidueValidation,
@@ -169,6 +175,15 @@ function emptySlotData(): SlotData {
 
 type DragMode = 'none' | 'rotate' | 'pan' | 'roll';
 
+/** A label the pointer can pick up, in the frame the last render left it. */
+interface LabelHandle {
+  key: string;
+  world: [number, number, number];
+  offset: { x: number; y: number };
+  width: number;
+  height: number;
+}
+
 export class ViewerController {
   readonly engine = new Engine();
   private data: SlotData[] = Array.from({ length: MAX_SLOTS }, emptySlotData);
@@ -182,6 +197,16 @@ export class ViewerController {
   private readyResolve!: () => void;
   /** Resolves once the engine exists, so callers can queue work behind it. */
   readonly ready = new Promise<void>((resolve) => { this.readyResolve = resolve; });
+
+  /**
+   * Pixel offsets for labels the user has moved, keyed `slot:measurementId`.
+   * Kept here rather than on the measurement because it is a property of how
+   * the scene is being looked at, not of the thing measured.
+   */
+  private labelOffsets = new Map<string, { x: number; y: number }>();
+  /** Screen-space boxes of the draggable labels, rebuilt with the overlay. */
+  private labelHandles: LabelHandle[][] = Array.from({ length: MAX_SLOTS }, () => []);
+  private draggingLabel: LabelHandle | null = null;
 
   private dragMode: DragMode = 'none';
   private dragSlot = -1;
@@ -1233,10 +1258,25 @@ export class ViewerController {
     if (state.showLabels) {
       const background: [number, number, number, number] = [0.05, 0.07, 0.1, 0.82];
 
+      // Measurement labels are the draggable ones: they are the labels that
+      // end up in a figure, and the one that lands on top of the bond it is
+      // measuring is the reason anyone wants to move a label at all.
+      this.labelHandles[slot] = [];
       for (const m of state.measurements) {
         const [x, y, z] = measurementAnchor(structure, m);
+        const offset = this.labelOffsets.get(`${slot}:${m.id}`) ?? { x: 0, y: 0 };
         labels.push({
           text: m.label, x, y, z, color: [1, 0.85, 0.4, 1], background, fontSize: 13,
+          offsetX: offset.x, offsetY: offset.y,
+        });
+        this.labelHandles[slot].push({
+          key: `${slot}:${m.id}`,
+          world: [x, y, z],
+          offset,
+          // Matches the layout in buildLabelInstances: 0.62 of the cell width
+          // per character, and the pill's padding around it.
+          width: m.label.length * 13 * 0.62 + 8,
+          height: 13 + 4,
         });
       }
 
@@ -1385,6 +1425,77 @@ export class ViewerController {
    * extent rather than a fixed zoom, so an interface between two chains and a
    * single side chain both end up filling the pane.
    */
+  /**
+   * Moves the point the camera turns about without moving the camera.
+   *
+   * Distinct from focusing, which also flies in and reframes. Once you are
+   * looking at an active site, the useful thing is to orbit *that* rather than
+   * the centre of a molecule the camera has long since left behind — and
+   * flying somewhere is exactly what you do not want at that moment.
+   * Null recentres on the whole structure.
+   */
+  setPivot(slot: number, selection: string | null): boolean {
+    const structure = this.data[slot].structure;
+    const geometry = this.data[slot].geometry;
+    if (!structure) return false;
+
+    let target: [number, number, number];
+    if (selection === null) {
+      if (!geometry) return false;
+      target = [geometry.center[0], geometry.center[1], geometry.center[2]];
+    } else {
+      if (selectionError(selection)) return false;
+      const mask = evaluateSelection(parseSelection(selection), structure);
+      let n = 0, cx = 0, cy = 0, cz = 0;
+      for (let a = 0; a < mask.length; a++) {
+        if (!mask[a]) continue;
+        cx += structure.x[a]; cy += structure.y[a]; cz += structure.z[a];
+        n++;
+      }
+      if (n === 0) return false;
+      target = [cx / n, cy / n, cz / n];
+    }
+
+    const camera = this.engine.getCamera(slot);
+    camera.animateTo({
+      target,
+      orientation: [
+        camera.orientation[0], camera.orientation[1],
+        camera.orientation[2], camera.orientation[3],
+      ],
+      // Unchanged: this is a pivot, not a flight.
+      distance: camera.distance,
+    });
+    this.invalidate();
+    return true;
+  }
+
+  /** Pivots on the residue the user last clicked, or on the whole structure. */
+  pivotOnSelection(slot: number): boolean {
+    const structure = this.data[slot].structure;
+    const residue = useStore.getState().slots[slot].selectedResidue;
+    if (!structure || residue === null) return this.setPivot(slot, null);
+
+    let cx = 0, cy = 0, cz = 0, n = 0;
+    for (let a = structure.resAtomStart[residue]; a < structure.resAtomStart[residue + 1]; a++) {
+      cx += structure.x[a]; cy += structure.y[a]; cz += structure.z[a];
+      n++;
+    }
+    if (n === 0) return false;
+
+    const camera = this.engine.getCamera(slot);
+    camera.animateTo({
+      target: [cx / n, cy / n, cz / n],
+      orientation: [
+        camera.orientation[0], camera.orientation[1],
+        camera.orientation[2], camera.orientation[3],
+      ],
+      distance: camera.distance,
+    });
+    this.invalidate();
+    return true;
+  }
+
   focusSelection(slot: number, selection: string): void {
     const structure = this.data[slot].structure;
     if (!structure) return;
@@ -1535,6 +1646,17 @@ export class ViewerController {
     this.lastX = event.clientX;
     this.lastY = event.clientY;
 
+    // A label under the pointer takes the drag: nudging one out of the way is
+    // a far commoner intention than starting an orbit from exactly there, and
+    // the camera is reachable from every other pixel in the pane.
+    const [localX, localY] = this.localCoords(slot, event.clientX, event.clientY);
+    this.draggingLabel = this.labelAt(slot, localX, localY);
+    if (this.draggingLabel) {
+      this.dragMode = 'none';
+      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+      return;
+    }
+
     if (event.button === 1 || event.button === 2 || event.shiftKey) this.dragMode = 'pan';
     else if (event.altKey) this.dragMode = 'roll';
     else this.dragMode = 'rotate';
@@ -1542,7 +1664,43 @@ export class ViewerController {
     (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
   }
 
+  /** The topmost draggable label containing a point, in pane-local pixels. */
+  private labelAt(slot: number, localX: number, localY: number): LabelHandle | null {
+    const handles = this.labelHandles[slot];
+    const el = this.paneElements[slot];
+    if (!el || handles.length === 0) return null;
+    const width = el.clientWidth || 1;
+    const height = el.clientHeight || 1;
+    const camera = this.engine.getCamera(slot);
+    const transform = this.engine.getSceneTransform(slot);
+
+    // Last drawn wins, matching the order they are blended in.
+    for (let i = handles.length - 1; i >= 0; i--) {
+      const handle = handles[i];
+      const screen = projectToPane(camera, transform, handle.world, width, height);
+      if (!screen) continue;
+      const cx = screen[0] + handle.offset.x;
+      const cy = screen[1] + handle.offset.y;
+      if (Math.abs(localX - cx) <= handle.width / 2
+        && Math.abs(localY - cy) <= handle.height / 2) {
+        return handle;
+      }
+    }
+    return null;
+  }
+
   onPointerMove(event: PointerEvent): void {
+    if (this.draggingLabel) {
+      // The offset is in the same pixel space the label shader lays out in, so
+      // the label tracks the pointer exactly and stays put as the camera moves.
+      this.draggingLabel.offset.x += event.clientX - this.lastX;
+      this.draggingLabel.offset.y += event.clientY - this.lastY;
+      this.lastX = event.clientX;
+      this.lastY = event.clientY;
+      this.labelOffsets.set(this.draggingLabel.key, { ...this.draggingLabel.offset });
+      this.refreshOverlay(this.dragSlot);
+      return;
+    }
     if (this.dragMode === 'none') {
       this.handleHover(event);
       return;
@@ -1560,6 +1718,15 @@ export class ViewerController {
 
     const height = el.clientHeight || 1;
     const before = camera.getState();
+
+    // With the pane in move mode the same gestures drive the structure instead
+    // of the camera, which is what lets two overlaid structures be placed
+    // against each other by hand.
+    if (useStore.getState().slots[slot].moveModel) {
+      this.moveModel(slot, dx, dy, height);
+      this.invalidate();
+      return;
+    }
 
     if (this.dragMode === 'rotate') {
       camera.rotate((dx / height) * 3.2, (dy / height) * 3.2);
@@ -1587,7 +1754,81 @@ export class ViewerController {
     }
   }
 
+  /**
+   * Turns or shifts a pane's structure under the pointer, leaving the camera
+   * alone.
+   *
+   * The gesture has to mean the same thing it means for the camera, so the
+   * rotation axes are the camera's own right and up expressed in world space —
+   * dragging right turns the near face right whichever way the camera is
+   * pointing. Rotation is about the structure's centre rather than the origin,
+   * or a small turn throws the molecule off screen.
+   */
+  private moveModel(slot: number, dx: number, dy: number, height: number): void {
+    const geometry = this.data[slot].geometry;
+    if (!geometry) return;
+    const camera = this.engine.getCamera(slot);
+    const current = this.engine.getSceneTransform(slot);
+
+    if (this.dragMode === 'pan') {
+      const worldPerPixel = (2 * Math.tan(camera.fovY / 2) * camera.distance) / height;
+      const shift = quatRotateInverse(
+        new Float32Array(3), camera.orientation, [dx * worldPerPixel, -dy * worldPerPixel, 0],
+      );
+      const next = current.slice();
+      next[12] += shift[0];
+      next[13] += shift[1];
+      next[14] += shift[2];
+      this.engine.setSceneTransform(slot, next);
+      return;
+    }
+
+    const right = quatRotateInverse(new Float32Array(3), camera.orientation, [1, 0, 0]);
+    const up = quatRotateInverse(new Float32Array(3), camera.orientation, [0, 1, 0]);
+    const forward = quatRotateInverse(new Float32Array(3), camera.orientation, [0, 0, 1]);
+
+    const rotation = quat();
+    const scratch = quat();
+    if (this.dragMode === 'roll') {
+      quatFromAxisAngle(rotation, forward[0], forward[1], forward[2], (dx / height) * 3.2);
+    } else {
+      quatFromAxisAngle(rotation, up[0], up[1], up[2], (dx / height) * 3.2);
+      quatFromAxisAngle(scratch, right[0], right[1], right[2], (dy / height) * 3.2);
+      quatMultiply(rotation, scratch, rotation);
+    }
+    quatNormalize(rotation);
+
+    const delta = mat4FromQuat(mat4(), rotation);
+    // The pivot is the structure's centre in its *current* placed position, so
+    // successive drags compose without the molecule creeping away.
+    const c = geometry.center;
+    const pivot: [number, number, number] = [
+      current[0] * c[0] + current[4] * c[1] + current[8] * c[2] + current[12],
+      current[1] * c[0] + current[5] * c[1] + current[9] * c[2] + current[13],
+      current[2] * c[0] + current[6] * c[1] + current[10] * c[2] + current[14],
+    ];
+
+    const next = multiply(mat4(), delta, current);
+    // Undo the translation the rotation about the origin introduced, so the
+    // pivot ends up exactly where it started.
+    const moved: [number, number, number] = [
+      delta[0] * pivot[0] + delta[4] * pivot[1] + delta[8] * pivot[2],
+      delta[1] * pivot[0] + delta[5] * pivot[1] + delta[9] * pivot[2],
+      delta[2] * pivot[0] + delta[6] * pivot[1] + delta[10] * pivot[2],
+    ];
+    next[12] += pivot[0] - moved[0];
+    next[13] += pivot[1] - moved[1];
+    next[14] += pivot[2] - moved[2];
+
+    this.engine.setSceneTransform(slot, next);
+  }
+
   onPointerUp(event: PointerEvent): void {
+    if (this.draggingLabel) {
+      this.draggingLabel = null;
+      this.dragSlot = -1;
+      return;
+    }
     const wasDragging = this.dragMode !== 'none';
     const slot = this.dragSlot;
     const moved = this.dragDistance > 4;
@@ -1779,6 +2020,12 @@ export class ViewerController {
             this.dirty = true;
             this.frame();
           },
+          // The key is laid out in CSS pixels; `zoom` converts framebuffer to
+          // output pixels and `dpr` CSS to framebuffer, so it keeps the same
+          // apparent size on a 640px clip and a 1920px one alike.
+          paintOverlay: (ctx, height, zoom) => {
+            paintColorKey(ctx, this.colorKeyFor(slot), height, zoom * dpr);
+          },
         },
         {
           frames: Math.max(1, Math.round(options.seconds * options.fps)),
@@ -1793,6 +2040,17 @@ export class ViewerController {
       if (wasSpinning) useStore.getState().patchSlot(slot, { spinning: true });
       this.invalidate();
     }
+  }
+
+  /** The key for a pane, or null when it is switched off or has nothing to say. */
+  colorKeyFor(slot: number): ColorKey {
+    const structure = this.data[slot].structure;
+    const state = useStore.getState().slots[slot];
+    if (!structure || !state.showColorKey) return null;
+    return colorKeyFor(structure, state.colorScheme, {
+      paletteOffset: slot * 3,
+      uniformColor: state.uniformColor,
+    });
   }
 
   async screenshot(slot: number): Promise<Blob | null> {
@@ -1821,6 +2079,9 @@ export class ViewerController {
     const ctx = out.getContext('2d');
     if (!ctx) return null;
     ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+    // The overlay lives in the DOM, so an export has to paint its own copy or
+    // ship a picture whose colours are unexplained.
+    paintColorKey(ctx, this.colorKeyFor(slot), sh, dpr);
 
     return new Promise((resolve) => out.toBlob(resolve, 'image/png'));
   }
@@ -1830,6 +2091,32 @@ export class ViewerController {
     for (const d of this.data) d.loadHandle?.cancel();
     this.engine.destroy();
   }
+}
+
+/**
+ * A world point in pane-local CSS pixels, or null when it is behind the camera.
+ * The same projection the label shader does, so a hit test agrees with what is
+ * on screen.
+ */
+function projectToPane(
+  camera: Camera,
+  transform: Float32Array,
+  world: [number, number, number],
+  width: number,
+  height: number,
+): [number, number] | null {
+  const [x, y, z] = world;
+  const wx = transform[0] * x + transform[4] * y + transform[8] * z + transform[12];
+  const wy = transform[1] * x + transform[5] * y + transform[9] * z + transform[13];
+  const wz = transform[2] * x + transform[6] * y + transform[10] * z + transform[14];
+
+  const m = camera.viewProjection;
+  const cw = m[3] * wx + m[7] * wy + m[11] * wz + m[15];
+  if (cw <= 0) return null;
+  const cx = (m[0] * wx + m[4] * wy + m[8] * wz + m[12]) / cw;
+  const cy = (m[1] * wx + m[5] * wy + m[9] * wz + m[13]) / cw;
+
+  return [(cx * 0.5 + 0.5) * width, (0.5 - cy * 0.5) * height];
 }
 
 function describePick(structure: Structure, hit: PickResult): string {

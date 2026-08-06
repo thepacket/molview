@@ -20,8 +20,6 @@ these are deliberately declined under "Not planned".
 - **Electrostatic colouring.** Needs a charge model and a Poisson-Boltzmann
   solve, or a crude Coulombic approximation that would be worse than nothing if
   presented as the real thing.
-- **Per-model interactive transforms, settable pivot, draggable labels, a colour
-  key.** Small, individually unremarkable, and each one is a real gap.
 
 Not taken: structure editing and dynamics (bond rotation, swapaa, tug,
 minimize), markers, and the map tab's analysis tools — see "Not planned".
@@ -35,6 +33,30 @@ One that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **The four small gaps** — each unremarkable alone, and the set closes the
+  ChimeraX comparison.
+
+  - **A colour key**, which had to exist twice. The overlay is HTML over the
+    canvas, so it is not part of the WebGPU surface a screenshot copies; both
+    export paths already compose through a 2D context, so they paint their own
+    copy from the same model. A legend that vanishes from the exported PNG is
+    worse than none, since the figure it was explaining is the one that gets
+    shared.
+  - **Per-model interactive transforms.** The same drags act on the pane's
+    scene transform instead of its camera. Rotation is about the structure's
+    centre in its *current* placement, so drags compose without creep — 40
+    mixed rotate and roll drags move the centre by 0.00003 A and the matrix
+    stays orthonormal to six decimals, which matters because picking inverts it
+    by transposing.
+  - **Draggable labels.** Measurement labels already carried a pixel offset for
+    the shader; what was missing was somewhere to keep it and a hit test that
+    agrees with what is on screen. A label under the pointer takes the drag,
+    because nudging one aside is a commoner intention than starting an orbit
+    from exactly that pixel.
+  - **A settable pivot** — moves what the camera turns about without moving the
+    camera. Distinct from focusing, which also flies in; once you are looking
+    at an active site, flying somewhere is exactly what you do not want.
 
 - **A confirmation mode for assistant actions** — off by default, and that is a
   position rather than laziness: everything the assistant can do is a

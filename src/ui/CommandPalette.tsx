@@ -125,6 +125,22 @@ export function CommandPalette() {
               Save pane {activeSlot + 1} as PNG
             </Command.Item>
             <Command.Item
+              value="set pivot rotation centre selection"
+              onSelect={() => run(() => viewer.pivotOnSelection(activeSlot))}
+            >
+              {store.slots[activeSlot].selectionLabel
+                ? `Rotate about ${store.slots[activeSlot].selectionLabel}`
+                : 'Rotate about the whole structure'}
+            </Command.Item>
+            <Command.Item
+              value="colour color key legend"
+              onSelect={() => run(() => store.patchSlot(
+                activeSlot, { showColorKey: !store.slots[activeSlot].showColorKey },
+              ))}
+            >
+              {store.slots[activeSlot].showColorKey ? 'Hide the colour key' : 'Show the colour key'}
+            </Command.Item>
+            <Command.Item
               value="record video movie turntable webm animation"
               onSelect={() => run(() => store.setPanel('scene'))}
             >

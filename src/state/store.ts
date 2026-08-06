@@ -160,6 +160,10 @@ export interface SlotState {
   showHydrogenBonds: boolean;
   hydrogenBondCount: number;
   showLabels: boolean;
+  /** Draw a legend for the pane's colour scheme, and include it in exports. */
+  showColorKey: boolean;
+  /** Drag moves this pane's structure rather than its camera. */
+  moveModel: boolean;
   /** Set when this pane was opened from a local file rather than an id. */
   sourceFileName: string | null;
   /** Other panes whose structures are also drawn in this one. */
@@ -200,6 +204,8 @@ function emptySlot(): SlotState {
     showHydrogenBonds: false,
     hydrogenBondCount: 0,
     showLabels: true,
+    showColorKey: false,
+    moveModel: false,
     sourceFileName: null,
     overlaySlots: [],
     superposedOnto: null,

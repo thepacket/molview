@@ -95,6 +95,8 @@ export function ScenePanel() {
         })}
       </div>
 
+      <MoveModelSection />
+
       <RecordSection />
 
       <SurfaceSection />
@@ -132,6 +134,48 @@ export function ScenePanel() {
         </button>
       </div>
     </>
+  );
+}
+
+/**
+ * Moving one structure by hand.
+ *
+ * Superposition computes a placement; this is for when you want to judge one —
+ * pushing two structures together to see whether a proposed contact is even
+ * geometrically possible, or separating an overlay that has landed on top of
+ * itself. The same drags do the same things, they just act on the model.
+ */
+function MoveModelSection() {
+  const activeSlot = useStore((s) => s.activeSlot);
+  const slot = useStore((s) => s.slots[s.activeSlot]);
+  const patchSlot = useStore((s) => s.patchSlot);
+
+  if (slot.status !== 'ready') return null;
+
+  return (
+    <div className="panel-section">
+      <div className="section-label"><span>Move pane {activeSlot + 1}</span></div>
+      <Toggle
+        label="Drag moves the structure"
+        checked={slot.moveModel}
+        onChange={(v) => patchSlot(activeSlot, { moveModel: v })}
+        hint="Drag rotates, shift-drag shifts, and the camera stays where it is"
+      />
+      <p className="panel-note" style={{ marginTop: 7, marginBottom: 0 }}>
+        Places this pane&apos;s structure relative to anything overlaid on it.
+        Superposition computes a placement; this is for judging one by eye.
+      </p>
+      {(slot.moveModel || slot.superposedOnto !== null) && (
+        <button
+          type="button"
+          className="btn ghost small"
+          style={{ width: '100%', marginTop: 8 }}
+          onClick={() => viewer.clearSuperposition(activeSlot)}
+        >
+          Reset to the original frame
+        </button>
+      )}
+    </div>
   );
 }
 

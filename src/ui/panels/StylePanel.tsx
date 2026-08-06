@@ -241,6 +241,12 @@ export function StylePanel() {
             onChange={(v) => patchSlot(activeSlot, { colorScheme: v })}
           />
         </Field>
+        <Toggle
+          label="Show colour key"
+          checked={slot.showColorKey}
+          onChange={(v) => patchSlot(activeSlot, { showColorKey: v })}
+          hint="A legend over the pane, included in screenshots and recordings"
+        />
         {VALIDATION_SCHEMES.has(slot.colorScheme) && (
           <ValidationLegend scheme={slot.colorScheme} slot={activeSlot} />
         )}

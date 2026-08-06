@@ -12,6 +12,7 @@ import {
 import { LAYOUT_SLOT_COUNT, useStore, type SlotState } from '../state/store';
 import { viewer } from '../viewer/ViewerController';
 import { Tip } from './controls';
+import { ColorKeyOverlay } from './ColorKeyOverlay';
 
 export function ViewportGrid() {
   const layout = useStore((s) => s.layout);
@@ -244,6 +245,8 @@ function Pane({ index, slot, active, dropping, onDropTarget }: {
               </button>
             </div>
           )}
+
+          <ColorKeyOverlay slot={index} />
 
           <div className="pane-footer">
             <div className="readout">

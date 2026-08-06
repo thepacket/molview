@@ -262,6 +262,19 @@ the coordinates are not, and neither a solid ribbon nor a bare hole says that.
 The disordered histone tails of `1KX5` are the case to look at. Chains
 can be hidden or focused individually.
 
+**Figures that explain themselves.** A colour key for the pane's scheme, drawn
+over the canvas *and* painted into screenshots and recordings — a legend that
+vanishes from the exported image is worse than none, since the export is the
+one that gets shared. Measurement labels can be dragged out of the way of what
+they measure. The camera's pivot can be moved onto whatever you are looking at
+without flying there.
+
+**Placing structures by hand.** Superposition computes a placement; a pane can
+also be put into move mode, where the same drags turn and shift its structure
+instead of its camera. That is for judging a placement by eye — pushing two
+structures together to see whether a proposed contact is geometrically
+possible at all.
+
 **Turntable video.** Any pane records to a WebM clip of one or more full
 revolutions. The camera is driven frame by frame rather than the screen being
 captured in real time, so a structure that renders slowly costs a slow export
@@ -444,6 +457,9 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
   no re-entrant saddles.
 - Recording produces WebM, the only format browsers encode natively, and the
   pane has to stay visible while it runs.
+- Dragged label positions last for the session. A saved project restores its
+  measurements by atom reference and gives them new ids, so the offsets have
+  nothing to reattach to.
 - Surfaces and density contours are generated on the CPU, so building one costs
   a stall — a fifth of a second for a small protein, a couple of seconds for a
   nucleosome — and it blocks the frame while it runs.
