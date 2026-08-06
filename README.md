@@ -295,6 +295,21 @@ tell you. The pair defines a slab, so a section through a capsid stays a
 section instead of becoming a silhouette against everything behind it. The
 planes follow the camera, so rotating rotates the cut.
 
+**Colour-blind-safe palette.** The default chain palette runs cyan, orange,
+purple, green, pink — and the green/pink pair is the classic deuteranopia
+collision, which makes a per-chain figure read as one colour to about eight per
+cent of men. One toggle in Settings swaps in Okabe and Ito's eight colours,
+which stay distinguishable. Eight rather than fourteen is the honest cost: a
+structure with many chains repeats sooner.
+
+**Take the view elsewhere.** The active pane exports as a PyMOL `.pml` or
+ChimeraX `.cxc` script. Selections are recompiled from their parsed form rather
+than string-substituted, so `not water` and nested parentheses survive into a
+different grammar instead of quietly producing the wrong picture. What does not
+transfer says so in a comment: the camera orientation, and MolView's per-residue
+colour tables, which become the target's own nearest scheme rather than a
+thousand colour commands.
+
 **Finding structures from a structure.** The search box answers questions you
 can phrase; two more services answer one you can only point at. **By shape**
 compares the assembly on screen against every assembly in the archive — 4HHB

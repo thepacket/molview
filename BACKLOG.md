@@ -31,15 +31,6 @@ point, cluster the buried ones. Reuses the field machinery wholesale, and
 answers the first question anyone asks of an unfamiliar structure with a
 ligand-shaped hole in it.
 
-### Smaller, worth doing
-
-- **Colour-blind-safe palettes.** The chain palette is a rainbow, which is the
-  single most common accessibility failure in molecular graphics. A toggle
-  swapping in a palette that survives deuteranopia costs a table.
-- **Export the scene as a PyMOL or ChimeraX script.** MolView is not where a
-  figure is finished; a script that reproduces the view where it is finished
-  makes it a useful first step rather than a dead end.
-
 ### Left from the ChimeraX comparison
 
 - **Electrostatic colouring.** Needs a charge model and a Poisson-Boltzmann
@@ -55,6 +46,20 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **A colour-blind-safe palette, and script export** — the two small ones.
+
+  The palette is Okabe and Ito's eight, persisted in localStorage rather than
+  sessionStorage: an accessibility setting that has to be found again every
+  session is one the person it exists for stops using. Colours are baked into
+  the geometry buffers, so changing it rebuilds every pane rather than merely
+  redrawing.
+
+  The script export recompiles selections from their parsed AST rather than
+  substituting strings, because substitution gets `not water` and nested
+  parentheses wrong in ways that stay silent until someone runs the script.
+  Each target's own hex convention had to be respected too — PyMOL takes
+  `0xRRGGBB` and ChimeraX `#RRGGBB`, and each rejects the other.
 
 - **Similarity search from the pane, and buried surface area** — two answers
   the app could not give about what was already on screen.

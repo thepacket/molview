@@ -110,7 +110,7 @@ function tokenize(source: string): Token[] {
 // Parsing
 // ---------------------------------------------------------------------------
 
-type Node =
+export type SelectionNode =
   | { type: 'all' }
   | { type: 'none' }
   | { type: 'and'; left: Node; right: Node }
@@ -127,6 +127,8 @@ type Node =
   | { type: 'hydrogen' }
   | { type: 'polymer' }
   | { type: 'model'; values: number[] };
+
+type Node = SelectionNode;
 
 /** Keywords taking an argument, e.g. `chain A`, `element Fe`. */
 const ARGUMENT_KEYWORDS: Record<string, 'chain' | 'residue' | 'atom' | 'element' | 'model'> = {

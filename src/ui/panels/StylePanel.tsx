@@ -4,7 +4,7 @@ import { Crosshair, Eye, EyeOff } from 'lucide-react';
 import type { Assembly } from '../../mol/assembly';
 import type { NucleotideStyle } from '../../gfx/geometry';
 import {
-  COLOR_SCHEME_LABELS, CHAIN_PALETTE, VALIDATION_SCHEMES, type ColorScheme,
+  COLOR_SCHEME_LABELS, chainPalette, VALIDATION_SCHEMES, type ColorScheme,
 } from '../../mol/coloring';
 import { MolKind } from '../../mol/structure';
 
@@ -253,7 +253,7 @@ export function StylePanel() {
         {slot.colorScheme === 'uniform' && (
           <Field label="Colour">
             <div className="chip-row">
-              {CHAIN_PALETTE.slice(0, 8).map((c) => (
+              {chainPalette().slice(0, 8).map((c) => (
                 <button
                   key={c}
                   type="button"
@@ -296,7 +296,7 @@ export function StylePanel() {
                 <span
                   className="seq-swatch"
                   style={{
-                    background: `#${CHAIN_PALETTE[(i + activeSlot * 3) % CHAIN_PALETTE.length]
+                    background: `#${chainPalette()[(i + activeSlot * 3) % chainPalette().length]
                       .toString(16).padStart(6, '0')}`,
                   }}
                 />

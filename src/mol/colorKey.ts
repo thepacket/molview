@@ -10,7 +10,7 @@
 
 import { MolKind, type Structure } from './structure';
 import {
-  BASE_COLORS, CHAIN_PALETTE, COLOR_SCHEME_LABELS, type ColorScheme,
+  BASE_COLORS, chainPalette, COLOR_SCHEME_LABELS, type ColorScheme,
 } from './coloring';
 import { ELEMENT_COLORS, ELEMENT_SYMBOLS, elementIndex } from './elements';
 import { PLDDT_BANDS } from '../rcsb/alphafold';
@@ -59,7 +59,7 @@ export function colorKeyFor(
       for (let c = 0; c < s.chainCount; c++) {
         const id = s.chainAuthId[c];
         if (!seen.has(id)) {
-          seen.set(id, CHAIN_PALETTE[(c + options.paletteOffset) % CHAIN_PALETTE.length]);
+          seen.set(id, chainPalette()[(c + options.paletteOffset) % chainPalette().length]);
         }
       }
       return {
@@ -79,7 +79,7 @@ export function colorKeyFor(
         ids.set(key, index);
         items.push({
           label: `Entity ${key}`,
-          color: CHAIN_PALETTE[(index + options.paletteOffset) % CHAIN_PALETTE.length],
+          color: chainPalette()[(index + options.paletteOffset) % chainPalette().length],
         });
       }
       return { kind: 'swatches', title, items };

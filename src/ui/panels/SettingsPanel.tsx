@@ -14,6 +14,8 @@ import {
   getStructuredOutputs, setApiKey, setConfirmActions, setModel,
   setStructuredOutputs, type OpenRouterModel,
 } from '../../ai/openrouter';
+import { isColorBlindSafe, setColorBlindSafe } from '../../mol/coloring';
+import { viewer } from '../../viewer/ViewerController';
 import { Field, Toggle } from '../controls';
 
 export function SettingsPanel() {
@@ -26,6 +28,7 @@ export function SettingsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [structured, setStructured] = useState(getStructuredOutputs());
   const [confirm, setConfirm] = useState(getConfirmActions());
+  const [safePalette, setSafePalette] = useState(isColorBlindSafe());
 
   const load = (force = false) => {
     setLoading(true);
@@ -202,6 +205,31 @@ export function SettingsPanel() {
             : 'The schema is spelled out in the prompt instead. Slower and more '
               + 'expensive, but it is the fallback when a provider mishandles '
               + 'schema-constrained requests.'}
+        </p>
+      </div>
+
+      <div className="panel-section">
+        <div className="section-label"><span>Accessibility</span></div>
+        <Toggle
+          label="Colour-blind-safe chain palette"
+          checked={safePalette}
+          onChange={(v) => {
+            setColorBlindSafe(v);
+            setSafePalette(v);
+            // Colours are baked into the geometry buffers, so every pane has to
+            // be rebuilt rather than merely redrawn.
+            viewer.rebuildAll();
+          }}
+          hint="Swaps the chain palette for one that survives deuteranopia and protanopia"
+        />
+        <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
+          {safePalette
+            ? 'Okabe and Ito\u2019s eight colours. Fewer than the default fourteen, so a '
+              + 'structure with many chains repeats sooner \u2014 which is the honest cost of '
+              + 'colours that stay distinguishable.'
+            : 'The default palette runs cyan, orange, purple, green, pink. The green and '
+              + 'pink collide under the commonest form of colour-vision deficiency, which '
+              + 'affects about eight per cent of men.'}
         </p>
       </div>
 

@@ -65,10 +65,65 @@ export const BASE_COLORS: Record<string, number> = {
 };
 
 /** Qualitative palette — distinguishable, and legible against a dark scene. */
-export const CHAIN_PALETTE = [
+const DEFAULT_CHAIN_PALETTE = [
   0x4cc9f0, 0xf7b267, 0x9d7bf5, 0x5ddb9a, 0xf76c8f, 0xffd94a, 0x69a4ff,
   0xff9e6d, 0x63d9d0, 0xd48cff, 0xa8e05f, 0xff7bb0, 0x8fd4ff, 0xe0c46c,
 ];
+
+/**
+ * Okabe and Ito's palette, which stays distinguishable under the common forms
+ * of colour-vision deficiency.
+ *
+ * Eight colours instead of fourteen, and that is the honest cost: a fifteen-
+ * chain structure will repeat sooner. The default palette runs cyan, orange,
+ * purple, green, pink — the green/pink pair is the classic deuteranopia
+ * collision, and a per-chain figure that reads as one colour to eight per cent
+ * of men is a figure that failed. Black is dropped because the background is
+ * nearly black; a light neutral takes its place.
+ */
+const SAFE_CHAIN_PALETTE = [
+  0x56b4e9, 0xe69f00, 0x009e73, 0xf0e442, 0x0072b2, 0xd55e00, 0xcc79a7, 0xe8e8e8,
+];
+
+const PALETTE_STORAGE = 'molview-colorblind-palette';
+
+/**
+ * Persisted, and in localStorage rather than sessionStorage: an accessibility
+ * setting that has to be found again every session is one the person it exists
+ * for will stop using.
+ */
+function storedPreference(): boolean {
+  try {
+    return localStorage.getItem(PALETTE_STORAGE) === '1';
+  } catch {
+    return false;
+  }
+}
+
+let activePalette = storedPreference() ? SAFE_CHAIN_PALETTE : DEFAULT_CHAIN_PALETTE;
+
+/**
+ * A function rather than a constant, because every consumer — the geometry
+ * builder, the colour key, the chain list in the panel — has to agree, and one
+ * of them holding the old array is a legend that contradicts the picture.
+ */
+export function chainPalette(): readonly number[] {
+  return activePalette;
+}
+
+export function setColorBlindSafe(enabled: boolean): void {
+  activePalette = enabled ? SAFE_CHAIN_PALETTE : DEFAULT_CHAIN_PALETTE;
+  try {
+    if (enabled) localStorage.setItem(PALETTE_STORAGE, '1');
+    else localStorage.removeItem(PALETTE_STORAGE);
+  } catch {
+    // Storage disabled: the setting still works, just not across reloads.
+  }
+}
+
+export function isColorBlindSafe(): boolean {
+  return activePalette === SAFE_CHAIN_PALETTE;
+}
 
 const SS_COLORS: Record<number, number> = {
   [SS.Coil]: 0x9aa5b5,
@@ -157,12 +212,12 @@ export function makeColorProvider(s: Structure, options: ColorOptions): ColorPro
 
     switch (scheme) {
       case 'chain':
-        color = CHAIN_PALETTE[(chain + paletteOffset) % CHAIN_PALETTE.length];
+        color = activePalette[(chain + paletteOffset) % activePalette.length];
         break;
       case 'entity': {
         const key = s.chainEntity[chain] || s.chainLabelId[chain];
         const idx = entityIds.get(key) ?? 0;
-        color = CHAIN_PALETTE[(idx + paletteOffset) % CHAIN_PALETTE.length];
+        color = activePalette[(idx + paletteOffset) % activePalette.length];
         break;
       }
       case 'secondary':

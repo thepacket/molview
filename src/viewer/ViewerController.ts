@@ -872,6 +872,19 @@ export class ViewerController {
     });
   }
 
+  /**
+   * Rebuilds every loaded pane, for a change that colours cannot express
+   * through settings — the palette itself moving under them.
+   */
+  rebuildAll(): void {
+    for (let i = 0; i < MAX_SLOTS; i++) {
+      if (!this.data[i].structure) continue;
+      this.data[i].builtSignature = '';
+      this.rebuild(i);
+    }
+    this.invalidate();
+  }
+
   syncSettings(): void {
     const { slots } = useStore.getState();
     for (let i = 0; i < MAX_SLOTS; i++) {

@@ -5,7 +5,7 @@
  */
 
 import { useMemo } from 'react';
-import { CHAIN_PALETTE } from '../../mol/coloring';
+import { chainPalette } from '../../mol/coloring';
 import { ONE_LETTER } from '../../mol/elements';
 import { MolKind, resNameOf, type Structure } from '../../mol/structure';
 import { useStore } from '../../state/store';
@@ -77,8 +77,8 @@ export function SequencePanel() {
             <span
               className="seq-swatch"
               style={{
-                background: `#${CHAIN_PALETTE[(track.colorIndex + activeSlot * 3)
-                  % CHAIN_PALETTE.length].toString(16).padStart(6, '0')}`,
+                background: `#${chainPalette()[(track.colorIndex + activeSlot * 3)
+                  % chainPalette().length].toString(16).padStart(6, '0')}`,
               }}
             />
             <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>

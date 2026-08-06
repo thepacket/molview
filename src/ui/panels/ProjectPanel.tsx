@@ -16,6 +16,7 @@ import {
   deleteProject, listProjects, loadProject, saveProject, type ProjectSummary,
 } from '../../state/projectStore';
 import { buildShareLink } from '../../state/share';
+import { paneScript, scriptFilename, type ScriptTarget } from '../../state/script';
 import { DEFAULT_PROJECT_NAME, useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Tip, Toggle } from '../controls';
@@ -134,6 +135,17 @@ export function ProjectPanel() {
     setProjectId(project.id);
     setStatus(describe(report));
   });
+
+  const downloadScript = (target: ScriptTarget) => {
+    const slot = useStore.getState().activeSlot;
+    const blob = new Blob([paneScript(slot, target)], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = scriptFilename(slot, target);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  };
 
   const doExport = () => void withBusy('Exporting…', async () => {
     const document = await serialiseProjectWithFiles({ includeCoordinates });
@@ -378,6 +390,34 @@ export function ProjectPanel() {
         >
           <Link size={12} /> Copy shareable link
         </button>
+
+        <div className="section-label" style={{ marginTop: 12 }}>
+          <span>Take the view elsewhere</span>
+        </div>
+        <p className="panel-note">
+          A script that reproduces the active pane where a figure gets finished.
+          Selections are recompiled from their parsed form, not string-swapped,
+          so nesting and <code>not</code> survive; the orientation does not
+          transfer and the script says so.
+        </p>
+        <div className="similar-buttons">
+          <button
+            type="button"
+            className="btn small"
+            disabled={!hasContent}
+            onClick={() => downloadScript('pymol')}
+          >
+            PyMOL .pml
+          </button>
+          <button
+            type="button"
+            className="btn small"
+            disabled={!hasContent}
+            onClick={() => downloadScript('chimerax')}
+          >
+            ChimeraX .cxc
+          </button>
+        </div>
         <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 6, lineHeight: 1.5 }}>
           The whole session is compressed into the link's fragment, which never
           leaves the browser it is opened in.
