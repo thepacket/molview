@@ -1361,6 +1361,37 @@ textarea {
   margin-top: 8px;
 }
 
+/* One cell per aligned residue. Wraps rather than scrolls: the shape of the
+   whole strip is the information, and a strip you have to scroll to see the
+   end of cannot show a shape. */
+.alignment-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  margin-top: 6px;
+}
+
+.alignment-cell {
+  width: 7px;
+  height: 12px;
+  padding: 0;
+  border-radius: 1px;
+  cursor: pointer;
+}
+
+.alignment-cell:hover {
+  outline: 1px solid var(--text);
+  outline-offset: 1px;
+}
+
+/* Pruned pairs did not contribute to the RMSD, and saying so with a texture
+   keeps the colour free to mean only distance. */
+.alignment-cell[data-dropped='true'] {
+  background-image: repeating-linear-gradient(
+    45deg, rgba(0, 0, 0, 0.55) 0 1px, transparent 1px 3px
+  );
+}
+
 .similar-buttons {
   display: flex;
   gap: 6px;

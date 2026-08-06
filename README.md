@@ -188,6 +188,14 @@ which residues correspond, then the paired Cα atoms are fitted and the outliers
 pruned. Validated against known comparisons — 4HHB's identical alpha chains
 0.30 Å, alpha vs beta 1.09 Å, alpha vs sperm whale myoglobin 1.07 Å.
 
+The alignment it computes is shown rather than discarded: one cell per aligned
+residue, coloured by how far the pair ended up apart after fitting, in sequence
+order. An RMSD is an average, and an average of a bimodal distribution lies
+about both halves — adenylate kinase open against closed reports 7.13 Å, and
+the strip shows why: a rigid core in blue and a LID domain that has swung 18 Å,
+which is the entire finding. Clicking a cell flies both panes to that pair.
+
+
 **Shareable links.** The whole session compresses into the URL fragment — a
 four-pane project including a 2.9M-atom capsid is about 1 kB of link. A fragment
 never reaches a server, so the link discloses nothing in transit. Opening one

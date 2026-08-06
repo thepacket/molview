@@ -16,13 +16,6 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
-### Making a superposition legible
-
-Superposition computes a sequence alignment and then throws it away, reporting
-only an RMSD. Showing the alignment — residue against residue, coloured by the
-per-pair distance after fitting — turns one number into where the two
-structures agree and where they do not, which is the actual finding.
-
 ### Pocket detection
 
 Where are the cavities, and how big. A LIGSITE-style scan over the same grid
@@ -46,6 +39,16 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **The alignment a superposition computes** — it was being calculated and then
+  reduced to one number. An RMSD is an average, and an average of a bimodal
+  distribution lies about both halves: adenylate kinase open against closed
+  reports 7.13 A, and what that actually means is a rigid core plus a LID domain
+  that has swung 18 A. One cell per aligned residue, coloured by residual
+  distance, in sequence order — the shape of the strip is the answer. Pruned
+  pairs are hatched rather than recoloured, so colour keeps meaning only
+  distance, and every pair is reported rather than only the fitted core, because
+  the residue the pruning threw out is precisely the interesting one.
 
 - **A colour-blind-safe palette, and script export** — the two small ones.
 

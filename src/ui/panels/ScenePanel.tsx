@@ -11,6 +11,7 @@ import { Field, Segmented, Select, Tip, Toggle } from '../controls';
 import { DensitySection } from './DensitySection';
 import { SurfaceSection } from './SurfaceSection';
 import { RecordSection } from './RecordSection';
+import { AlignmentTrack } from './AlignmentTrack';
 
 const LAYOUTS: { value: LayoutMode; label: React.ReactNode; title: string }[] = [
   { value: 'single', label: <Square size={12} />, title: 'Single pane' },
@@ -310,6 +311,7 @@ function SuperposeSection() {
               >
                 Reset to original frame
               </button>
+              <AlignmentTrack slot={activeSlot} />
             </div>
           )}
         </>

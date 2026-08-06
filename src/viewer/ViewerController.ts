@@ -21,7 +21,8 @@ import {
 } from '../mol/measure';
 import { buildLabelInstances, type LabelRequest } from '../gfx/text';
 import {
-  AlignmentError, alignableChains, superposeChains, type AlignableChain,
+  AlignmentError, alignableChains, superposeChains,
+  type AlignableChain, type AlignedPair,
 } from '../mol/align';
 import { evaluateSelection, parseSelection, selectionError } from '../mol/selection';
 import { fetchEntryDetail } from '../rcsb/api';
@@ -65,6 +66,13 @@ interface SlotData {
   builtSignature: string;
   /** Raw bytes of a locally opened file, kept so projects can embed them. */
   sourceFile: { name: string; buffer: ArrayBuffer } | null;
+  /** The residue-by-residue result of the last superposition of this pane. */
+  alignment: {
+    pairs: AlignedPair[];
+    referenceSlot: number;
+    mobileChain: string;
+    referenceChain: string;
+  } | null;
   /** AlphaFold extras for this pane, if it holds a prediction. */
   predictionUrls: { pae: string | null; missense: string | null; length: number } | null;
   pae: PaeMatrix | null;
@@ -171,6 +179,7 @@ function emptySlotData(): SlotData {
     loadHandle: null,
     builtSignature: '',
     sourceFile: null,
+    alignment: null,
     predictionUrls: null,
     pae: null,
     missense: null,
@@ -831,6 +840,24 @@ export class ViewerController {
         });
       })
       .finally(() => { this.data[slot].residueValidationRequest = null; });
+  }
+
+  /** The last superposition of this pane, residue by residue. */
+  getAlignment(slot: number) {
+    return this.data[slot].alignment;
+  }
+
+  /** Frames one aligned pair in both panes at once, so the eye can compare. */
+  focusAlignedPair(slot: number, pair: AlignedPair): void {
+    const alignment = this.data[slot].alignment;
+    if (!alignment) return;
+    this.focusResidue(slot, pair.mobileResidue);
+    // The panes share a frame after a superposition, so the reference follows
+    // the same camera and does not need its own focus call — but it does when
+    // the cameras have since been unlinked.
+    if (!useStore.getState().linkedCameras) {
+      this.focusResidue(alignment.referenceSlot, pair.referenceResidue);
+    }
   }
 
   /** Per-residue metrics for a pane, once a validation scheme has loaded them. */
@@ -1494,6 +1521,16 @@ export class ViewerController {
         superposedOnto: null, superposeRmsd: null, superposePairs: null,
       });
 
+      // Kept so the panel can show where the two structures agree; it is the
+      // by-product of the fit, and discarding it was throwing away the answer
+      // and keeping only its average.
+      this.data[mobileSlot].alignment = {
+        pairs: result.alignment,
+        referenceSlot,
+        mobileChain: mc.authId,
+        referenceChain: rc.authId,
+      };
+
       // Both panes now share a frame, so give them the same camera.
       this.syncCameras(referenceSlot);
       this.invalidate();
@@ -1533,6 +1570,7 @@ export class ViewerController {
 
   clearSuperposition(slot: number): void {
     this.engine.setSceneTransform(slot, IDENTITY);
+    this.data[slot].alignment = null;
     useStore.getState().patchSlot(slot, {
       superposedOnto: null, superposeRmsd: null, superposePairs: null,
     });

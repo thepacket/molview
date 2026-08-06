@@ -265,12 +265,38 @@ function largestEigenvector(matrix: Float64Array): [number, number, number, numb
   return [v[best], v[4 + best], v[8 + best], v[12 + best]];
 }
 
+/**
+ * One residue against its partner, after fitting.
+ *
+ * The alignment is computed anyway and was being discarded; keeping it is what
+ * turns a single RMSD into where the two structures agree and where they do
+ * not, which is usually the actual finding. A 0.9 A RMSD over a two-domain
+ * protein can mean 0.4 A everywhere and 4 A in a hinge, and the number alone
+ * cannot say which.
+ */
+export interface AlignedPair {
+  /** Structure residue indices, so a caller can select or focus them. */
+  referenceResidue: number;
+  mobileResidue: number;
+  referenceSeq: number;
+  mobileSeq: number;
+  /** One-letter codes; unequal means the alignment matched non-identical residues. */
+  referenceCode: string;
+  mobileCode: string;
+  /** Anchor separation after the final fit, in Å. */
+  distance: number;
+  /** False for pairs the iterative pruning dropped before the last fit. */
+  used: boolean;
+}
+
 export interface Superposition {
   /** Column-major 4x4 mapping mobile coordinates onto the reference. */
   transform: Float32Array;
   rmsd: number;
   pairsUsed: number;
   pairsConsidered: number;
+  /** Every aligned pair, in sequence order, with its residual distance. */
+  alignment: AlignedPair[];
 }
 
 /**
@@ -419,10 +445,39 @@ export function superposeChains(
     active = kept;
   }
 
+  // Every pair, not just the surviving ones: a residue the pruning threw out
+  // is precisely the interesting one, and reporting only the core would hide
+  // the disagreement the fit was measuring.
+  const kept = new Set(active.map(([r, m]) => `${r}:${m}`));
+  const t = result.transform;
+  const alignment: AlignedPair[] = pairs.map(([ri, mi]) => {
+    const ra = referenceChain.anchors[ri];
+    const ma = mobileChain.anchors[mi];
+    const px = mobileStructure.x[ma], py = mobileStructure.y[ma], pz = mobileStructure.z[ma];
+    const tx = t[0] * px + t[4] * py + t[8] * pz + t[12];
+    const ty = t[1] * px + t[5] * py + t[9] * pz + t[13];
+    const tz = t[2] * px + t[6] * py + t[10] * pz + t[14];
+    return {
+      referenceResidue: referenceChain.residues[ri],
+      mobileResidue: mobileChain.residues[mi],
+      referenceSeq: referenceStructure.resSeq[referenceChain.residues[ri]],
+      mobileSeq: mobileStructure.resSeq[mobileChain.residues[mi]],
+      referenceCode: referenceChain.sequence[ri],
+      mobileCode: mobileChain.sequence[mi],
+      distance: Math.hypot(
+        tx - referenceStructure.x[ra],
+        ty - referenceStructure.y[ra],
+        tz - referenceStructure.z[ra],
+      ),
+      used: kept.has(`${ri}:${mi}`),
+    };
+  });
+
   return {
     transform: result.transform,
     rmsd: result.rmsd,
     pairsUsed: active.length,
     pairsConsidered: pairs.length,
+    alignment,
   };
 }
