@@ -23,6 +23,8 @@
  */
 
 import type { VolumeGrid } from '../rcsb/volume';
+import { ISOSURFACE_STRIDE } from './isosurface';
+import { MolKind, type Structure } from '../mol/structure';
 
 export interface SurfaceOptions {
   /** Added to every van der Waals radius; 1.4 Å is a water molecule. */
@@ -188,4 +190,170 @@ function unpackColors(packed: Uint32Array): Float32Array {
     out[i * 3 + 2] = (c & 0xff) / 255;
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Coulombic potential
+// ---------------------------------------------------------------------------
+
+/**
+ * A deliberately small charge model: the ionisable groups, the termini, the
+ * nucleic acid phosphates and the ions.
+ *
+ * Not Amber, not any published force field, and the naming says Coulombic
+ * everywhere rather than "electrostatics" for that reason. A full partial-charge
+ * set would put a tenth of an electron on every backbone carbonyl and change
+ * the picture very little: what a Coulombic surface is read for is the gross
+ * character — which face is acidic, which groove is positive, whether a
+ * DNA-binding surface looks like one — and that is carried almost entirely by
+ * the formal charges below.
+ *
+ * A Poisson-Boltzmann solve is a different thing and is not attempted. It
+ * would account for solvent screening and ionic strength, which this does not.
+ */
+const SIDE_CHAIN_CHARGES: Record<string, Record<string, number>> = {
+  ASP: { OD1: -0.5, OD2: -0.5 },
+  GLU: { OE1: -0.5, OE2: -0.5 },
+  LYS: { NZ: 1 },
+  ARG: { NH1: 0.5, NH2: 0.5 },
+  // Mostly neutral at pH 7, but not nothing, and it matters at an active site.
+  HIS: { ND1: 0.1, NE2: 0.1 },
+  // Phosphate backbone: the dominant charge in any nucleic acid, and leaving
+  // it out makes DNA look uncharged, which is the opposite of the truth.
+  A: PHOSPHATE(), C: PHOSPHATE(), G: PHOSPHATE(), U: PHOSPHATE(),
+  DA: PHOSPHATE(), DC: PHOSPHATE(), DG: PHOSPHATE(), DT: PHOSPHATE(),
+};
+
+function PHOSPHATE(): Record<string, number> {
+  return { OP1: -0.5, OP2: -0.5, 'O1P': -0.5, 'O2P': -0.5 };
+}
+
+/** Formal charges of the ions that turn up as single-atom residues. */
+const ION_CHARGES: Record<string, number> = {
+  NA: 1, K: 1, LI: 1, CS: 1, RB: 1,
+  MG: 2, CA: 2, ZN: 2, MN: 2, NI: 2, CO: 2, CU: 2, CD: 2, SR: 2, BA: 2,
+  FE: 2, FE2: 2, FE3: 3, AL: 3,
+  CL: -1, BR: -1, IOD: -1, F: -1,
+};
+
+export interface PointCharges {
+  positions: Float32Array;
+  values: Float32Array;
+}
+
+export function chargesOf(
+  s: Structure, atoms: Int32Array,
+): PointCharges {
+  const positions: number[] = [];
+  const values: number[] = [];
+  const included = new Uint8Array(s.atomCount);
+  for (const a of atoms) included[a] = 1;
+
+  // Termini need the first and last modelled residue of each chain, which is
+  // not the same as the first and last atom of the structure.
+  const chainEnds = new Set<number>();
+  for (let c = 0; c < s.chainCount; c++) {
+    chainEnds.add(s.chainResStart[c]);
+    chainEnds.add(s.chainResStart[c + 1] - 1);
+  }
+
+  for (let r = 0; r < s.residueCount; r++) {
+    const name = s.nameTable[s.resNameId[r]];
+    const table = SIDE_CHAIN_CHARGES[name];
+    const kind = s.resKind[r];
+    const isTerminus = chainEnds.has(r)
+      && (kind === MolKind.Protein || kind === MolKind.Nucleic);
+
+    for (let a = s.resAtomStart[r]; a < s.resAtomStart[r + 1]; a++) {
+      if (!included[a]) continue;
+      const atomName = s.nameTable[s.atomNameId[a]];
+      let q = table?.[atomName] ?? 0;
+
+      if (kind === MolKind.Ion) q += ION_CHARGES[name.toUpperCase()] ?? 0;
+      if (isTerminus && kind === MolKind.Protein) {
+        if (atomName === 'N' && r === s.chainResStart[s.resChain[r]]) q += 1;
+        if (atomName === 'OXT') q -= 0.5;
+        if (atomName === 'O' && r === s.chainResStart[s.resChain[r] + 1] - 1) q -= 0.5;
+      }
+
+      if (q === 0) continue;
+      positions.push(s.x[a], s.y[a], s.z[a]);
+      values.push(q);
+    }
+  }
+
+  return { positions: Float32Array.from(positions), values: Float32Array.from(values) };
+}
+
+/** Beyond this a charge contributes under a per cent of the strongest term. */
+const CHARGE_CUTOFF = 20;
+
+/**
+ * Recolours a surface mesh by the Coulombic potential at each vertex.
+ *
+ * Distance-dependent dielectric, ε(r) = 4r, which is the usual cheap stand-in
+ * for solvent screening and is what makes the falloff 1/r² rather than 1/r.
+ * The scale is symmetric about zero and fixed rather than normalised per
+ * structure, so blue means the same thing on two proteins — the same argument
+ * as every other ramp here.
+ */
+export function colorSurfaceByPotential(
+  vertices: Float32Array,
+  charges: PointCharges,
+  scale = 8,
+): void {
+  const count = charges.values.length;
+  if (count === 0) return;
+
+  // Hash the charges: a protein has a few hundred, a nucleosome a few thousand,
+  // and a surface has hundreds of thousands of vertices.
+  const cell = CHARGE_CUTOFF;
+  const buckets = new Map<number, number[]>();
+  const key = (i: number, j: number, k: number) =>
+    (i * 73856093) ^ (j * 19349663) ^ (k * 83492791);
+  for (let i = 0; i < count; i++) {
+    const k = key(
+      Math.floor(charges.positions[i * 3] / cell),
+      Math.floor(charges.positions[i * 3 + 1] / cell),
+      Math.floor(charges.positions[i * 3 + 2] / cell),
+    );
+    const bucket = buckets.get(k);
+    if (bucket) bucket.push(i);
+    else buckets.set(k, [i]);
+  }
+
+  const cutoffSq = CHARGE_CUTOFF * CHARGE_CUTOFF;
+  for (let v = 0; v < vertices.length; v += ISOSURFACE_STRIDE) {
+    const x = vertices[v], y = vertices[v + 1], z = vertices[v + 2];
+    let potential = 0;
+
+    const gi = Math.floor(x / cell), gj = Math.floor(y / cell), gk = Math.floor(z / cell);
+    for (let di = -1; di <= 1; di++) {
+      for (let dj = -1; dj <= 1; dj++) {
+        for (let dk = -1; dk <= 1; dk++) {
+          const bucket = buckets.get(key(gi + di, gj + dj, gk + dk));
+          if (!bucket) continue;
+          for (const i of bucket) {
+            const dx = charges.positions[i * 3] - x;
+            const dy = charges.positions[i * 3 + 1] - y;
+            const dz = charges.positions[i * 3 + 2] - z;
+            const d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 > cutoffSq) continue;
+            // 332 converts e²/Å to kcal/mol; the 4r dielectric makes it 1/r².
+            potential += (332 * charges.values[i]) / (4 * Math.max(d2, 1));
+          }
+        }
+      }
+    }
+
+    const t = Math.min(Math.max(potential / scale, -1), 1);
+    // Red negative, white neutral, blue positive — the convention everywhere,
+    // and reversing it would be actively misleading.
+    const [r, g, b] = t < 0
+      ? [1, 1 + t * 0.75, 1 + t * 0.85]
+      : [1 - t * 0.85, 1 - t * 0.55, 1];
+    vertices[v + 6] = r;
+    vertices[v + 7] = g;
+    vertices[v + 8] = b;
+  }
 }

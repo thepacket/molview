@@ -102,7 +102,7 @@ interface PaneDocument {
     resolution: number;
     opacity: number;
     wireframe: boolean;
-    colorByAtom: boolean;
+    coloring?: 'atom' | 'coulombic' | 'flat';
     uniformColor: number;
   };
 }
@@ -228,7 +228,7 @@ export function serialiseProject(_options: SerialiseOptions = {}): ProjectDocume
             resolution: slot.surface.resolution,
             opacity: slot.surface.opacity,
             wireframe: slot.surface.wireframe,
-            colorByAtom: slot.surface.colorByAtom,
+            coloring: slot.surface.coloring,
             uniformColor: slot.surface.uniformColor,
           }
         : undefined,

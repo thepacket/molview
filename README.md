@@ -418,6 +418,19 @@ undifferentiated blob. It is a Gaussian surface, not a solvent-excluded one:
 there is no rolling probe, so the re-entrant saddles of a true SES are absent
 and the overall envelope is the same.
 
+**Coulombic colouring.** A molecular surface can be coloured by electrostatic
+potential — red negative, blue positive — from formal charges on the ionisable
+side chains, the termini, the nucleic acid phosphates and the ions, with a
+distance-dependent dielectric. The nucleosome is the check: its histone core
+comes out overwhelmingly blue with the H2A/H2B acidic patch showing as a red
+spot, and the charge model totals −292 for `1KX5`'s DNA, which is exactly its
+292 phosphates, against about +120 for the octamer.
+
+It is called Coulombic rather than "electrostatics" for a reason. There is no
+Poisson-Boltzmann solve, no solvent screening and no ionic strength; it is
+read for gross character — which face is acidic, which groove binds DNA — and
+not for a number.
+
 **Experimental density.** A model is an interpretation of an experiment, and
 MolView will show you the experiment. The Panes tool fetches the deposited map
 for the pane — 2Fo-Fc and Fo-Fc for X-ray entries, the EMDB map for cryo-EM —

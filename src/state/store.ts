@@ -106,8 +106,11 @@ export interface SurfaceState {
   actualResolution: number;
   opacity: number;
   wireframe: boolean;
-  /** Colour by the pane's scheme, or one flat colour for the whole envelope. */
-  colorByAtom: boolean;
+  /**
+   * How the envelope is coloured: by the pane's scheme, by Coulombic
+   * potential, or one flat colour.
+   */
+  coloring: 'atom' | 'coulombic' | 'flat';
   uniformColor: number;
   triangles: number;
 }
@@ -121,7 +124,7 @@ export const DEFAULT_SURFACE: SurfaceState = {
   actualResolution: 0.6,
   opacity: 0.55,
   wireframe: false,
-  colorByAtom: true,
+  coloring: 'atom',
   uniformColor: 0x9fb6d8,
   triangles: 0,
 };

@@ -13,7 +13,13 @@ import { useState } from 'react';
 import { Blend } from 'lucide-react';
 import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
-import { Field, Slider, Toggle } from '../controls';
+import { Field, Segmented, Slider, Toggle } from '../controls';
+
+const COLORINGS = [
+  { value: 'atom' as const, label: 'By atom' },
+  { value: 'coulombic' as const, label: 'Coulombic' },
+  { value: 'flat' as const, label: 'Flat' },
+];
 
 export function SurfaceSection() {
   const activeSlot = useStore((s) => s.activeSlot);
@@ -103,16 +109,27 @@ export function SurfaceSection() {
             checked={s.wireframe}
             onChange={(v) => restyle({ wireframe: v })}
           />
-          <Toggle
-            label="Colour by atom"
-            checked={s.colorByAtom}
-            onChange={(v) => {
-              // The colour is baked into the mesh, so this one has to rebuild.
-              updateSurface(activeSlot, { colorByAtom: v });
-              viewer.showSurface(activeSlot);
-            }}
-            hint="Takes the pane's colour scheme through to the surface, rather than one flat colour"
-          />
+          <Field label="Colour">
+            <Segmented
+              value={s.coloring}
+              options={COLORINGS}
+              onChange={(v) => {
+                // The colour is baked into the mesh, so this one has to rebuild.
+                updateSurface(activeSlot, { coloring: v });
+                viewer.showSurface(activeSlot);
+              }}
+            />
+          </Field>
+          {s.coloring === 'coulombic' && (
+            <p className="panel-note">
+              Coulombic potential from formal charges — ionisable side chains,
+              termini, phosphates and ions — with a distance-dependent
+              dielectric. Red is negative, blue positive. It is not a
+              Poisson-Boltzmann solve: there is no solvent screening and no
+              ionic strength, and it should be read for gross character rather
+              than for a number.
+            </p>
+          )}
 
           <button
             type="button"

@@ -30,7 +30,9 @@ import { orientationFor } from '../gfx/orient';
 import {
   isosurface, levelWithinBudget, nearMask, type IsoMesh,
 } from '../gfx/isosurface';
-import { DEFAULT_SURFACE_OPTIONS, gaussianSurface } from '../gfx/surface';
+import {
+  DEFAULT_SURFACE_OPTIONS, chargesOf, colorSurfaceByPotential, gaussianSurface,
+} from '../gfx/surface';
 import { VDW_RADII } from '../mol/elements';
 import type { VolumeStyle } from '../gfx/engine';
 import { recordTurntable } from './recorder';
@@ -1306,7 +1308,9 @@ export class ViewerController {
         style: {
           // Per-vertex colour is already baked into the mesh; white here lets
           // it through, and a chosen colour multiplies over a white mesh.
-          color: s.colorByAtom
+          // Per-vertex colour is baked into the mesh for both the atom and the
+          // Coulombic modes; only the flat mode tints from the uniform.
+          color: s.coloring !== 'flat'
             ? [1, 1, 1]
             : [
                 ((s.uniformColor >> 16) & 0xff) / 255,
@@ -1363,7 +1367,7 @@ export class ViewerController {
 
     const resolved = this.data[slot].resolved;
     const signature = [
-      s.selection, s.probeRadius, s.resolution, s.colorByAtom,
+      s.selection, s.probeRadius, s.resolution, s.coloring,
       state.colorScheme, state.uniformColor, atoms.length,
       state.components.map((c) => `${c.selection}:${c.style}:${c.colorScheme}`).join(';'),
     ].join('|');
@@ -1385,7 +1389,7 @@ export class ViewerController {
         ...DEFAULT_SURFACE_OPTIONS,
         probeRadius: s.probeRadius,
         resolution: s.resolution,
-        atomColors: s.colorByAtom ? resolved?.atomColor ?? null : null,
+        atomColors: s.coloring === 'atom' ? resolved?.atomColor ?? null : null,
       },
     );
 
@@ -1394,6 +1398,13 @@ export class ViewerController {
       owner: field.owner,
       colors: field.colors,
     });
+
+    // Potential is evaluated per vertex rather than per grid point: a surface
+    // has a few hundred thousand vertices and the grid a few million points,
+    // and only the ones on the surface are ever looked at.
+    if (s.coloring === 'coulombic') {
+      colorSurfaceByPotential(mesh.vertices, chargesOf(structure, atoms));
+    }
 
     this.data[slot].surfaceMesh = mesh;
     this.data[slot].surfaceSignature = signature;

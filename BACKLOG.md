@@ -16,15 +16,6 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
-### Coulombic colouring on the surface
-
-Previously declined as "worse than nothing if presented as the real thing". The
-qualifier is the whole point: ChimeraX ships Coulombic colouring, labels it
-Coulombic, and nobody is misled. With a molecular surface already in place, a
-distance-dependent-dielectric Coulombic potential at each surface vertex is a
-sum over nearby charges — and honest naming does the rest. A Poisson-Boltzmann
-solve remains out of scope.
-
 ### Blocked for now
 
 - **Conservation colouring.** ConSurf-DB has precomputed profiles for most PDB
@@ -44,6 +35,24 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **Coulombic colouring on the surface** — previously declined as "worse than
+  nothing if presented as the real thing", where the qualifier was always the
+  point. It is named Coulombic everywhere, the panel states what it is not, and
+  a Poisson-Boltzmann solve remains out of scope.
+
+  The charge model is deliberately small — ionisable side chains, termini,
+  nucleic acid phosphates, ions — because that is what carries the gross
+  character a Coulombic surface is read for, and a full partial-charge set
+  would put a tenth of an electron on every backbone carbonyl and change the
+  picture very little. Checked by arithmetic rather than by eye: 1KX5's DNA
+  totals -292, exactly its 292 phosphates, against about +120 for the histone
+  octamer, and the surface shows the octamer blue with the H2A/H2B acidic patch
+  as a red spot.
+
+  Potential is evaluated per vertex after meshing rather than per grid point
+  before it: a surface has a few hundred thousand vertices and the grid a few
+  million points, and only the ones on the surface are ever looked at.
 
 - **Morphing between two superposed conformations** — nearly free once the
   superposition kept its alignment. Each aligned residue is translated bodily
