@@ -7,28 +7,99 @@ already exists are documented at the end of [README.md](README.md) instead.
 
 ## Open
 
-Ideas that came up along the way and were deliberately not taken are under "Not
-planned" below; current limitations of what exists are at the end of
-[README.md](README.md).
+The ChimeraX comparison is closed out — what is left of it is at the bottom of
+this section. What follows came from asking a different question: not "what
+does another viewer have" but "what does someone actually want to do with a
+structure now, and can MolView do it". Endpoints below were probed, not
+assumed.
 
-### From the ChimeraX comparison
+Ideas deliberately not taken are under "Not planned"; current limitations of
+what exists are at the end of [README.md](README.md).
 
-Its seven toolbars read against what MolView has, ranked by payoff per unit of
-work rather than by how large the gap is. Mimicry is not the goal — several of
-these are deliberately declined under "Not planned".
+### Predicted structures
+
+**The largest gap by far.** MolView reads the PDB and nothing else, and the PDB
+is now the small half of the structures anyone looks at: AlphaFold DB covers
+over 200 million sequences against the archive's quarter of a million. A viewer
+that cannot open a predicted model is missing most of the field's working
+material.
+
+Everything needed is CORS-enabled and already half-supported:
+
+- `alphafold.ebi.ac.uk/api/prediction/{accession}` returns the metadata and the
+  current file URLs. It takes a UniProt accession only — not a gene name — so a
+  lookup step is needed; `rest.uniprot.org/uniprotkb/search` answers that and is
+  also CORS-open.
+- The model is BinaryCIF, which `bcif.ts` already decodes, so loading is the
+  existing path with a different URL.
+- pLDDT arrives in the B-factor column, which the colour scheme already reads.
+  What is missing is the *bands*: pLDDT is read at 90/70/50, not as a continuous
+  ramp, and colouring it like a B-factor invites exactly the wrong reading of a
+  disordered tail.
+- `-predicted_aligned_error_*.json` is the PAE matrix. This is the piece with no
+  equivalent anywhere else in the app: a heatmap where dragging a block selects
+  those residues in the structure would answer "are these two domains placed
+  relative to each other, or just individually confident" — the question pLDDT
+  cannot answer and everyone gets wrong.
+- `-aa-substitutions.csv` is AlphaMissense: a pathogenicity score for every
+  possible substitution at every position. Averaged per residue it is a colour
+  scheme, and it pairs exactly with the per-residue validation work — one says
+  where a model is uncertain, the other where a mutation would matter.
+
+### Finding related structures from the one on screen
+
+The search panel answers questions you can phrase. These answer questions you
+can only point at, and both are one request to an endpoint already in use:
+
+- **Shape similarity.** RCSB's `structure` search service, `strict_shape_match`
+  against the current entry's assembly. Probed: 4HHB returns 1,705 hits with
+  1COH and 2HHB at the top, which is the right answer.
+- **Sequence similarity.** The `sequence` service, from a chain rather than from
+  typed text — "what else has this fold" without leaving the pane.
+
+### Buried surface area
+
+The interfaces panel counts heavy-atom contacts, and the note in its entry says
+buried surface area "was not attempted; it needs SASA". It does, and SASA is a
+Shrake-Rupley sphere sampling that the neighbour search already built for
+hydrogen bonds makes cheap. ΔSASA is the number papers quote for an interface;
+a contact count is a proxy for it.
+
+### Making a superposition legible
+
+Superposition computes a sequence alignment and then throws it away, reporting
+only an RMSD. Showing the alignment — residue against residue, coloured by the
+per-pair distance after fitting — turns one number into where the two
+structures agree and where they do not, which is the actual finding.
+
+### Pocket detection
+
+Where are the cavities, and how big. A LIGSITE-style scan over the same grid
+the molecular surface already builds: count buried directions per empty grid
+point, cluster the buried ones. Reuses the field machinery wholesale, and
+answers the first question anyone asks of an unfamiliar structure with a
+ligand-shaped hole in it.
+
+### Smaller, worth doing
+
+- **Colour-blind-safe palettes.** The chain palette is a rainbow, which is the
+  single most common accessibility failure in molecular graphics. A toggle
+  swapping in a palette that survives deuteranopia costs a table.
+- **Export the scene as a PyMOL or ChimeraX script.** MolView is not where a
+  figure is finished; a script that reproduces the view where it is finished
+  makes it a useful first step rather than a dead end.
+
+### Left from the ChimeraX comparison
 
 - **Electrostatic colouring.** Needs a charge model and a Poisson-Boltzmann
   solve, or a crude Coulombic approximation that would be worse than nothing if
   presented as the real thing.
-
-Not taken: structure editing and dynamics (bond rotation, swapaa, tug,
-minimize), markers, and the map tab's analysis tools — see "Not planned".
-
-One that would be worth revisiting if the app grows:
-
 - **A real command line** — the ⌘K palette and the selection grammar between
   them cover most of what a command line would, but typed commands compose in a
   way menus cannot.
+
+Not taken: structure editing and dynamics (bond rotation, swapaa, tug,
+minimize), markers, and the map tab's analysis tools — see "Not planned".
 
 ---
 
