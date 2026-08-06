@@ -25,7 +25,6 @@ these are deliberately declined under "Not planned".
 - **Electrostatic colouring.** Needs a charge model and a Poisson-Boltzmann
   solve, or a crude Coulombic approximation that would be worse than nothing if
   presented as the real thing.
-- **Movie recording.** Auto-rotate exists; capturing it does not.
 - **Per-model interactive transforms, settable pivot, draggable labels, a colour
   key.** Small, individually unremarkable, and each one is a real gap.
 
@@ -47,6 +46,14 @@ One that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **Turntable recording** — a pane exported as WebM. Not a screen capture: the
+  camera is stepped as a function of frame number and the recorder is fed one
+  frame per step, so a slow structure produces a slow export and a smooth
+  video rather than a real-time capture of the stutter. Each step sets the pose
+  absolutely from the starting one, so a dropped frame cannot accumulate into
+  drift. WebM only — MP4 needs a shipped encoder and GIF a shipped quantiser,
+  both large additions for a conversion any tool does.
 
 - **A side view, and a rear clipping plane** — the scene drawn edge-on with
   both planes draggable, replacing the front-clipping slider. The widget is

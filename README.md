@@ -262,6 +262,12 @@ the coordinates are not, and neither a solid ribbon nor a bare hole says that.
 The disordered histone tails of `1KX5` are the case to look at. Chains
 can be hidden or focused individually.
 
+**Turntable video.** Any pane records to a WebM clip of one or more full
+revolutions. The camera is driven frame by frame rather than the screen being
+captured in real time, so a structure that renders slowly costs a slow export
+and still produces a smooth turn — and the clip is the length you asked for
+rather than however long the export took.
+
 **Clipping, set by eye.** A front and a rear plane, perpendicular to the view,
 dragged on a small side-on schematic that shows where they sit relative to the
 structure — which is the thing a pair of sliders labelled in Ångströms cannot
@@ -420,6 +426,8 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
   other still blend in the order they were submitted.
 - Molecular surfaces are Gaussian, not solvent-excluded: no rolling probe, so
   no re-entrant saddles.
+- Recording produces WebM, the only format browsers encode natively, and the
+  pane has to stay visible while it runs.
 - Surfaces and density contours are generated on the CPU, so building one costs
   a stall — a fifth of a second for a small protein, a couple of seconds for a
   nucleosome — and it blocks the frame while it runs.

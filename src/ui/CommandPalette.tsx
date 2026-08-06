@@ -125,6 +125,12 @@ export function CommandPalette() {
               Save pane {activeSlot + 1} as PNG
             </Command.Item>
             <Command.Item
+              value="record video movie turntable webm animation"
+              onSelect={() => run(() => store.setPanel('scene'))}
+            >
+              Record pane {activeSlot + 1} as a turntable video…
+            </Command.Item>
+            <Command.Item
               value="molecular surface envelope solvent shape"
               onSelect={() => run(() => {
                 if (store.slots[activeSlot].surface.status === 'ready') {

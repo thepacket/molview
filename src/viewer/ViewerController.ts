@@ -32,6 +32,7 @@ import {
 import { DEFAULT_SURFACE_OPTIONS, gaussianSurface } from '../gfx/surface';
 import { VDW_RADII } from '../mol/elements';
 import type { VolumeStyle } from '../gfx/engine';
+import { recordTurntable } from './recorder';
 import {
   NoVolumeError, fetchVolumes, sampleSigma,
   type Box, type MapKind, type VolumeGrid, type VolumeSet,
@@ -1644,6 +1645,67 @@ export class ViewerController {
       store.setFrameMs(this.frameAccumulator / this.frameSamples);
       this.frameAccumulator = 0;
       this.frameSamples = 0;
+    }
+  }
+
+  /**
+   * Records a pane turning through one or more full revolutions.
+   *
+   * The camera is restored afterwards whatever happens, including on failure:
+   * a recording that leaves the view somewhere else is worse than one that
+   * fails, because the failure is at least visible.
+   */
+  async recordTurntable(
+    slot: number,
+    options: { seconds: number; fps: number; turns: number; maxSize: number },
+    onProgress?: (fraction: number) => void,
+  ): Promise<Blob | null> {
+    const canvas = this.engine.canvasElement;
+    const pane = this.paneElements[slot];
+    const container = this.container;
+    if (!canvas || !pane || !container || !this.data[slot].structure) return null;
+
+    const dpr = this.engine.pixelRatio;
+    const containerRect = container.getBoundingClientRect();
+    const paneRect = pane.getBoundingClientRect();
+    const camera = this.engine.getCamera(slot);
+    const start = camera.getState();
+
+    // Spin would fight the frame-by-frame rotation and make the turn uneven.
+    const wasSpinning = useStore.getState().slots[slot].spinning;
+    if (wasSpinning) useStore.getState().patchSlot(slot, { spinning: false });
+
+    try {
+      return await recordTurntable(
+        {
+          canvas,
+          rect: {
+            x: Math.floor((paneRect.left - containerRect.left) * dpr),
+            y: Math.floor((paneRect.top - containerRect.top) * dpr),
+            width: Math.floor(paneRect.width * dpr),
+            height: Math.floor(paneRect.height * dpr),
+          },
+          step: (turnFraction) => {
+            // Absolute from the starting pose rather than incremental, so a
+            // dropped frame cannot accumulate into a drifting turn.
+            camera.setState(start);
+            camera.rotate(turnFraction * Math.PI * 2, 0);
+            this.dirty = true;
+            this.frame();
+          },
+        },
+        {
+          frames: Math.max(1, Math.round(options.seconds * options.fps)),
+          framesPerSecond: options.fps,
+          turns: options.turns,
+          maxSize: options.maxSize,
+          onProgress,
+        },
+      );
+    } finally {
+      camera.setState(start);
+      if (wasSpinning) useStore.getState().patchSlot(slot, { spinning: true });
+      this.invalidate();
     }
   }
 
