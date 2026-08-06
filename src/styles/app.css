@@ -1208,6 +1208,39 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+/* The dot rides inside the value cell rather than taking a column of its own —
+   the definition panel is narrow, and a third column would push the numbers
+   into wrapping. */
+.vrpt-value {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.vrpt-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.vrpt-dot[data-grade='fair'] { background: var(--warn); }
+.vrpt-dot[data-grade='poor'] { background: var(--error); }
+
+.vrpt-absent {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.vrpt-note {
+  margin-top: 7px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--warn);
+  overflow-wrap: anywhere;
+}
+
 .link {
   color: var(--accent);
   text-decoration: none;

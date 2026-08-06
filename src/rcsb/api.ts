@@ -43,6 +43,24 @@ export interface EntrySummary {
   keywords: string | null;
 }
 
+/**
+ * The wwPDB validation summary, as far as it exists for an entry.
+ *
+ * Geometry is computed from coordinates alone, so every entry in the archive
+ * has it. The data-fit metrics are conditional: `rsrzOutliers` needs deposited
+ * structure factors, which were not required before 2008, and
+ * `emBackboneInclusion` only exists for cryo-EM. A null therefore means "this
+ * could not be measured", never "this is zero" — which is why the panel prints
+ * a reason beside the dash rather than leaving a gap.
+ */
+export interface EntryValidation {
+  clashscore: number | null;
+  ramaOutliers: number | null;
+  rotamerOutliers: number | null;
+  rsrzOutliers: number | null;
+  emBackboneInclusion: number | null;
+}
+
 export interface EntryDetail extends EntrySummary {
   citation: {
     title: string | null;
@@ -54,6 +72,7 @@ export interface EntryDetail extends EntrySummary {
   polymerEntities: PolymerEntity[];
   nonPolymerEntities: NonPolymerEntity[];
   assemblyCount: number;
+  validation: EntryValidation;
 }
 
 interface GraphQLResponse<T> {
@@ -113,6 +132,11 @@ const DETAIL_FIELDS = `
     rcsb_nonpolymer_entity_container_identifiers { auth_asym_ids }
   }
   assemblies { rcsb_id }
+  pdbx_vrpt_summary_geometry {
+    clashscore percent_ramachandran_outliers percent_rotamer_outliers
+  }
+  pdbx_vrpt_summary_diffraction { percent_RSRZ_outliers }
+  pdbx_vrpt_summary_em { atom_inclusion_backbone }
 `;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -198,6 +222,29 @@ export async function fetchEntryDetail(
     polymerEntities,
     nonPolymerEntities,
     assemblyCount: (e.assemblies ?? []).length,
+    validation: toValidation(e),
+  };
+}
+
+/** These come back as single-element lists, but defend against either shape. */
+function one(v: any): any {
+  return Array.isArray(v) ? v[0] ?? null : v ?? null;
+}
+
+function num(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+function toValidation(e: any): EntryValidation {
+  const geometry = one(e.pdbx_vrpt_summary_geometry) ?? {};
+  const diffraction = one(e.pdbx_vrpt_summary_diffraction) ?? {};
+  const em = one(e.pdbx_vrpt_summary_em) ?? {};
+  return {
+    clashscore: num(geometry.clashscore),
+    ramaOutliers: num(geometry.percent_ramachandran_outliers),
+    rotamerOutliers: num(geometry.percent_rotamer_outliers),
+    rsrzOutliers: num(diffraction.percent_RSRZ_outliers),
+    emBackboneInclusion: num(em.atom_inclusion_backbone),
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

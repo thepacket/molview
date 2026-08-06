@@ -10,6 +10,7 @@
 import { ACTION_REFERENCE } from './actionTypes';
 import { responseSchemaForPrompt, structuredOutputsActive } from './openrouter';
 import { COLOR_SCHEME_LABELS } from '../mol/coloring';
+import { validationForPrompt } from '../rcsb/validation';
 import { MolKind } from '../mol/structure';
 import { SELECTION_KEYWORDS } from '../mol/selection';
 import { LAYOUT_SLOT_COUNT, useStore } from '../state/store';
@@ -113,6 +114,11 @@ export function sceneContext(): string {
       method: slot.detail?.method,
       resolution: slot.detail?.resolution,
       atoms: slot.stats?.atoms,
+      // Only when a metric is actually middling or poor, so a sound structure
+      // costs nothing per turn and a weak one cannot be read uncritically.
+      modelQuality: slot.detail
+        ? validationForPrompt(slot.detail.validation, slot.detail.method) ?? undefined
+        : undefined,
       chains: [...chains].map(([id, c]) => `${id}:${c.kind}:${c.residues}`),
       ligands: [...ligands],
       assembly: slot.assemblyId || 'asymmetric unit',

@@ -1,7 +1,9 @@
 /** Molecular definition for the active pane, as returned by the GraphQL API. */
 
+import { Fragment } from 'react';
 import { ExternalLink, FlaskConical, Layers } from 'lucide-react';
 import { RCSB_ENTRY_URL } from '../../rcsb/api';
+import { hasValidation, validationNote, validationRows } from '../../rcsb/validation';
 import { useStore } from '../../state/store';
 import { Chip } from '../controls';
 
@@ -28,6 +30,9 @@ export function EntryPanel() {
       </div>
     );
   }
+
+  const releaseYear = detail.releaseDate ? Number(detail.releaseDate.slice(0, 4)) : null;
+  const note = validationNote(detail.validation, detail.method, releaseYear);
 
   return (
     <>
@@ -75,6 +80,27 @@ export function EntryPanel() {
           )}
         </dl>
       </div>
+
+      {hasValidation(detail.validation) && (
+        <div className="panel-section">
+          <div className="section-label">
+            <span>Validation</span>
+            <span style={{ fontSize: 9.5, color: 'var(--text-faint)' }}>wwPDB</span>
+          </div>
+          <dl className="meta-grid">
+            {validationRows(detail.validation, detail.method).map((row) => (
+              <Fragment key={row.label}>
+                <dt>{row.label}</dt>
+                <dd className="vrpt-value" title={row.absent}>
+                  {row.grade && <i className="vrpt-dot" data-grade={row.grade} />}
+                  {row.value ?? <span className="vrpt-absent">not measured</span>}
+                </dd>
+              </Fragment>
+            ))}
+          </dl>
+          {note && <p className="vrpt-note">{note}</p>}
+        </div>
+      )}
 
       {detail.polymerEntities.length > 0 && (
         <div className="panel-section" style={{ padding: 0 }}>
