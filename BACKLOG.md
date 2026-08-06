@@ -24,7 +24,7 @@ these are deliberately declined under "Not planned".
 
 - **A side view widget.** Setting the clipping plane by eye — the camera and
   its planes drawn edge-on, draggable — rather than by the slider that exists.
-  The orient half of this is done (`pending`).
+  The orient half of this is done (`c08ae3d`).
 - **Electrostatic colouring.** Needs a charge model and a Poisson-Boltzmann
   solve, or a crude Coulombic approximation that would be worse than nothing if
   presented as the real thing.
@@ -59,7 +59,7 @@ Two that would be worth revisiting if the app grows:
 
 ## Done
 
-- **Camera orientation on demand** (`pending`) — O re-orients a pane to its own
+- **Camera orientation on demand** (`c08ae3d`) — O re-orients a pane to its own
   principal axes, the palette offers views down X, Y and Z, and the assistant
   has a `view` action for both. Turning and refitting animate as one movement,
   since snapping then gliding reads as two events.
