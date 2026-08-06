@@ -10,6 +10,7 @@ export const ACTION_TYPES = [
   'component', 'remove-component', 'color', 'assembly',
   'focus', 'reset-view', 'spin', 'lighting', 'background',
   'hbonds', 'interfaces', 'measure', 'superpose', 'overlay', 'ensemble',
+  'nucleotides',
 ] as const;
 
 export type ActionType = (typeof ACTION_TYPES)[number];
@@ -48,5 +49,6 @@ export const ACTION_REFERENCE: { type: ActionType; value: string; note: string }
   { type: 'measure', value: '"distance /A:142@FE /A:87@NE2"', note: 'Measure between atoms. Kind is distance (2 atoms), angle (3) or torsion (4); each atom is a selection matching exactly one atom.' },
   { type: 'superpose', value: '"2 onto 1" or "2 onto 1 chain B onto A"', note: 'Align one pane onto another by sequence, then fit the matched CA atoms.' },
   { type: 'overlay', value: '"2" or "2,3" or "off"', note: "Draw other panes' structures inside the active pane, in their superposed frames." },
+  { type: 'nucleotides', value: '"slab" | "ladder" | "stubs" | "none"', note: 'How nucleic acid bases are drawn inside the cartoon. Ladder joins Watson-Crick partners into one rung. To colour by base, use the color action with the "base" scheme — it is not a style.' },
   { type: 'ensemble', value: '"on" | "off"', note: 'Draw every model of an NMR ensemble at once, or just one.' },
 ];

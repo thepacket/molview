@@ -186,9 +186,9 @@ loading entries, building representations from selections, measuring, colouring,
 switching assemblies, superposing panes. Replies come back as one JSON object
 carrying prose plus a list of actions; each action is re-validated against live
 state before it runs, so a wrong chain id becomes a stated rejection rather than
-a silent no-op. Nineteen action types cover loading, layout, components,
-colour, assemblies, focus, lighting, background, hydrogen bonds, measurement,
-interfaces, superposition, overlay and ensembles. What the actions did comes
+a silent no-op. Twenty action types cover loading, layout, components, colour,
+assemblies, focus, lighting, background, hydrogen bonds, measurement,
+interfaces, nucleotide styles, superposition, overlay and ensembles. What the actions did comes
 back to the model as a RESULTS message, so a search it ran is something it can
 read rather than something it has to guess at, and a rejected chain id is
 something it can correct on the next turn. Every one is a reversible local view

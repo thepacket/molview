@@ -16,7 +16,9 @@ import { Style, makeComponent, STYLE_LABELS } from '../mol/components';
 import { COLOR_SCHEME_LABELS, type ColorScheme } from '../mol/coloring';
 import { evaluateSelection, parseSelection, selectionError } from '../mol/selection';
 import { createMeasurement, describeAtom, type MeasurementKind } from '../mol/measure';
-import { findInterfaces } from '../mol/interfaces';
+import { findInterfaces, interfaceSelection } from '../mol/interfaces';
+import { MolKind } from '../mol/structure';
+import type { NucleotideStyle } from '../gfx/geometry';
 import { LAYOUT_SLOT_COUNT, useStore, type LayoutMode } from '../state/store';
 import { viewer } from '../viewer/ViewerController';
 
@@ -145,7 +147,14 @@ export async function applyAction(action: Action): Promise<string> {
       }
       const [name, selection, styleName, colorName] = parts;
       const style = STYLE_BY_NAME[styleName.toLowerCase()];
-      if (style === undefined) return reject(`unknown style "${styleName}"`);
+      if (style === undefined) {
+        return reject(
+          `unknown style "${styleName}" — use one of `
+          + `${Object.values(STYLE_LABELS).join(', ')}. `
+          + 'For nucleotide bases use the nucleotides action, and for colouring '
+          + 'name a colour scheme in the fourth field instead.',
+        );
+      }
 
       const problem = selectionError(selection);
       if (problem) return reject(`selection "${selection}" is invalid (${problem})`);
@@ -261,6 +270,24 @@ export async function applyAction(action: Action): Promise<string> {
       return on ? `Showing ${count.toLocaleString()} hydrogen bonds.` : 'Hydrogen bonds hidden.';
     }
 
+    case 'nucleotides': {
+      const styles = ['slab', 'ladder', 'stubs', 'none'] as const;
+      const want = (value ?? '').trim().toLowerCase();
+      if (!(styles as readonly string[]).includes(want)) {
+        return reject(`nucleotide style must be one of ${styles.join(', ')}`);
+      }
+      const slot = store.activeSlot;
+      const structure = viewer.getStructure(slot);
+      if (!structure) return reject(`pane ${slot + 1} has no structure`);
+      let hasNucleic = false;
+      for (let c = 0; c < structure.chainCount; c++) {
+        if (structure.chainKind[c] === MolKind.Nucleic) { hasNucleic = true; break; }
+      }
+      if (!hasNucleic) return reject('this structure has no nucleic acid');
+      store.updateRepresentation(slot, { nucleotideStyle: want as NucleotideStyle });
+      return `Nucleotide bases drawn as ${want}.`;
+    }
+
     case 'interfaces': {
       const slot = store.activeSlot;
       const structure = viewer.getStructure(slot);
@@ -276,14 +303,27 @@ export async function applyAction(action: Action): Promise<string> {
       const raw = (value ?? '').trim();
       const limitMatch = /^top\s+(\d+)$/i.exec(raw);
       const limit = limitMatch ? Math.min(20, Number(limitMatch[1])) : 8;
-      const chainFilter = limitMatch ? '' : raw;
 
-      const matching = chainFilter
-        ? all.filter((i) => i.chainA === chainFilter || i.chainB === chainFilter)
-        : all;
-      if (matching.length === 0) {
-        return reject(`chain ${chainFilter} touches nothing, or is not a chain here`);
+      // "A", "A,B", "A B" and "A-B" are all natural ways to ask, and a pair is
+      // the commonest: the answer to "show me the A-B interface" is one entry
+      // plus the selection that draws it.
+      const parts = limitMatch ? [] : raw.split(/[\s,;-]+/).filter(Boolean);
+      const [wantA, wantB] = parts;
+
+      let matching = all;
+      if (wantA && wantB) {
+        matching = all.filter((i) => (i.chainA === wantA && i.chainB === wantB)
+          || (i.chainA === wantB && i.chainB === wantA));
+        if (matching.length === 0) {
+          return reject(`chains ${wantA} and ${wantB} do not touch`);
+        }
+      } else if (wantA) {
+        matching = all.filter((i) => i.chainA === wantA || i.chainB === wantA);
+        if (matching.length === 0) {
+          return reject(`chain ${wantA} touches nothing, or is not a chain here`);
+        }
       }
+      const chainFilter = parts.join(' and ');
 
       const lines = matching.slice(0, limit).map((i) => {
         const partner = i.copyB === undefined ? i.chainB : `${i.chainB} (copy ${i.copyB})`;
@@ -292,8 +332,16 @@ export async function applyAction(action: Action): Promise<string> {
       const more = matching.length > lines.length
         ? ` (${matching.length - lines.length} weaker pairs omitted)`
         : '';
-      return `Contacts by chain pair${chainFilter ? ` for chain ${chainFilter}` : ''}: `
-        + `${lines.join('; ')}${more}.`;
+
+      // A named pair is nearly always a prelude to drawing it, so hand back the
+      // selection rather than making the model reconstruct residue lists it has
+      // not been shown. Without this it invents one, and invents it wrong.
+      const draw = wantA && wantB && matching.length === 1
+        ? ` To draw it, use this selection: ${interfaceSelection(matching[0])}`
+        : '';
+
+      return `Contacts by chain pair${chainFilter ? ` for ${chainFilter}` : ''}: `
+        + `${lines.join('; ')}${more}.${draw}`;
     }
 
     case 'measure': {

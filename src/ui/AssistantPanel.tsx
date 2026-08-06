@@ -261,7 +261,9 @@ export function AssistantPanel() {
       if (!isFollowUp && answered) {
         await runTurn(
           'Those are the results of what you just ran. Answer the question from '
-          + 'them, briefly, without running anything else.',
+          + 'them, briefly. If the request needed those results before it could '
+          + 'be carried out — drawing what a search found, for instance — do that '
+          + 'now. Do not run the same search again.',
           true,
         );
       }
