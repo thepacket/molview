@@ -553,6 +553,8 @@ const PURINE_RING = ['N9', 'C8', 'N7', 'C5', 'C6', 'N1', 'C2', 'N3', 'C4'];
 const PYRIMIDINE_RING = ['N1', 'C2', 'N3', 'C4', 'C5', 'C6'];
 const SLAB_HALF_THICKNESS = 0.2;
 const STUB_RADIUS = 0.22;
+/** Thinner than a stub: it only has to bridge C1' to the ring. */
+const SLAB_STUB_RADIUS = 0.15;
 const LADDER_RADIUS = 0.28;
 /** Watson-Crick N1(purine)–N3(pyrimidine) hydrogen bond, generously bounded. */
 const PAIR_MAX = 3.5;
@@ -563,8 +565,12 @@ interface BaseFrame {
   /** Ring atom the sugar hangs off: N9 for purines, N1 for pyrimidines. */
   attach: number;
   attachPos: [number, number, number];
-  /** Where a rod should start — the sugar C1' when present. */
-  sugar: [number, number, number];
+  /**
+   * Where a rod should start. The cartoon spline runs through C4', so a rod
+   * from anywhere else — C1' included, 2.3 A away — emerges outside a tube only
+   * 0.62 A thick and the base looks detached.
+   */
+  backbone: [number, number, number];
   centre: [number, number, number];
   normal: [number, number, number];
   u: [number, number, number];
@@ -621,7 +627,10 @@ function baseFrame(s: Structure, residue: number): BaseFrame | null {
   ux /= ulen; uy /= ulen; uz /= ulen;
 
   const attach = byName.get(purine ? 'N9' : 'N1') ?? ring[0];
-  const sugarAtom = byName.get("C1'") ?? byName.get('C1*') ?? attach;
+  const anchor = s.resAnchor[residue];
+  const backboneAtom = anchor >= 0
+    ? anchor
+    : byName.get("C1'") ?? byName.get('C1*') ?? attach;
   const pairAtom = byName.get(purine ? 'N1' : 'N3') ?? null;
 
   return {
@@ -629,7 +638,7 @@ function baseFrame(s: Structure, residue: number): BaseFrame | null {
     purine,
     attach,
     attachPos: [s.x[attach], s.y[attach], s.z[attach]],
-    sugar: [s.x[sugarAtom], s.y[sugarAtom], s.z[sugarAtom]],
+    backbone: [s.x[backboneAtom], s.y[backboneAtom], s.z[backboneAtom]],
     centre: [cx, cy, cz],
     normal: [nx, ny, nz],
     u: [ux, uy, uz],
@@ -785,83 +794,52 @@ function addLadder(
     const f = frames.get(r)!;
     const g = frames.get(other)!;
     const mid: [number, number, number] = [
-      (f.sugar[0] + g.sugar[0]) / 2,
-      (f.sugar[1] + g.sugar[1]) / 2,
-      (f.sugar[2] + g.sugar[2]) / 2,
+      (f.backbone[0] + g.backbone[0]) / 2,
+      (f.backbone[1] + g.backbone[1]) / 2,
+      (f.backbone[2] + g.backbone[2]) / 2,
     ];
     // Two halves rather than one rod, so each base keeps its own colour.
-    addRod(vertices, indices, f.sugar, mid, LADDER_RADIUS,
+    addRod(vertices, indices, f.backbone, mid, LADDER_RADIUS,
       atomColor[f.attach] || 0xffffff);
-    addRod(vertices, indices, g.sugar, mid, LADDER_RADIUS,
+    addRod(vertices, indices, g.backbone, mid, LADDER_RADIUS,
       atomColor[g.attach] || 0xffffff);
   }
 
   for (const [r, f] of frames) {
     if (paired.has(r)) continue;
-    addRod(vertices, indices, f.sugar, f.centre, STUB_RADIUS,
+    addRod(vertices, indices, f.backbone, f.centre, STUB_RADIUS,
       atomColor[f.attach] || 0xffffff);
   }
 }
 
 
 /**
- * A flat box covering the base ring, plus a stub joining it to the sugar.
- * The box is fitted in the ring's own plane rather than assumed, so modified
- * and non-planar bases still get a sensible slab.
+ * A flat box in the base's own ring plane, joined to the sugar by a short rod.
+ *
+ * The rod is not decoration: without it the slab hangs in space a bond's length
+ * from the backbone tube, and a nucleosome renders as confetti round a ribbon
+ * rather than as DNA. It was described here from the start and never emitted.
  */
 function addBaseSlab(
   vertices: number[], indices: number[],
   s: Structure, residue: number, atomColor: Uint32Array,
 ): void {
-  const start = s.resAtomStart[residue];
-  const end = s.resAtomStart[residue + 1];
+  const f = baseFrame(s, residue);
+  if (!f) return;
 
-  const byName = new Map<string, number>();
-  for (let a = start; a < end; a++) byName.set(atomNameOf(s, a).toUpperCase(), a);
+  const { ring, attach } = f;
+  const [cx, cy, cz] = f.centre;
+  const [nx, ny, nz] = f.normal;
+  const [ux, uy, uz] = f.u;
+  const [vx, vy, vz] = f.v;
 
-  const purine = byName.has('N9');
-  const ringNames = purine ? PURINE_RING : PYRIMIDINE_RING;
-  const ring: number[] = [];
-  for (const name of ringNames) {
-    const a = byName.get(name);
-    if (a !== undefined) ring.push(a);
-  }
-  if (ring.length < 4) return;
+  const color = atomColor[attach] || atomColor[ring[0]];
 
-  // Newell's method: a plane normal that tolerates a slightly puckered ring.
-  let nx = 0, ny = 0, nz = 0;
-  let cx = 0, cy = 0, cz = 0;
-  for (let i = 0; i < ring.length; i++) {
-    const a = ring[i];
-    const b = ring[(i + 1) % ring.length];
-    nx += (s.y[a] - s.y[b]) * (s.z[a] + s.z[b]);
-    ny += (s.z[a] - s.z[b]) * (s.x[a] + s.x[b]);
-    nz += (s.x[a] - s.x[b]) * (s.y[a] + s.y[b]);
-    cx += s.x[a]; cy += s.y[a]; cz += s.z[a];
-  }
-  const nlen = Math.hypot(nx, ny, nz);
-  if (nlen < 1e-5) return;
-  nx /= nlen; ny /= nlen; nz /= nlen;
-  cx /= ring.length; cy /= ring.length; cz /= ring.length;
-
-  // In-plane frame, seeded from the first ring bond.
-  let ux = s.x[ring[1]] - s.x[ring[0]];
-  let uy = s.y[ring[1]] - s.y[ring[0]];
-  let uz = s.z[ring[1]] - s.z[ring[0]];
-  const dotU = ux * nx + uy * ny + uz * nz;
-  ux -= nx * dotU; uy -= ny * dotU; uz -= nz * dotU;
-  const ulen = Math.hypot(ux, uy, uz);
-  if (ulen < 1e-5) return;
-  ux /= ulen; uy /= ulen; uz /= ulen;
-
-  const vx = ny * uz - nz * uy;
-  const vy = nz * ux - nx * uz;
-  const vz = nx * uy - ny * ux;
+  // Joins the ring to the sugar it hangs off.
+  addRod(vertices, indices, f.backbone, f.attachPos, SLAB_STUB_RADIUS, color);
 
   // Fit the box to the ring's extent in that frame.
   let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
-  const anchorName = purine ? 'N9' : 'N1';
-  const attach = byName.get(anchorName) ?? ring[0];
   const consider = (a: number) => {
     const dx = s.x[a] - cx, dy = s.y[a] - cy, dz = s.z[a] - cz;
     const du = dx * ux + dy * uy + dz * uz;
@@ -875,7 +853,6 @@ function addBaseSlab(
   const pad = 0.35;
   minU -= pad; maxU += pad; minV -= pad; maxV += pad;
 
-  const color = atomColor[attach] || atomColor[ring[0]];
   const cr = ((color >> 16) & 0xff) / 255;
   const cg = ((color >> 8) & 0xff) / 255;
   const cb = (color & 0xff) / 255;
