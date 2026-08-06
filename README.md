@@ -168,9 +168,16 @@ finds 33 lattice contacts on top of the 28 within its asymmetric unit. The far
 side of such an interface is a matrix rather than a chain in the file, so only
 the near side can be selected, and the panel says which side it is reporting.
 
-It is proximity, not buried surface area — it says where to look, not how
-tightly anything binds. A 237k-atom ribosome takes about 300 ms and finds 244
-pairs.
+Each pair also carries the area it buries — Shrake-Rupley SASA of the two
+chains apart and together, reported as interface area (half the total change,
+the convention PISA uses). Contacts rank the pairs; the area is what a paper
+quotes, and the two disagree more often than you would expect, because a flat
+patch and a knob in a socket can touch equally and bury very differently.
+Haemoglobin comes out at 816–831 Å² for α1β1, 663–668 for α1β2 and 266 for
+α1α2, against PISA's 830–870, and the whole tetramer's surface at 24,713 Å²
+against a literature ~25,000. It is still a geometric criterion, not an
+energetic one. A 237k-atom ribosome finds 244 pairs in about 300 ms; areas are
+computed only for the pairs actually reported, since each is four SASA passes.
 
 **Overlay.** A pane can draw other panes' structures inside it, each keeping its
 own superposition, so two folds land on top of each other in one viewport
@@ -501,9 +508,10 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
 - A density map's opening contour is chosen against a triangle budget rather
   than fixed, so a map never arrives half-drawn; the level it settles on is the
   one the panel reports, and it is never lower than the one asked for.
-- Chain contacts are proximity, not buried surface area, and symmetry contacts
-  are found only around the deposited copy — enough to see every distinct
-  interface in a symmetric assembly, not a per-copy census.
+- Symmetry contacts are found only around the deposited copy — enough to see
+  every distinct interface in a symmetric assembly, not a per-copy census — and
+  they carry no buried area, because the second half of such an interface is a
+  matrix rather than atoms in the file.
 - The assistant is only as good as the model behind it. Models that cannot be
   held to the reply schema mostly cope, since the shape is described in the
   prompt and fenced JSON is unwrapped, but a small one will emit prose where an

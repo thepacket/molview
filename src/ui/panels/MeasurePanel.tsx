@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { Crosshair, Layers, Ruler, Trash2, Triangle, Waypoints } from 'lucide-react';
 import { describeAtom, type MeasurementKind } from '../../mol/measure';
-import { findInterfaces, interfaceSelection, type ChainInterface } from '../../mol/interfaces';
+import {
+  findInterfaces, interfaceSelection, measureInterfaceAreas, type ChainInterface,
+} from '../../mol/interfaces';
 import { makeComponent, Style } from '../../mol/components';
 import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
@@ -165,7 +167,12 @@ function InterfaceSection({ slot }: { slot: number }) {
     // Yield first: on a large assembly this takes long enough to drop a frame,
     // and a button that looks stuck is worse than one that says it is working.
     window.setTimeout(() => {
-      setList(findInterfaces(structure, { assembly }));
+      const found = findInterfaces(structure, { assembly });
+      // Areas for the ones that will actually be shown. Measuring all of them
+      // on a capsid would be a hundred SASA passes for a list nobody reads
+      // past the top of.
+      measureInterfaceAreas(structure, found.slice(0, 12));
+      setList(found);
       setBusy(false);
     }, 0);
   };
@@ -195,8 +202,11 @@ function InterfaceSection({ slot }: { slot: number }) {
             <Layers size={12} /> {busy ? 'Searching…' : 'Find chain contacts'}
           </button>
           <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
-            Heavy atoms within 4 Å, grouped by chain pair. Proximity, not buried
-            area — it says where to look, not how tightly anything binds.
+            Heavy atoms within 4 Å, grouped by chain pair, with the area each
+            one buries. Contacts rank them; the area is what a paper quotes,
+            and the two disagree more often than you would think — a flat patch
+            and a knob in a socket can touch equally and bury three times as
+            differently.
             {assembly
               ? ' Contacts with symmetry copies are included; only the deposited'
                 + ' side of those can be selected, since the other side is a matrix.'
@@ -248,6 +258,7 @@ function InterfaceSection({ slot }: { slot: number }) {
                 </Tip>
               </div>
               <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text-faint)' }}>
+                {entry.area != null && `${Math.round(entry.area).toLocaleString()} Å² · `}
                 {entry.contacts.toLocaleString()} contacts · {entry.polar} polar ·{' '}
                 {entry.copyB === undefined
                   ? `${entry.residuesA.length}+${entry.residuesB.length} residues`

@@ -16,7 +16,9 @@ import { Style, makeComponent, STYLE_LABELS } from '../mol/components';
 import { COLOR_SCHEME_LABELS, type ColorScheme } from '../mol/coloring';
 import { evaluateSelection, parseSelection, selectionError } from '../mol/selection';
 import { createMeasurement, describeAtom, type MeasurementKind } from '../mol/measure';
-import { findInterfaces, interfaceSelection } from '../mol/interfaces';
+import {
+  findInterfaces, interfaceSelection, measureInterfaceAreas,
+} from '../mol/interfaces';
 import { searchUniProt } from '../rcsb/alphafold';
 import { MolKind } from '../mol/structure';
 import type { NucleotideStyle } from '../gfx/geometry';
@@ -570,12 +572,20 @@ export async function applyAction(action: Action): Promise<string> {
       }
       const chainFilter = parts.join(' and ');
 
-      const lines = matching.slice(0, limit).map((i) => {
+      // Areas only for what is being reported: it is four SASA passes per pair,
+      // and a capsid's full list would be a hundred of them for lines nobody
+      // reads.
+      const reported = matching.slice(0, limit);
+      measureInterfaceAreas(structure, reported);
+
+      const lines = reported.map((i) => {
         const partner = i.copyB === undefined ? i.chainB : `${i.chainB} (copy ${i.copyB})`;
-        return `${i.chainA}-${partner}: ${i.contacts} contacts, ${i.polar} polar`;
+        const area = i.area != null ? `, buries ${Math.round(i.area)} A2` : '';
+        return `${i.chainA}-${partner}: ${i.contacts} contacts, ${i.polar} polar${area}`;
       });
       const more = matching.length > lines.length
-        ? ` (${matching.length - lines.length} weaker pairs omitted)`
+        ? ` (${matching.length - lines.length} weaker `
+          + `pair${matching.length - lines.length === 1 ? '' : 's'} omitted)`
         : '';
 
       // A named pair is nearly always a prelude to drawing it, so hand back the

@@ -9,12 +9,14 @@
  *
  * Contacts are geometric — heavy atoms within a cutoff — which is the same
  * standard the hydrogen-bond search uses and the same caveat applies: it is a
- * proximity criterion, not an energetic one, and it does not compute buried
- * surface area. It tells you where to look.
+ * proximity criterion, not an energetic one. Buried area, which is the number
+ * papers quote, is computed separately and on demand: it costs a SASA
+ * calculation per pair, and a contact count is enough to rank them first.
  */
 
 import type { Assembly } from './assembly';
 import { MolKind, type Structure } from './structure';
+import { chainAtoms, interfaceArea } from './sasa';
 
 export interface ChainInterface {
   /** Auth chain ids, ordered so the pair reads the same way every time. */
@@ -33,6 +35,12 @@ export interface ChainInterface {
   residuesB: number[];
   /** Hydrogen-bond-range contacts, a crude polar/apolar hint. */
   polar: number;
+  /**
+   * Buried area in Å², computed on demand. Null until asked for, and null
+   * forever for a symmetry pair — the second half of that interface is not in
+   * the file, so there is nothing to compute an area against.
+   */
+  area?: number | null;
 }
 
 export interface InterfaceOptions {
@@ -319,6 +327,33 @@ function symmetryContacts(
  * Runs of consecutive residues collapse to ranges, because an interface is
  * usually a few loops and the expanded form would be a hundred numbers long.
  */
+/**
+ * Fills in the buried area for interfaces that have one, in place.
+ *
+ * Separate from finding them because it is the expensive half: four SASA
+ * passes per pair, against a contact count that is a single neighbour sweep
+ * for all pairs at once. Ranking by contacts and then measuring the ones you
+ * are going to look at is the right order.
+ */
+export function measureInterfaceAreas(
+  s: Structure, entries: ChainInterface[], mask?: Uint8Array | null,
+): void {
+  const chains = new Map<string, Uint8Array>();
+  const atomsOf = (id: string) => {
+    let set = chains.get(id);
+    if (!set) {
+      set = chainAtoms(s, id, mask);
+      chains.set(id, set);
+    }
+    return set;
+  };
+
+  for (const entry of entries) {
+    if (entry.copyB !== undefined) { entry.area = null; continue; }
+    entry.area = interfaceArea(s, atomsOf(entry.chainA), atomsOf(entry.chainB));
+  }
+}
+
 export function interfaceSelection(entry: ChainInterface): string {
   // Only the deposited side of a symmetry interface exists to be selected.
   if (entry.copyB !== undefined) return side(entry.chainA, entry.residuesA);
