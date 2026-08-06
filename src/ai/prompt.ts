@@ -136,6 +136,9 @@ export function sceneContext(): string {
       overlaying: slot.overlaySlots.map((s) => s + 1),
       // Only when a map is up: the absence of the key is what tells the model
       // there is none, and it can ask for one with the density action.
+      surface: slot.surface.status === 'ready'
+        ? slot.surface.selection || 'everything drawn'
+        : undefined,
       density: slot.density.status === 'ready'
         ? `${slot.density.source} at ${slot.density.level} sigma`
           + `${slot.density.showDifference ? ', Fo-Fc shown' : ''}`

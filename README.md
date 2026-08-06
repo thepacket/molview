@@ -263,6 +263,14 @@ The disordered histone tails of `1KX5` are the case to look at. Chains
 can be hidden or focused individually. A front clipping plane slices into the
 interior of large assemblies.
 
+**Molecular surfaces.** The envelope a molecule presents to the solvent, as a
+Gaussian surface over the atoms currently drawn or over any selection, blended
+so the cartoon stays visible through it. It carries the pane's colour scheme, so
+a haemoglobin surface shows where its four subunits meet rather than being one
+undifferentiated blob. It is a Gaussian surface, not a solvent-excluded one:
+there is no rolling probe, so the re-entrant saddles of a true SES are absent
+and the overall envelope is the same.
+
 **Experimental density.** A model is an interpretation of an experiment, and
 MolView will show you the experiment. The Panes tool fetches the deposited map
 for the pane — 2Fo-Fc and Fo-Fc for X-ray entries, the EMDB map for cryo-EM —
@@ -400,15 +408,18 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
 - A pane opened from a local file has no id to refetch, so a project must embed
   its bytes to restore it. That is an opt-in, capped at 25 MB per file, and
   never included in a shareable link.
-- There is no molecular surface representation yet. Transparency now exists —
-  the density isosurface is drawn in a forward pass blended over the deferred
-  resolve — but it is unsorted, so two transparent sheets in front of each other
-  blend in draw order rather than in depth order.
-- Density surfaces are generated on the CPU, so moving a contour costs a stall
-  of a tenth of a second on a small X-ray map and about a second on a large
-  cryo-EM one. The opening contour is chosen against a triangle budget rather
-  than fixed, so a map never arrives half-drawn, and the level it settles on is
-  the one the panel reports.
+- Transparency is not depth-sorted. Isosurfaces are drawn back faces first and
+  then front faces, which is the right order for one closed surface and enough
+  for almost everything; two separate transparent surfaces in front of each
+  other still blend in the order they were submitted.
+- Molecular surfaces are Gaussian, not solvent-excluded: no rolling probe, so
+  no re-entrant saddles.
+- Surfaces and density contours are generated on the CPU, so building one costs
+  a stall — a fifth of a second for a small protein, a couple of seconds for a
+  nucleosome — and it blocks the frame while it runs.
+- A density map's opening contour is chosen against a triangle budget rather
+  than fixed, so a map never arrives half-drawn; the level it settles on is the
+  one the panel reports, and it is never lower than the one asked for.
 - Chain contacts are proximity, not buried surface area, and symmetry contacts
   are found only around the deposited copy — enough to see every distinct
   interface in a symmetric assembly, not a per-copy census.

@@ -94,6 +94,16 @@ interface PaneDocument {
     opacity: number;
     radius: number;
   };
+  /** Surface settings, when one was built. The mesh is regenerated on restore. */
+  surface?: {
+    selection: string;
+    probeRadius: number;
+    resolution: number;
+    opacity: number;
+    wireframe: boolean;
+    colorByAtom: boolean;
+    uniformColor: number;
+  };
 }
 
 export interface ProjectDocument {
@@ -207,6 +217,17 @@ export function serialiseProject(_options: SerialiseOptions = {}): ProjectDocume
             wireframe: slot.density.wireframe,
             opacity: slot.density.opacity,
             radius: slot.density.radius,
+          }
+        : undefined,
+      surface: slot.surface.status === 'ready'
+        ? {
+            selection: slot.surface.selection,
+            probeRadius: slot.surface.probeRadius,
+            resolution: slot.surface.resolution,
+            opacity: slot.surface.opacity,
+            wireframe: slot.surface.wireframe,
+            colorByAtom: slot.surface.colorByAtom,
+            uniformColor: slot.surface.uniformColor,
           }
         : undefined,
     });
@@ -394,6 +415,10 @@ export async function restoreProject(doc: ProjectDocument): Promise<RestoreRepor
       // panes would otherwise open one map at a time.
       useStore.getState().updateDensity(i, { ...pane.density });
       void viewer.showDensity(i);
+    }
+    if (pane.surface) {
+      useStore.getState().updateSurface(i, { ...pane.surface });
+      viewer.showSurface(i);
     }
     viewer.refreshOverlay(i);
 

@@ -31,6 +31,7 @@ these are deliberately declined under "Not planned".
 - **Movie recording.** Auto-rotate exists; capturing it does not.
 - **Per-model interactive transforms, settable pivot, draggable labels, a colour
   key.** Small, individually unremarkable, and each one is a real gap.
+
 Not taken: structure editing and dynamics (bond rotation, swapaa, tug,
 minimize), markers, and the map tab's analysis tools — see "Not planned".
 
@@ -39,11 +40,6 @@ Ideas that surfaced while building the assistant:
 - **A confirmation mode for actions.** Everything the assistant can do is a
   reversible view change, so it runs directly; a toggle for people who want to
   approve each one would be cheap.
-
-- **Molecular surfaces.** A Gaussian or solvent-excluded surface, reusing the
-  marching cubes and the forward transparent pass the density work added. What
-  is left is generating the field: a Gaussian sum over atoms on a grid, which is
-  the same shape of problem as `nearMask` already solves.
 
 One that would be worth revisiting if the app grows:
 
@@ -54,6 +50,28 @@ One that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **Molecular surfaces** — a Gaussian surface over the drawn atoms or any
+  selection, coloured by the pane's scheme so subunit boundaries show on the
+  envelope. It reuses the density work wholesale: the field is emitted as a
+  `VolumeGrid` with mean 0 and sigma 1, so the same marching cubes, wireframe,
+  transparency and budget code contour it with nothing added.
+
+  The two things that made it look right rather than merely exist:
+
+  - **Per-vertex colour, blended along the cut edge.** Whichever atom dominates
+    the field at each grid point is recorded during accumulation, which is free,
+    and the surface takes its colour from there. A flat surface says nothing
+    about the molecule under it.
+  - **Silhouette weighting had to become a per-style number.** The rim-opaque
+    look that makes a density contour read as a boundary rather than as fog
+    turns a molecular surface into lace, because that surface is all bumps and
+    every bump has a rim.
+
+  Transparency is now drawn back faces then front faces, which needed the
+  marching cubes to wind consistently — each triangle is turned to agree with
+  its own vertex normals as it is emitted, one dot product, and the derived
+  table still never reasons about orientation.
 
 - **Density maps** — the deposited experimental density, fetched from RCSB's
   VolumeServer and contoured with marching cubes.
@@ -160,6 +178,7 @@ Modeller, dockprep, mutation, docking — these need scientific backends there i
 no case for reimplementing. VR. And the full ChimeraX command surface: hundreds
 of commands built over decades, and chasing it is mimicry rather than design.
 
-Molecular surfaces (SES/Gaussian) are genuinely wanted, and the blocker is now
-gone: the density work added the forward blended pass they were waiting on, so
-they have moved to "Open" above.
+A true solvent-excluded surface. The Gaussian surface that exists answers the
+question people ask a surface — what shape does this present to the world — and
+a rolling-probe SES would add re-entrant saddles at the cost of a much more
+delicate algorithm.

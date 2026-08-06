@@ -125,6 +125,21 @@ export function CommandPalette() {
               Save pane {activeSlot + 1} as PNG
             </Command.Item>
             <Command.Item
+              value="molecular surface envelope solvent shape"
+              onSelect={() => run(() => {
+                if (store.slots[activeSlot].surface.status === 'ready') {
+                  viewer.hideSurface(activeSlot);
+                } else {
+                  store.setPanel('scene');
+                  viewer.showSurface(activeSlot);
+                }
+              })}
+            >
+              {store.slots[activeSlot].surface.status === 'ready'
+                ? 'Remove the molecular surface'
+                : 'Build a molecular surface'}
+            </Command.Item>
+            <Command.Item
               value="density map electron microscopy experimental evidence"
               onSelect={() => run(() => {
                 if (store.slots[activeSlot].density.status === 'ready') {

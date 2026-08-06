@@ -17,16 +17,17 @@
  *   face cuts off one *outside* corner. It depends only on the in/out pattern
  *   of the four shared corners, so the two cubes meeting at that face always
  *   agree, and the mesh cannot crack.
- * - **Winding does not matter.** Normals come from the field gradient, which is
- *   both smoother than a face normal and independent of triangle order, so the
- *   surface is drawn without back-face culling and the derivation never has to
- *   reason about orientation.
+ * - **The derivation never reasons about orientation.** Normals come from the
+ *   field gradient, which is smoother than a face normal and independent of
+ *   triangle order. Each triangle is then turned to agree with its own vertex
+ *   normals as it is emitted, which is one dot product and gets consistent
+ *   outward winding without the table having to encode it.
  */
 
 import type { VolumeGrid } from '../rcsb/volume';
 
 export interface IsoMesh {
-  /** Interleaved position (3) + normal (3). */
+  /** Interleaved position (3) + normal (3) + colour (3). */
   vertices: Float32Array;
   triangles: Uint32Array;
   /** Deduplicated triangle edges, for the wireframe presentation. */
@@ -37,7 +38,16 @@ export interface IsoMesh {
   truncated: boolean;
 }
 
-export const ISOSURFACE_STRIDE = 6;
+/**
+ * Position, normal, colour.
+ *
+ * A density contour is one colour throughout and carries white here, letting
+ * the shader tint by the style uniform. A molecular surface is not: it has to
+ * be coloured by the atom under it or it says nothing about the molecule, and
+ * that colour cannot live in a uniform. Paying three floats a vertex on the
+ * density path keeps one pipeline instead of two.
+ */
+export const ISOSURFACE_STRIDE = 9;
 
 // Cube corners, in the conventional marching-cubes order.
 const CORNER: readonly (readonly [number, number, number])[] = [
@@ -152,6 +162,13 @@ export interface IsoOptions {
   mask?: Uint8Array | null;
   /** Stop after this many triangles rather than exhaust memory. */
   maxTriangles?: number;
+  /**
+   * Which atom dominates the field at each grid point, and the colour table it
+   * indexes (three floats per atom). Given together or not at all; without them
+   * the surface comes out white and is tinted by the style uniform.
+   */
+  owner?: Int32Array | null;
+  colors?: Float32Array | null;
 }
 
 export const DEFAULT_MAX_TRIANGLES = 900_000;
@@ -222,6 +239,8 @@ export function isosurface(grid: VolumeGrid, options: IsoOptions): IsoMesh {
   const values = grid.values;
   const maxTriangles = options.maxTriangles ?? DEFAULT_MAX_TRIANGLES;
   const mask = options.mask ?? null;
+  const owner = options.owner ?? null;
+  const colors = options.colors ?? null;
 
   // Vertex per cut edge, shared between the cubes that meet on it. Without
   // this the wireframe draws every interior edge four times and the buffers
@@ -279,6 +298,23 @@ export function isosurface(grid: VolumeGrid, options: IsoOptions): IsoMesh {
     const dv = -(gA[1] + (gB[1] - gA[1]) * t);
     const dw = -(gA[2] + (gB[2] - gA[2]) * t);
 
+    // Colour comes from the atom dominating the field at each end, blended
+    // along the edge, so a chain boundary crossing the surface fades rather
+    // than staircases along the grid.
+    let cr = 1, cg = 1, cb2 = 1;
+    if (owner && colors) {
+      const oa = owner[ai + nx * (aj + ny * ak)];
+      const ob = owner[bi + nx * (bj + ny * bk)];
+      if (oa >= 0 && ob >= 0) {
+        cr = colors[oa * 3] + (colors[ob * 3] - colors[oa * 3]) * t;
+        cg = colors[oa * 3 + 1] + (colors[ob * 3 + 1] - colors[oa * 3 + 1]) * t;
+        cb2 = colors[oa * 3 + 2] + (colors[ob * 3 + 2] - colors[oa * 3 + 2]) * t;
+      } else if (oa >= 0 || ob >= 0) {
+        const o = oa >= 0 ? oa : ob;
+        cr = colors[o * 3]; cg = colors[o * 3 + 1]; cb2 = colors[o * 3 + 2];
+      }
+    }
+
     const index = positions.length / ISOSURFACE_STRIDE;
     positions.push(
       origin[0] + stepA[0] * fi + stepB[0] * fj + stepC[0] * fk,
@@ -287,6 +323,7 @@ export function isosurface(grid: VolumeGrid, options: IsoOptions): IsoMesh {
       stepA[0] * du + stepB[0] * dv + stepC[0] * dw,
       stepA[1] * du + stepB[1] * dv + stepC[1] * dw,
       stepA[2] * du + stepB[2] * dv + stepC[2] * dw,
+      cr, cg, cb2,
     );
     edgeVertex[key] = index;
     return index;
@@ -306,11 +343,15 @@ export function isosurface(grid: VolumeGrid, options: IsoOptions): IsoMesh {
 
         const list = TRI_TABLE[config];
         for (let t = 0; t < list.length; t += 3) {
-          tris.push(
-            vertexFor(i, j, k, list[t]),
-            vertexFor(i, j, k, list[t + 1]),
-            vertexFor(i, j, k, list[t + 2]),
-          );
+          const a = vertexFor(i, j, k, list[t]);
+          const b = vertexFor(i, j, k, list[t + 1]);
+          const c = vertexFor(i, j, k, list[t + 2]);
+          // The derived table says nothing about orientation, so each triangle
+          // is turned to face the way its vertex normals do. Shading never
+          // needed this — the gradient normal is independent of winding — but
+          // drawing a transparent surface back-faces-first does, and so would
+          // any later pass that culls.
+          tris.push(...(facesOutward(positions, a, b, c) ? [a, b, c] : [a, c, b]));
         }
         if (tris.length >= maxTriangles * 3) {
           truncated = true;
@@ -330,6 +371,9 @@ export function isosurface(grid: VolumeGrid, options: IsoOptions): IsoMesh {
     vertices[v + 3] = nxv / len;
     vertices[v + 4] = nyv / len;
     vertices[v + 5] = nzv / len;
+    vertices[v + 6] = positions[v + 6];
+    vertices[v + 7] = positions[v + 7];
+    vertices[v + 8] = positions[v + 8];
   }
 
   return {
@@ -340,6 +384,20 @@ export function isosurface(grid: VolumeGrid, options: IsoOptions): IsoMesh {
     triangleCount: tris.length / 3,
     truncated,
   };
+}
+
+/** True when the winding a-b-c already agrees with the vertex normals. */
+function facesOutward(p: number[], a: number, b: number, c: number): boolean {
+  const ia = a * ISOSURFACE_STRIDE, ib = b * ISOSURFACE_STRIDE, ic = c * ISOSURFACE_STRIDE;
+  const ux = p[ib] - p[ia], uy = p[ib + 1] - p[ia + 1], uz = p[ib + 2] - p[ia + 2];
+  const vx = p[ic] - p[ia], vy = p[ic + 1] - p[ia + 1], vz = p[ic + 2] - p[ia + 2];
+  const gx = uy * vz - uz * vy;
+  const gy = uz * vx - ux * vz;
+  const gz = ux * vy - uy * vx;
+  const nx = p[ia + 3] + p[ib + 3] + p[ic + 3];
+  const ny = p[ia + 4] + p[ib + 4] + p[ic + 4];
+  const nz = p[ia + 5] + p[ib + 5] + p[ic + 5];
+  return gx * nx + gy * ny + gz * nz >= 0;
 }
 
 /**

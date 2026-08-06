@@ -86,6 +86,46 @@ export const DEFAULT_DENSITY: DensityState = {
   truncated: false,
 };
 
+/**
+ * A molecular surface for one pane.
+ *
+ * Separate from the density state even though both end up as isosurfaces in
+ * the same forward pass: one is evidence and the other is an interpretation of
+ * the model, and a pane can reasonably want both at once.
+ */
+export interface SurfaceState {
+  status: 'off' | 'building' | 'ready' | 'error';
+  error: string | null;
+  /** What the surface covers. Empty means every atom currently drawn. */
+  selection: string;
+  /** Added to each van der Waals radius; 1.4 Å is a water molecule. */
+  probeRadius: number;
+  /** Grid spacing asked for, in Å. */
+  resolution: number;
+  /** What the generator settled on, which is coarser on a large structure. */
+  actualResolution: number;
+  opacity: number;
+  wireframe: boolean;
+  /** Colour by the pane's scheme, or one flat colour for the whole envelope. */
+  colorByAtom: boolean;
+  uniformColor: number;
+  triangles: number;
+}
+
+export const DEFAULT_SURFACE: SurfaceState = {
+  status: 'off',
+  error: null,
+  selection: '',
+  probeRadius: 1.4,
+  resolution: 0.6,
+  actualResolution: 0.6,
+  opacity: 0.55,
+  wireframe: false,
+  colorByAtom: true,
+  uniformColor: 0x9fb6d8,
+  triangles: 0,
+};
+
 export interface SlotState {
   entryId: string | null;
   status: SlotStatus;
@@ -129,6 +169,7 @@ export interface SlotState {
   superposeRmsd: number | null;
   superposePairs: number | null;
   density: DensityState;
+  surface: SurfaceState;
 }
 
 function emptySlot(): SlotState {
@@ -165,6 +206,7 @@ function emptySlot(): SlotState {
     superposeRmsd: null,
     superposePairs: null,
     density: { ...DEFAULT_DENSITY },
+    surface: { ...DEFAULT_SURFACE },
   };
 }
 
@@ -221,6 +263,7 @@ export interface AppState {
   removeComponent: (slot: number, id: string) => void;
   updateVisual: (slot: number, patch: Partial<SlotVisualSettings>) => void;
   updateDensity: (slot: number, patch: Partial<DensityState>) => void;
+  updateSurface: (slot: number, patch: Partial<SurfaceState>) => void;
   clearSlot: (slot: number) => void;
 
   setFilters: (patch: Partial<SearchFilters>) => void;
@@ -329,6 +372,12 @@ export const useStore = create<AppState>((set) => ({
   updateDensity: (slot, patch) => set((s) => {
     const slots = s.slots.slice();
     slots[slot] = { ...slots[slot], density: { ...slots[slot].density, ...patch } };
+    return { slots };
+  }),
+
+  updateSurface: (slot, patch) => set((s) => {
+    const slots = s.slots.slice();
+    slots[slot] = { ...slots[slot], surface: { ...slots[slot].surface, ...patch } };
     return { slots };
   }),
 

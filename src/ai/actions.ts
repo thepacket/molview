@@ -20,7 +20,8 @@ import { findInterfaces, interfaceSelection } from '../mol/interfaces';
 import { MolKind } from '../mol/structure';
 import type { NucleotideStyle } from '../gfx/geometry';
 import {
-  LAYOUT_SLOT_COUNT, useStore, type DensityState, type LayoutMode,
+  LAYOUT_SLOT_COUNT, useStore,
+  type DensityState, type LayoutMode, type SurfaceState,
 } from '../state/store';
 import { viewer } from '../viewer/ViewerController';
 
@@ -284,6 +285,52 @@ export async function applyAction(action: Action): Promise<string> {
       if (!m) return reject('view takes "orient", or an axis such as "x" or "-z"');
       viewer.viewAlongAxis(slot, m[2] as 'x' | 'y' | 'z', m[1] === '-');
       return `Looking down ${m[1]}${m[2].toUpperCase()}.`;
+    }
+
+    case 'surface': {
+      const slot = store.activeSlot;
+      if (!viewer.getStructure(slot)) return reject(`pane ${slot + 1} has no structure`);
+      const want = value.toLowerCase();
+
+      if (/^(off|hide|no|false|none)$/.test(want)) {
+        viewer.hideSurface(slot);
+        return 'Molecular surface removed.';
+      }
+
+      const patch: Partial<SurfaceState> = {};
+      let rebuild = true;
+      const opacity = /^opacity\s+([\d.]+)$/.exec(want);
+      const probe = /^probe\s+([\d.]+)$/.exec(want);
+
+      if (opacity) {
+        patch.opacity = Math.min(1, Math.max(0.05, Number(opacity[1])));
+        rebuild = false;
+      } else if (probe) {
+        patch.probeRadius = Math.min(3, Math.max(0, Number(probe[1])));
+      } else if (/^(wire|wireframe|mesh)$/.test(want)) {
+        patch.wireframe = true;
+        rebuild = false;
+      } else if (/^(solid|opaque|surface)$/.test(want)) {
+        patch.wireframe = false;
+        rebuild = false;
+      } else if (want && !/^(on|show|yes|true)$/.test(want)) {
+        // Anything else is a selection; reject a bad one here rather than
+        // spending two seconds discovering it matches nothing.
+        const error = selectionError(value);
+        if (error) return reject(`selection error: ${error}`);
+        patch.selection = value;
+      }
+
+      store.updateSurface(slot, patch);
+      const ready = useStore.getState().slots[slot].surface.status === 'ready';
+      if (rebuild || !ready) viewer.showSurface(slot);
+      else viewer.refreshSurfaceStyle(slot);
+
+      const now = useStore.getState().slots[slot].surface;
+      if (now.status !== 'ready') return reject(now.error ?? 'the surface could not be built');
+      return `Molecular surface over ${now.selection || 'everything drawn'}: `
+        + `${now.triangles.toLocaleString()} triangles at a ${now.actualResolution.toFixed(2)} A grid, `
+        + `${now.wireframe ? 'as wireframe' : `${now.opacity.toFixed(2)} opacity`}.`;
     }
 
     case 'density': {

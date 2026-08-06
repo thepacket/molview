@@ -70,6 +70,12 @@ export interface VolumeStyle {
   /** 0-1. Ignored in wireframe, where the mesh is see-through by construction. */
   opacity: number;
   wireframe: boolean;
+  /**
+   * How much more opaque the surface is at its silhouette than face-on. A thin
+   * shell like a density contour wants this high; a molecular surface, which
+   * is a boundary rather than a shell, wants it near zero.
+   */
+  silhouette: number;
 }
 
 /** GPU resources for one isosurface. */
@@ -158,6 +164,7 @@ export class Engine {
   private compositePipeline!: GPURenderPipeline;
   private labelPipeline!: GPURenderPipeline;
   private volumeSolidPipeline!: GPURenderPipeline;
+  private volumeBackPipeline!: GPURenderPipeline;
   private volumeWirePipeline!: GPURenderPipeline;
   private volumeStyleLayout!: GPUBindGroupLayout;
   private labelLayout!: GPUBindGroupLayout;
@@ -444,25 +451,34 @@ export class Engine {
         attributes: [
           { shaderLocation: 0, offset: 0, format: 'float32x3' },
           { shaderLocation: 1, offset: 12, format: 'float32x3' },
+          { shaderLocation: 2, offset: 24, format: 'float32x3' },
         ],
       }],
     };
 
-    this.volumeSolidPipeline = this.device.createRenderPipeline({
-      label: 'volume-solid',
-      layout: volumeLayout,
-      vertex: volumeVertex,
-      fragment: {
-        module: volumeModule,
-        entryPoint: 'fsSolid',
-        targets: [{ format: this.format, blend: alphaBlend }],
-      },
-      // A level set has no inside to cull, and both faces of a shell carry
-      // information — culling one is what makes a transparent surface look
-      // like it has holes in it.
-      primitive: { topology: 'triangle-list' },
-      depthStencil: forwardDepth,
-    });
+    // Both faces are drawn, but in two passes rather than one. Without depth
+    // sorting, a single two-sided draw blends whichever triangle the index
+    // buffer reached first, which on a bumpy surface is visible as a crawling
+    // texture. Back faces then front faces is the painter's order for a closed
+    // surface, and it is exactly two draw calls.
+    const solid = (label: string, cullMode: GPUCullMode) =>
+      this.device.createRenderPipeline({
+        label,
+        layout: volumeLayout,
+        vertex: volumeVertex,
+        fragment: {
+          module: volumeModule,
+          entryPoint: 'fsSolid',
+          targets: [{ format: this.format, blend: alphaBlend }],
+        },
+        primitive: { topology: 'triangle-list', cullMode },
+        depthStencil: forwardDepth,
+      });
+    // Winding is not controlled by the mesh generator — normals come from the
+    // field gradient — so "front" here means whichever side the rasteriser
+    // calls front, and the two passes together still cover both.
+    this.volumeBackPipeline = solid('volume-back', 'front');
+    this.volumeSolidPipeline = solid('volume-front', 'back');
 
     this.volumeWirePipeline = this.device.createRenderPipeline({
       label: 'volume-wire',
@@ -513,7 +529,7 @@ export class Engine {
       this.device.queue.writeBuffer(styleBuffer, 0, Float32Array.from([
         style.color[0], style.color[1], style.color[2],
         style.wireframe ? 1 : style.opacity,
-        0, 0, 0, 0,
+        style.silhouette, 0, 0, 0,
       ]));
 
       s.volumes.push({
@@ -1091,11 +1107,18 @@ export class Engine {
       for (const v of slot.volumes) {
         const wire = v.wireframe;
         if (wire ? v.lineIndexCount === 0 : v.triangleIndexCount === 0) continue;
-        compositePass.setPipeline(wire ? this.volumeWirePipeline : this.volumeSolidPipeline);
         compositePass.setBindGroup(1, v.styleBind);
         compositePass.setVertexBuffer(0, v.vertices);
         compositePass.setIndexBuffer(wire ? v.lines : v.triangles, 'uint32');
-        compositePass.drawIndexed(wire ? v.lineIndexCount : v.triangleIndexCount);
+        if (wire) {
+          compositePass.setPipeline(this.volumeWirePipeline);
+          compositePass.drawIndexed(v.lineIndexCount);
+        } else {
+          for (const pipeline of [this.volumeBackPipeline, this.volumeSolidPipeline]) {
+            compositePass.setPipeline(pipeline);
+            compositePass.drawIndexed(v.triangleIndexCount);
+          }
+        }
       }
     }
 

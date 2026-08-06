@@ -26,7 +26,12 @@ import {
 import { evaluateSelection, parseSelection, selectionError } from '../mol/selection';
 import { fetchEntryDetail } from '../rcsb/api';
 import { orientationFor } from '../gfx/orient';
-import { isosurface, levelWithinBudget, nearMask } from '../gfx/isosurface';
+import {
+  isosurface, levelWithinBudget, nearMask, type IsoMesh,
+} from '../gfx/isosurface';
+import { DEFAULT_SURFACE_OPTIONS, gaussianSurface } from '../gfx/surface';
+import { VDW_RADII } from '../mol/elements';
+import type { VolumeStyle } from '../gfx/engine';
 import {
   NoVolumeError, fetchVolumes, sampleSigma,
   type Box, type MapKind, type VolumeGrid, type VolumeSet,
@@ -49,6 +54,12 @@ interface SlotData {
   /** Fetched density grids, kept so the contour can move without refetching. */
   volumes: VolumeSet | null;
   volumeRequest: AbortController | null;
+  /**
+   * The molecular surface mesh, cached against the settings that shaped it.
+   * Generating one is seconds of work; changing its opacity should not be.
+   */
+  surfaceMesh: IsoMesh | null;
+  surfaceSignature: string;
 }
 
 /**
@@ -141,6 +152,8 @@ function emptySlotData(): SlotData {
     sourceFile: null,
     volumes: null,
     volumeRequest: null,
+    surfaceMesh: null,
+    surfaceSignature: '',
   };
 }
 
@@ -226,7 +239,10 @@ export class ViewerController {
     // A map belongs to the structure it was fetched for. Leaving it up would
     // draw one entry's density around another's model, which is the single
     // most misleading thing this feature could do.
-    if (!keepCamera) this.hideDensity(slot);
+    if (!keepCamera) {
+      this.hideDensity(slot);
+      this.hideSurface(slot);
+    }
 
     store.patchSlot(slot, {
       entryId: id,
@@ -767,14 +783,15 @@ export class ViewerController {
   rebuildDensity(slot: number): void {
     const set = this.data[slot].volumes;
     const structure = this.data[slot].structure;
-    if (!set || !structure) return;
+    if (!set || !structure) {
+      this.pushVolumes(slot, []);
+      return;
+    }
 
     const d = useStore.getState().slots[slot].density;
     const points = d.radius > 0 ? this.drawnAtomPositions(slot) : null;
 
-    const entries: { mesh: ReturnType<typeof isosurface>; style: {
-      color: [number, number, number]; opacity: number; wireframe: boolean;
-    } }[] = [];
+    const entries: { mesh: IsoMesh; style: VolumeStyle }[] = [];
     let triangles = 0;
     let truncated = false;
 
@@ -795,7 +812,7 @@ export class ViewerController {
       truncated = truncated || mesh.truncated;
       entries.push({
         mesh,
-        style: { color, opacity: d.opacity, wireframe: d.wireframe },
+        style: { color, opacity: d.opacity, wireframe: d.wireframe, silhouette: 1 },
       });
     };
 
@@ -813,9 +830,171 @@ export class ViewerController {
       }
     }
 
-    this.engine.setVolumes(slot, entries);
     useStore.getState().updateDensity(slot, { triangles, truncated });
+    this.pushVolumes(slot, entries);
+  }
+
+  /**
+   * Hands the engine everything drawn in the forward transparent pass.
+   *
+   * Density and the molecular surface are separate features with separate
+   * controls, but they share one list on the GPU, so whichever of them changes
+   * has to re-present both. The surface goes last: it is the outer envelope,
+   * and blending it over the density reads better than the reverse.
+   */
+  private pushVolumes(
+    slot: number, densityEntries: { mesh: IsoMesh; style: VolumeStyle }[],
+  ): void {
+    const s = useStore.getState().slots[slot].surface;
+    const mesh = this.data[slot].surfaceMesh;
+    const entries = [...densityEntries];
+
+    if (mesh && s.status === 'ready') {
+      entries.push({
+        mesh,
+        style: {
+          // Per-vertex colour is already baked into the mesh; white here lets
+          // it through, and a chosen colour multiplies over a white mesh.
+          color: s.colorByAtom
+            ? [1, 1, 1]
+            : [
+                ((s.uniformColor >> 16) & 0xff) / 255,
+                ((s.uniformColor >> 8) & 0xff) / 255,
+                (s.uniformColor & 0xff) / 255,
+              ],
+          opacity: s.opacity,
+          wireframe: s.wireframe,
+          silhouette: 0.2,
+        },
+      });
+    }
+
+    this.engine.setVolumes(slot, entries);
     this.invalidate();
+  }
+
+  // -------------------------------------------------------------------------
+  // Molecular surface
+  // -------------------------------------------------------------------------
+
+  /**
+   * Builds the pane's molecular surface, or reuses the cached mesh when only
+   * its appearance changed. Synchronous and therefore a visible stall on a
+   * large structure — the panel says so before you press the button.
+   */
+  showSurface(slot: number): void {
+    const structure = this.data[slot].structure;
+    const store = useStore.getState();
+    if (!structure) return;
+
+    const state = store.slots[slot];
+    const s = state.surface;
+
+    let atoms: Int32Array;
+    try {
+      atoms = this.surfaceAtoms(slot, s.selection);
+    } catch (err) {
+      store.updateSurface(slot, {
+        status: 'error',
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+    if (atoms.length === 0) {
+      store.updateSurface(slot, {
+        status: 'error',
+        error: s.selection
+          ? `Nothing matches "${s.selection}".`
+          : 'No atoms are drawn in this pane to build a surface from.',
+      });
+      return;
+    }
+
+    const resolved = this.data[slot].resolved;
+    const signature = [
+      s.selection, s.probeRadius, s.resolution, s.colorByAtom,
+      state.colorScheme, state.uniformColor, atoms.length,
+      state.components.map((c) => `${c.selection}:${c.style}:${c.colorScheme}`).join(';'),
+    ].join('|');
+
+    if (this.data[slot].surfaceMesh && this.data[slot].surfaceSignature === signature) {
+      store.updateSurface(slot, { status: 'ready', error: null });
+      this.pushVolumesFor(slot);
+      return;
+    }
+
+    const radii = new Float32Array(structure.atomCount);
+    for (let a = 0; a < structure.atomCount; a++) {
+      radii[a] = VDW_RADII[structure.element[a]];
+    }
+
+    const field = gaussianSurface(
+      structure.x, structure.y, structure.z, radii, atoms,
+      {
+        ...DEFAULT_SURFACE_OPTIONS,
+        probeRadius: s.probeRadius,
+        resolution: s.resolution,
+        atomColors: s.colorByAtom ? resolved?.atomColor ?? null : null,
+      },
+    );
+
+    const mesh = isosurface(field.grid, {
+      sigma: field.level,
+      owner: field.owner,
+      colors: field.colors,
+    });
+
+    this.data[slot].surfaceMesh = mesh;
+    this.data[slot].surfaceSignature = signature;
+    store.updateSurface(slot, {
+      status: 'ready',
+      error: null,
+      triangles: mesh.triangleCount,
+      actualResolution: field.resolution,
+    });
+    this.pushVolumesFor(slot);
+  }
+
+  hideSurface(slot: number): void {
+    this.data[slot].surfaceMesh = null;
+    this.data[slot].surfaceSignature = '';
+    useStore.getState().updateSurface(slot, { status: 'off', error: null, triangles: 0 });
+    this.pushVolumesFor(slot);
+  }
+
+  /** Re-presents both volume features after either one changed. */
+  private pushVolumesFor(slot: number): void {
+    if (this.data[slot].volumes) this.rebuildDensity(slot);
+    else this.pushVolumes(slot, []);
+  }
+
+  /** Re-applies surface appearance without regenerating the mesh. */
+  refreshSurfaceStyle(slot: number): void {
+    this.pushVolumesFor(slot);
+  }
+
+  /** Atom indices the surface covers: a selection, or everything drawn. */
+  private surfaceAtoms(slot: number, selection: string): Int32Array {
+    const structure = this.data[slot].structure!;
+    const out: number[] = [];
+
+    if (selection.trim()) {
+      const error = selectionError(selection);
+      if (error) throw new Error(error);
+      const mask = evaluateSelection(parseSelection(selection), structure);
+      for (let a = 0; a < structure.atomCount; a++) if (mask[a]) out.push(a);
+      return Int32Array.from(out);
+    }
+
+    const drawn = this.drawnAtomMask(slot);
+    for (let a = 0; a < structure.atomCount; a++) {
+      // Water makes a surface out of a shell of unconnected beads, which is
+      // never what someone asking for a molecular surface meant.
+      if (structure.resKind[structure.atomResidue[a]] === MolKind.Water) continue;
+      if (drawn && !drawn[a]) continue;
+      out.push(a);
+    }
+    return Int32Array.from(out);
   }
 
   /** Positions of the atoms actually drawn, for masking the map to the model. */

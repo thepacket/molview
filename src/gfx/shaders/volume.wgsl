@@ -15,7 +15,7 @@
 struct Style {
   // rgb colour, a = opacity
   color: vec4f,
-  // x = fog density, y = fog start, z unused, w unused
+  // x = silhouette weighting, 0 = uniform opacity
   params: vec4f,
 };
 
@@ -24,6 +24,9 @@ struct Style {
 struct Vertex {
   @location(0) position: vec3f,
   @location(1) normal: vec3f,
+  // White for a density contour, the colour of the atom underneath for a
+  // molecular surface. Multiplied by the style colour either way.
+  @location(2) color: vec3f,
 };
 
 struct VSOut {
@@ -31,6 +34,7 @@ struct VSOut {
   @location(0) normalView: vec3f,
   @location(1) viewZ: f32,
   @location(2) viewPos: vec3f,
+  @location(3) color: vec3f,
 };
 
 @vertex
@@ -44,6 +48,7 @@ fn vs(v: Vertex) -> VSOut {
   out.normalView = (cam.view * vec4f(worldNormal, 0.0)).xyz;
   out.viewZ = viewPos.z;
   out.viewPos = viewPos.xyz;
+  out.color = v.color;
   return out;
 }
 
@@ -69,14 +74,17 @@ fn fsSolid(in: VSOut, @builtin(front_facing) frontFacing: bool) -> @location(0) 
   let nFill = max(dot(n, fillDir), 0.0);
   let hemi = mix(vec3f(0.16, 0.18, 0.24), vec3f(0.55, 0.58, 0.66), n.y * 0.5 + 0.5);
 
-  var color = style.color.rgb * (hemi * 0.9 + nKey * 0.75 + nFill * 0.3);
+  var color = style.color.rgb * in.color * (hemi * 0.9 + nKey * 0.75 + nFill * 0.3);
 
-  // Silhouette-weighted opacity. A shell seen face-on is nearly transparent
-  // and its rim nearly solid, which is how a soap bubble reads and is why a
-  // constant-alpha surface looks like coloured fog instead of a boundary.
+  // Silhouette weighting: a shell seen face-on fades and its rim stays solid,
+  // which is how a soap bubble reads and is what stops a density contour
+  // looking like coloured fog. It has to be dialled right down for a molecular
+  // surface — that surface is all bumps, every bump has a rim, and at full
+  // weight the whole envelope turns into lace.
   let viewDir = normalize(-in.viewPos);
   let facing = abs(dot(n, viewDir));
-  let alpha = clamp(style.color.a * mix(1.0, 0.35, facing), 0.0, 1.0);
+  let weight = mix(1.0, 1.0 - 0.65 * style.params.x, facing);
+  let alpha = clamp(style.color.a * weight, 0.0, 1.0);
 
   return vec4f(fogged(color, in.viewPos), alpha);
 }
@@ -90,5 +98,5 @@ fn fsWire(in: VSOut) -> @location(0) vec4f {
   // it belongs to turns away — just enough to give the mesh depth.
   let n = normalize(in.normalView);
   let lit = 0.55 + 0.45 * abs(dot(n, normalize(vec3f(0.45, 0.55, 0.75))));
-  return vec4f(fogged(style.color.rgb * lit, in.viewPos), style.color.a);
+  return vec4f(fogged(style.color.rgb * in.color * lit, in.viewPos), style.color.a);
 }
