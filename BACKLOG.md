@@ -60,7 +60,7 @@ Two that would be worth revisiting if the app grows:
 
 ## Done
 
-- **Validation in the browse results** (`pending`) — one chip per hit naming the
+- **Validation in the browse results** (`d5c824e`) — one chip per hit naming the
   entry's weakest metric. It rides the existing batched summary query, so it
   costs no extra round trip. Sorting by quality was not added: the search API
   sorts server-side, so a client-side re-sort would reorder the current page
