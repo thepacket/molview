@@ -34,16 +34,33 @@ const SORTS = [
 ] as const;
 
 /** A few structures that show off different representations well. */
+/**
+ * The first thing a new user clicks, so every one of these has to be worth
+ * looking at — capability coverage second, appearance first. Ordered small to
+ * large, so working down the list is also a tour of the performance envelope.
+ * Anything over a few megabytes carries its download size.
+ */
 const FEATURED: { id: string; note: string; size?: string }[] = [
-  { id: '4HHB', note: 'Haemoglobin — classic α₂β₂ tetramer with haem groups' },
   { id: '1UBQ', note: 'Ubiquitin — small, crisp β-grasp fold' },
-  { id: '6VXX', note: 'SARS-CoV-2 spike — large glycosylated trimer' },
-  { id: '1BNA', note: 'B-DNA dodecamer — double helix' },
-  { id: '1KX5', note: 'Nucleosome — 147 bp of DNA wound on a histone octamer' },
-  { id: '1AON', note: 'GroEL/GroES — 58-chain chaperonin assembly' },
-  { id: '5XNL', note: 'Photosystem II — large membrane complex' },
+  { id: '2K39', note: 'The same fold by NMR — 116 models at once' },
+  { id: '1EMA', note: 'GFP — a β-barrel with its chromophore threaded inside' },
+  { id: '4INS', note: 'Insulin — two chains stitched by disulfides' },
+  { id: '1CAG', note: 'Collagen — three strands in a tight triple helix' },
+  { id: '4HHB', note: 'Haemoglobin — α₂β₂ tetramer with haem groups' },
+  { id: '1BNA', note: 'B-DNA dodecamer — the double helix' },
+  { id: '1EHZ', note: 'Transfer RNA — an L of stems and loops' },
+  { id: '1FHA', note: 'Ferritin — 24 copies close into a hollow shell' },
+  { id: '1KX5', note: 'Nucleosome — 147 bp wound on a histone octamer' },
+  { id: '1PRC', note: 'Reaction centre — the first membrane protein solved' },
+  { id: '1AON', note: 'GroEL/GroES — a 21-chain folding chamber' },
+  { id: '6VXX', note: 'SARS-CoV-2 spike — glycosylated trimer' },
+  { id: '1JB0', note: 'Photosystem I — 36 chains and hundreds of cofactors' },
+  { id: '2OM3', note: 'Tobacco mosaic virus — 98 copies in a helical rod' },
+  { id: '3JAT', note: 'Microtubule — the tubulin lattice, up close' },
+  { id: '1CWP', note: 'Cowpea chlorotic mottle virus — 360 chains' },
+  { id: '5GJR', note: '26S proteasome — 64 chains, caps on a barrel', size: '6.7 MB' },
   { id: '2BTV', note: 'Bluetongue virus — 15 chains become a 900-chain capsid' },
-  { id: '3J3Q', note: 'HIV-1 capsid — 2.4M atoms, the renderer at its limit', size: '113 MB' },
+  { id: '4V6X', note: 'Human ribosome — RNA and protein at full scale', size: '12 MB' },
 ];
 
 const looksLikePdbId = (value: string) => /^[0-9][a-z0-9]{3}$/i.test(value.trim());
