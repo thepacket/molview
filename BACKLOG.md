@@ -67,7 +67,7 @@ Two that would be worth revisiting if the app grows:
 
 ## Done
 
-- **Interfaces for the assistant, and results fed back** (`pending`) — an
+- **Interfaces for the assistant, and results fed back** (`4c75173`) — an
   `interfaces` action, and every action's outcome returned to the model as a
   RESULTS message. Asked what chain A touches, it was reasoning from entity
   stoichiometry while the answer sat computed in the panel beside it.
