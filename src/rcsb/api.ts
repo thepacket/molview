@@ -41,6 +41,8 @@ export interface EntrySummary {
   polymerTypes: string | null;
   releaseDate: string | null;
   keywords: string | null;
+  /** wwPDB validation, as far as it exists — see `EntryValidation`. */
+  validation: EntryValidation;
 }
 
 /**
@@ -72,7 +74,6 @@ export interface EntryDetail extends EntrySummary {
   polymerEntities: PolymerEntity[];
   nonPolymerEntities: NonPolymerEntity[];
   assemblyCount: number;
-  validation: EntryValidation;
 }
 
 interface GraphQLResponse<T> {
@@ -112,6 +113,11 @@ const SUMMARY_FIELDS = `
   }
   rcsb_accession_info { initial_release_date }
   struct_keywords { pdbx_keywords }
+  pdbx_vrpt_summary_geometry {
+    clashscore percent_ramachandran_outliers percent_rotamer_outliers
+  }
+  pdbx_vrpt_summary_diffraction { percent_RSRZ_outliers }
+  pdbx_vrpt_summary_em { atom_inclusion_backbone }
 `;
 
 const DETAIL_FIELDS = `
@@ -132,11 +138,6 @@ const DETAIL_FIELDS = `
     rcsb_nonpolymer_entity_container_identifiers { auth_asym_ids }
   }
   assemblies { rcsb_id }
-  pdbx_vrpt_summary_geometry {
-    clashscore percent_ramachandran_outliers percent_rotamer_outliers
-  }
-  pdbx_vrpt_summary_diffraction { percent_RSRZ_outliers }
-  pdbx_vrpt_summary_em { atom_inclusion_backbone }
 `;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -154,6 +155,7 @@ function toSummary(e: any): EntrySummary {
     polymerTypes: info.selected_polymer_entity_types ?? null,
     releaseDate: e.rcsb_accession_info?.initial_release_date?.slice(0, 10) ?? null,
     keywords: e.struct_keywords?.pdbx_keywords ?? null,
+    validation: toValidation(e),
   };
 }
 
@@ -222,7 +224,6 @@ export async function fetchEntryDetail(
     polymerEntities,
     nonPolymerEntities,
     assemblyCount: (e.assemblies ?? []).length,
-    validation: toValidation(e),
   };
 }
 

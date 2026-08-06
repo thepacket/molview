@@ -7,13 +7,6 @@ already exists are documented at the end of [README.md](README.md) instead.
 
 ## Open
 
-- **Validation in the browse results.** The definition panel now shows the wwPDB
-  summary (`2fdd77a`), but the decision it most affects is picking among the
-  dozens of entries for the same protein, where resolution is the usual and poor
-  tiebreaker. A three-segment bar per hit — clashes, geometry, density fit —
-  plus sorting by it. Not built because the result rows are much tighter than
-  the panel and the layout wants a real eye on it. Costs a second batched query,
-  since `fetchSummaries` does not carry the validation fields.
 - **Per-residue validation.** Entry-level numbers say "9.5% rotamer outliers"
   but not which residues, so the structure cannot be coloured by fault. The
   per-residue data is in the validation XML; whether RCSB exposes it through
@@ -66,6 +59,12 @@ Two that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **Validation in the browse results** (`pending`) — one chip per hit naming the
+  entry's weakest metric. It rides the existing batched summary query, so it
+  costs no extra round trip. Sorting by quality was not added: the search API
+  sorts server-side, so a client-side re-sort would reorder the current page
+  only and quietly lie about the rest.
 
 - **Interfaces for the assistant, and results fed back** (`4c75173`) — an
   `interfaces` action, and every action's outcome returned to the model as a

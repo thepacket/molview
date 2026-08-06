@@ -5,6 +5,7 @@ import { Filter, Loader2, Search, SlidersHorizontal, X } from 'lucide-react';
 import {
   fetchSummaries, hasActiveFilters, searchEntries, type EntrySummary,
 } from '../../rcsb/api';
+import { validationBadge } from '../../rcsb/validation';
 import { useStore, visibleSlotCount } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Chip, Field, Select, Slider, Tip } from '../controls';
@@ -389,6 +390,7 @@ function ResultRow({ entry, loaded, onOpen }: {
   loaded: boolean;
   onOpen: () => void;
 }) {
+  const badge = validationBadge(entry.validation, entry.method);
   return (
     <button type="button" className="result" data-loaded={loaded} onClick={onOpen}>
       <div className="result-top">
@@ -405,6 +407,15 @@ function ResultRow({ entry, loaded, onOpen }: {
         {entry.resolution !== null && <Chip accent>{entry.resolution.toFixed(2)} Å</Chip>}
         {entry.atomCount !== null && <Chip>{entry.atomCount.toLocaleString()} atoms</Chip>}
         {entry.weightKda !== null && <Chip>{Math.round(entry.weightKda)} kDa</Chip>}
+        {badge && (
+          // Resolution alone is the usual tiebreaker between a dozen entries of
+          // one protein, and a poor one: two 2.8 A cryo-EM models can differ
+          // fivefold in clashscore. A dot and a number is what fits here.
+          <span className="chip" title={`wwPDB validation — ${badge.detail}`}>
+            <i className="vrpt-dot" data-grade={badge.grade} />
+            {badge.label}
+          </span>
+        )}
       </div>
     </button>
   );

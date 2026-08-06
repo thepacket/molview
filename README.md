@@ -221,6 +221,13 @@ A turn starts at about 1,300 input tokens; what grows it is the rolling history
 of three exchanges, not the size of the structure, since the scene is counts and
 chain names rather than coordinates. **Clear** is what resets it.
 
+Search results carry the same judgement in one chip: the entry's weakest metric,
+named and coloured together — `density 7.0%` in red, `clash 5.5` in amber. Two
+cryo-EM models at the same resolution can differ fivefold in clashscore, and
+resolution is the tiebreaker everyone reaches for, so it is worth seeing which
+of a dozen entries for one protein is actually the better model before opening
+it. Computed models have no wwPDB validation and get no chip.
+
 **Validation.** The wwPDB validates the whole archive, and the definition panel
 shows what it found: steric clashes, Ramachandran and rotamer outliers, fit to
 density where structure factors were deposited, backbone coverage for cryo-EM.

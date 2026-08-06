@@ -115,6 +115,44 @@ export function validationRows(
   return rows;
 }
 
+/** Room for a dot and one number in a result row, so it has to be the right one. */
+const SHORT_LABEL: Record<string, string> = {
+  Clashes: 'clash',
+  Ramachandran: 'rama',
+  Rotamers: 'rotamer',
+  'Density fit': 'density',
+  'Backbone in map': 'backbone',
+};
+
+/**
+ * The worst metric an entry has, named and coloured together.
+ *
+ * Showing the clashscore always and colouring by the worst metric produced a
+ * badge that contradicted itself — "clash 4.8", which is fine, beside a red dot
+ * that was really about rotamers. The number now belongs to the metric the
+ * colour is judging, so a row says one thing rather than two.
+ */
+export function validationBadge(
+  v: EntryValidation, method: string,
+): { grade: Grade; label: string; detail: string } | null {
+  const rows = validationRows(v, method).filter((r) => r.grade !== null);
+  if (rows.length === 0) return null;
+
+  const order: Grade[] = ['good', 'fair', 'poor'];
+  let worst = rows[0];
+  for (const r of rows) {
+    if (order.indexOf(r.grade as Grade) > order.indexOf(worst.grade as Grade)) worst = r;
+  }
+  // All good: clashes is the most comparable number across entries.
+  if (worst.grade === 'good') worst = rows.find((r) => r.label === 'Clashes') ?? worst;
+
+  return {
+    grade: worst.grade as Grade,
+    label: `${SHORT_LABEL[worst.label] ?? worst.label.toLowerCase()} ${worst.value}`,
+    detail: rows.map((r) => `${r.label} ${r.value}`).join(' · '),
+  };
+}
+
 export function hasValidation(v: EntryValidation): boolean {
   return Object.values(v).some((x) => x !== null);
 }
