@@ -119,7 +119,7 @@ textarea {
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-rows: var(--titlebar) minmax(0, 1fr) var(--assistant-h) var(--statusbar);
+  grid-template-rows: var(--titlebar) minmax(0, 1fr) var(--statusbar);
   background: var(--bg-void);
 }
 
@@ -732,6 +732,17 @@ textarea {
 }
 
 /* --- viewport grid -------------------------------------------------------- */
+
+/* The centre column. The assistant lives here rather than across the foot of
+   the shell, so the side panels keep their full height down to the status bar
+   and only the canvas gives up room to it. */
+.canvas-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
 
 .stage {
   position: relative;
@@ -1651,6 +1662,8 @@ textarea {
 /* --- assistant ------------------------------------------------------------ */
 
 .assistant {
+  height: var(--assistant-h);
+  flex: none;
   display: grid;
   grid-template-rows: 5px 30px minmax(0, 1fr) auto;
   min-height: 0;

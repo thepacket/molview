@@ -57,7 +57,13 @@ export default function App() {
             </aside>
           )}
 
-          <ViewportGrid />
+          {/* The assistant belongs under the canvas, not under the whole
+              shell: the side panels run to the status bar, and only the stage
+              gives up height to it. */}
+          <div className="canvas-column">
+            <ViewportGrid />
+            <AssistantPanel />
+          </div>
 
           {inspectorOpen && (
             <aside className="panel right">
@@ -74,7 +80,6 @@ export default function App() {
           )}
         </div>
 
-        <AssistantPanel />
         <StatusBar />
       </div>
 
