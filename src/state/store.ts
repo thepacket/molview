@@ -38,6 +38,54 @@ export interface SlotStats {
   instances: number;
 }
 
+/**
+ * Experimental density for one pane.
+ *
+ * The grids themselves live in the controller — a map is a few million floats
+ * and has no business in a React store — so this is only what the panel draws
+ * and what a saved project needs to restore the same view.
+ */
+export interface DensityState {
+  status: 'off' | 'loading' | 'ready' | 'error';
+  error: string | null;
+  /** PDB id for X-ray, EMDB accession for EM. What was actually fetched. */
+  source: string | null;
+  kind: 'x-ray' | 'em' | null;
+  /** Contour of the main map (2Fo-Fc, or the EM map), in sigma. */
+  level: number;
+  /** Contour of the difference map; drawn at both +level and -level. */
+  diffLevel: number;
+  showDifference: boolean;
+  wireframe: boolean;
+  opacity: number;
+  /**
+   * Ångströms around the drawn atoms to keep; 0 shows the whole box. A box
+   * query returns the crystal packing too, and unmasked density buries the
+   * model in its neighbours'.
+   */
+  radius: number;
+  triangles: number;
+  bytes: number;
+  /** Set when the surface hit the triangle budget and is therefore partial. */
+  truncated: boolean;
+}
+
+export const DEFAULT_DENSITY: DensityState = {
+  status: 'off',
+  error: null,
+  source: null,
+  kind: null,
+  level: 1.5,
+  diffLevel: 3,
+  showDifference: false,
+  wireframe: true,
+  opacity: 0.35,
+  radius: 5,
+  triangles: 0,
+  bytes: 0,
+  truncated: false,
+};
+
 export interface SlotState {
   entryId: string | null;
   status: SlotStatus;
@@ -80,6 +128,7 @@ export interface SlotState {
   superposedOnto: number | null;
   superposeRmsd: number | null;
   superposePairs: number | null;
+  density: DensityState;
 }
 
 function emptySlot(): SlotState {
@@ -115,6 +164,7 @@ function emptySlot(): SlotState {
     superposedOnto: null,
     superposeRmsd: null,
     superposePairs: null,
+    density: { ...DEFAULT_DENSITY },
   };
 }
 
@@ -170,6 +220,7 @@ export interface AppState {
   updateComponent: (slot: number, id: string, patch: Partial<Component>) => void;
   removeComponent: (slot: number, id: string) => void;
   updateVisual: (slot: number, patch: Partial<SlotVisualSettings>) => void;
+  updateDensity: (slot: number, patch: Partial<DensityState>) => void;
   clearSlot: (slot: number) => void;
 
   setFilters: (patch: Partial<SearchFilters>) => void;
@@ -272,6 +323,12 @@ export const useStore = create<AppState>((set) => ({
   updateVisual: (slot, patch) => set((s) => {
     const slots = s.slots.slice();
     slots[slot] = { ...slots[slot], visual: { ...slots[slot].visual, ...patch } };
+    return { slots };
+  }),
+
+  updateDensity: (slot, patch) => set((s) => {
+    const slots = s.slots.slice();
+    slots[slot] = { ...slots[slot], density: { ...slots[slot].density, ...patch } };
     return { slots };
   }),
 

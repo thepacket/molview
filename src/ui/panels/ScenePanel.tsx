@@ -8,6 +8,7 @@ import {
 import { LAYOUT_SLOT_COUNT, useStore, type LayoutMode } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Field, Segmented, Select, Tip, Toggle } from '../controls';
+import { DensitySection } from './DensitySection';
 
 const LAYOUTS: { value: LayoutMode; label: React.ReactNode; title: string }[] = [
   { value: 'single', label: <Square size={12} />, title: 'Single pane' },
@@ -91,6 +92,8 @@ export function ScenePanel() {
           );
         })}
       </div>
+
+      <DensitySection />
 
       <SuperposeSection />
 

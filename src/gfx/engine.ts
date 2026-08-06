@@ -20,6 +20,9 @@ import cylindersWgsl from './shaders/cylinders.wgsl?raw';
 import cartoonWgsl from './shaders/cartoon.wgsl?raw';
 import compositeWgsl from './shaders/composite.wgsl?raw';
 import labelsWgsl from './shaders/labels.wgsl?raw';
+import volumeWgsl from './shaders/volume.wgsl?raw';
+
+import { ISOSURFACE_STRIDE, type IsoMesh } from './isosurface';
 
 export const MAX_SLOTS = 4;
 const IDENTITY_MATRIX = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -60,6 +63,26 @@ export const DEFAULT_VISUAL_SETTINGS: SlotVisualSettings = {
   clipNear: 0,
   colorBySymmetry: false,
 };
+
+/** How one density isosurface is drawn. */
+export interface VolumeStyle {
+  color: [number, number, number];
+  /** 0-1. Ignored in wireframe, where the mesh is see-through by construction. */
+  opacity: number;
+  wireframe: boolean;
+}
+
+/** GPU resources for one isosurface. */
+interface GpuVolume {
+  vertices: GPUBuffer;
+  triangles: GPUBuffer;
+  triangleIndexCount: number;
+  lines: GPUBuffer;
+  lineIndexCount: number;
+  styleBuffer: GPUBuffer;
+  styleBind: GPUBindGroup;
+  wireframe: boolean;
+}
 
 /** GPU resources for one geometry group and the transforms it repeats under. */
 interface GpuGroup {
@@ -111,6 +134,8 @@ interface Slot {
   overlayBuffer: GPUBuffer | null;
   overlayBind: GPUBindGroup | null;
   overlayCount: number;
+  /** Density isosurfaces, drawn forward after the deferred resolve. */
+  volumes: GpuVolume[];
 }
 
 export interface PickResult {
@@ -132,6 +157,9 @@ export class Engine {
   private cartoonPipeline!: GPURenderPipeline;
   private compositePipeline!: GPURenderPipeline;
   private labelPipeline!: GPURenderPipeline;
+  private volumeSolidPipeline!: GPURenderPipeline;
+  private volumeWirePipeline!: GPURenderPipeline;
+  private volumeStyleLayout!: GPUBindGroupLayout;
   private labelLayout!: GPUBindGroupLayout;
   private fontAtlas!: FontAtlas;
 
@@ -249,6 +277,15 @@ export class Engine {
       entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: storage }],
     });
 
+    this.volumeStyleLayout = this.device.createBindGroupLayout({
+      label: 'volume-style',
+      entries: [{
+        binding: 0,
+        visibility: GPUShaderStage.FRAGMENT,
+        buffer: { type: 'uniform' },
+      }],
+    });
+
     this.labelLayout = this.device.createBindGroupLayout({
       label: 'labels',
       entries: [
@@ -355,6 +392,29 @@ export class Engine {
       depthStencil,
     });
 
+    // The resolve pass now carries the depth buffer as a read-only attachment
+    // so the forward passes after it can depth-test against the molecule.
+    // Read-only is what lets the same texture stay bound as a sampled
+    // texture for the composite's own occlusion and shadow marching.
+    const forwardDepth: GPUDepthStencilState = {
+      format: 'depth32float',
+      depthWriteEnabled: false,
+      depthCompare: 'less',
+    };
+    const overlayDepth: GPUDepthStencilState = { ...forwardDepth, depthCompare: 'always' };
+    const alphaBlend: GPUBlendState = {
+      color: {
+        srcFactor: 'src-alpha',
+        dstFactor: 'one-minus-src-alpha',
+        operation: 'add',
+      },
+      alpha: {
+        srcFactor: 'one',
+        dstFactor: 'one-minus-src-alpha',
+        operation: 'add',
+      },
+    };
+
     const compositeModule = this.module(compositeWgsl, 'composite');
     this.compositePipeline = this.device.createRenderPipeline({
       label: 'composite',
@@ -368,6 +428,53 @@ export class Engine {
         targets: [{ format: this.format }],
       },
       primitive: { topology: 'triangle-list' },
+      depthStencil: overlayDepth,
+    });
+
+    const volumeModule = this.module(volumeWgsl, 'volume');
+    const volumeLayout = this.device.createPipelineLayout({
+      bindGroupLayouts: [this.cameraLayout, this.volumeStyleLayout],
+    });
+    const volumeVertex: GPUVertexState = {
+      module: volumeModule,
+      entryPoint: 'vs',
+      buffers: [{
+        arrayStride: ISOSURFACE_STRIDE * 4,
+        stepMode: 'vertex',
+        attributes: [
+          { shaderLocation: 0, offset: 0, format: 'float32x3' },
+          { shaderLocation: 1, offset: 12, format: 'float32x3' },
+        ],
+      }],
+    };
+
+    this.volumeSolidPipeline = this.device.createRenderPipeline({
+      label: 'volume-solid',
+      layout: volumeLayout,
+      vertex: volumeVertex,
+      fragment: {
+        module: volumeModule,
+        entryPoint: 'fsSolid',
+        targets: [{ format: this.format, blend: alphaBlend }],
+      },
+      // A level set has no inside to cull, and both faces of a shell carry
+      // information — culling one is what makes a transparent surface look
+      // like it has holes in it.
+      primitive: { topology: 'triangle-list' },
+      depthStencil: forwardDepth,
+    });
+
+    this.volumeWirePipeline = this.device.createRenderPipeline({
+      label: 'volume-wire',
+      layout: volumeLayout,
+      vertex: volumeVertex,
+      fragment: {
+        module: volumeModule,
+        entryPoint: 'fsWire',
+        targets: [{ format: this.format, blend: alphaBlend }],
+      },
+      primitive: { topology: 'line-list' },
+      depthStencil: forwardDepth,
     });
 
     const labelModule = this.module(labelsWgsl, 'labels');
@@ -380,24 +487,59 @@ export class Engine {
       fragment: {
         module: labelModule,
         entryPoint: 'fs',
-        targets: [{
-          format: this.format,
-          blend: {
-            color: {
-              srcFactor: 'src-alpha',
-              dstFactor: 'one-minus-src-alpha',
-              operation: 'add',
-            },
-            alpha: {
-              srcFactor: 'one',
-              dstFactor: 'one-minus-src-alpha',
-              operation: 'add',
-            },
-          },
-        }],
+        targets: [{ format: this.format, blend: alphaBlend }],
       },
       primitive: { topology: 'triangle-strip' },
+      depthStencil: overlayDepth,
     });
+  }
+
+  /**
+   * Replaces a pane's density isosurfaces. Meshes are generated on the CPU and
+   * handed over whole; contour changes rebuild them, which is why the contour
+   * control debounces.
+   */
+  setVolumes(slot: number, entries: { mesh: IsoMesh; style: VolumeStyle }[]): void {
+    const s = this.slots[slot];
+    this.releaseVolumes(s);
+
+    for (const { mesh, style } of entries) {
+      if (mesh.vertexCount === 0) continue;
+      const styleBuffer = this.device.createBuffer({
+        label: 'volume-style',
+        size: 32,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      this.device.queue.writeBuffer(styleBuffer, 0, Float32Array.from([
+        style.color[0], style.color[1], style.color[2],
+        style.wireframe ? 1 : style.opacity,
+        0, 0, 0, 0,
+      ]));
+
+      s.volumes.push({
+        vertices: this.createBuffer(mesh.vertices, GPUBufferUsage.VERTEX),
+        triangles: this.createBuffer(mesh.triangles, GPUBufferUsage.INDEX),
+        triangleIndexCount: mesh.triangles.length,
+        lines: this.createBuffer(mesh.lines, GPUBufferUsage.INDEX),
+        lineIndexCount: mesh.lines.length,
+        styleBuffer,
+        styleBind: this.device.createBindGroup({
+          layout: this.volumeStyleLayout,
+          entries: [{ binding: 0, resource: { buffer: styleBuffer } }],
+        }),
+        wireframe: style.wireframe,
+      });
+    }
+  }
+
+  private releaseVolumes(slot: Slot): void {
+    for (const v of slot.volumes) {
+      v.vertices.destroy();
+      v.triangles.destroy();
+      v.lines.destroy();
+      v.styleBuffer.destroy();
+    }
+    slot.volumes = [];
   }
 
   /**
@@ -551,6 +693,7 @@ export class Engine {
         overlayBuffer: null,
         overlayBind: null,
         overlayCount: 0,
+        volumes: [],
         sceneTransform: IDENTITY_MATRIX.slice(),
         sceneInverse: IDENTITY_MATRIX.slice(),
       });
@@ -806,7 +949,7 @@ export class Engine {
 
     const visible = this.slots.filter(
       (s) => (s.active || s.overlayCount > 0 || s.labelCount > 0
-          || s.overlaySources.length > 0)
+          || s.overlaySources.length > 0 || s.volumes.length > 0)
         && s.rect.width > 0 && s.rect.height > 0,
     );
     for (const slot of visible) this.writeUniforms(slot);
@@ -907,6 +1050,12 @@ export class Engine {
         loadOp: 'clear',
         storeOp: 'store',
       }],
+      // Carried through read-only: the forward passes below depth-test the
+      // molecule out of the way, and the composite keeps sampling it.
+      depthStencilAttachment: {
+        view: this.depthTexture.createView(),
+        depthReadOnly: true,
+      },
     });
     compositePass.setPipeline(this.compositePipeline);
     compositePass.setBindGroup(1, this.gbufferBindGroup);
@@ -923,6 +1072,31 @@ export class Engine {
       compositePass.setScissorRect(vx, vy, vw, vh);
       compositePass.setBindGroup(0, slot.bindGroups[this.slots.indexOf(slot)]);
       compositePass.draw(3);
+    }
+
+    // Density over the resolved molecule, before text.
+    for (const slot of visible) {
+      if (slot.volumes.length === 0) continue;
+      const { rect } = slot;
+      const vx = Math.floor(rect.x * px);
+      const vy = Math.floor(rect.y * px);
+      const vw = Math.min(Math.max(1, Math.floor(rect.width * px)), this.width - vx);
+      const vh = Math.min(Math.max(1, Math.floor(rect.height * px)), this.height - vy);
+      if (vw <= 0 || vh <= 0) continue;
+
+      compositePass.setViewport(vx, vy, vw, vh, 0, 1);
+      compositePass.setScissorRect(vx, vy, vw, vh);
+      compositePass.setBindGroup(0, slot.bindGroups[this.slots.indexOf(slot)]);
+
+      for (const v of slot.volumes) {
+        const wire = v.wireframe;
+        if (wire ? v.lineIndexCount === 0 : v.triangleIndexCount === 0) continue;
+        compositePass.setPipeline(wire ? this.volumeWirePipeline : this.volumeSolidPipeline);
+        compositePass.setBindGroup(1, v.styleBind);
+        compositePass.setVertexBuffer(0, v.vertices);
+        compositePass.setIndexBuffer(wire ? v.lines : v.triangles, 'uint32');
+        compositePass.drawIndexed(wire ? v.lineIndexCount : v.triangleIndexCount);
+      }
     }
 
     // Text goes on last, blended over the resolved image.
@@ -1059,6 +1233,7 @@ export class Engine {
   destroy(): void {
     for (const s of this.slots) {
       this.releaseGroups(s);
+      this.releaseVolumes(s);
       s.labelBuffer?.destroy();
       s.overlayBuffer?.destroy();
       for (const buffer of s.uniformBuffers) buffer.destroy();

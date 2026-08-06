@@ -26,6 +26,11 @@ import {
 import { evaluateSelection, parseSelection, selectionError } from '../mol/selection';
 import { fetchEntryDetail } from '../rcsb/api';
 import { orientationFor } from '../gfx/orient';
+import { isosurface, levelWithinBudget, nearMask } from '../gfx/isosurface';
+import {
+  NoVolumeError, fetchVolumes, sampleSigma,
+  type Box, type MapKind, type VolumeGrid, type VolumeSet,
+} from '../rcsb/volume';
 import { useStore, visibleSlotCount, type SlotState } from '../state/store';
 
 interface SlotData {
@@ -41,6 +46,9 @@ interface SlotData {
   builtSignature: string;
   /** Raw bytes of a locally opened file, kept so projects can embed them. */
   sourceFile: { name: string; buffer: ArrayBuffer } | null;
+  /** Fetched density grids, kept so the contour can move without refetching. */
+  volumes: VolumeSet | null;
+  volumeRequest: AbortController | null;
 }
 
 /**
@@ -56,6 +64,52 @@ const IDENTITY = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0,
 const BOND_PERCEPTION_LIMIT = 250_000;
 /** copies x atoms above which assembly 1 is offered but not auto-selected. */
 const ASSEMBLY_AUTO_LIMIT = 20_000_000;
+
+/**
+ * VolumeServer detail levels. Both saturate at the map's own sampling, so
+ * these are ceilings rather than targets: 4 returns a small X-ray map at full
+ * resolution, and 3 keeps an EM map near a megabyte instead of the eight it
+ * would send at 4 — eight million samples is a two-second contour and millions
+ * of triangles for detail no one can see through the model.
+ */
+const XRAY_DETAIL = 4;
+const EM_DETAIL = 3;
+
+const DEFAULT_LEVEL: Record<MapKind, number> = { 'x-ray': 1.5, em: 4 };
+
+const MAIN_COLOR: [number, number, number] = [0.42, 0.62, 0.95];
+const EM_COLOR: [number, number, number] = [0.62, 0.70, 0.82];
+const DIFFERENCE_POSITIVE: [number, number, number] = [0.30, 0.82, 0.45];
+const DIFFERENCE_NEGATIVE: [number, number, number] = [0.95, 0.35, 0.35];
+
+/** Cartesian bounds of a structure, padded, as the box query wants it. */
+function paddedBox(s: Structure, pad: number): Box {
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  for (let a = 0; a < s.atomCount; a++) {
+    if (s.x[a] < minX) minX = s.x[a];
+    if (s.x[a] > maxX) maxX = s.x[a];
+    if (s.y[a] < minY) minY = s.y[a];
+    if (s.y[a] > maxY) maxY = s.y[a];
+    if (s.z[a] < minZ) minZ = s.z[a];
+    if (s.z[a] > maxZ) maxZ = s.z[a];
+  }
+  return {
+    min: [minX - pad, minY - pad, minZ - pad],
+    max: [maxX + pad, maxY + pad, maxZ + pad],
+  };
+}
+
+/**
+ * "SOLUTION NMR" reads as "Solution NMR", not "Solution nmr". The archive
+ * stores methods in capitals and the acronyms in them stay capitals.
+ */
+const METHOD_ACRONYMS = /\b(nmr|em|epr|xfel|3d)\b/gi;
+
+function methodPhrase(method: string): string {
+  const lower = method.toLowerCase().replace(/^./, (c) => c.toUpperCase());
+  return lower.replace(METHOD_ACRONYMS, (m) => m.toUpperCase());
+}
 
 /**
  * Whole-structure bond perception is expensive, so only run it when a layer
@@ -85,6 +139,8 @@ function emptySlotData(): SlotData {
     loadHandle: null,
     builtSignature: '',
     sourceFile: null,
+    volumes: null,
+    volumeRequest: null,
   };
 }
 
@@ -167,6 +223,10 @@ export class ViewerController {
     this.data[slot].loadHandle?.cancel();
     const keepCamera = (modelNum !== undefined || allModels !== undefined)
       && store.slots[slot].entryId === entryId.trim().toUpperCase();
+    // A map belongs to the structure it was fetched for. Leaving it up would
+    // draw one entry's density around another's model, which is the single
+    // most misleading thing this feature could do.
+    if (!keepCamera) this.hideDensity(slot);
 
     store.patchSlot(slot, {
       entryId: id,
@@ -309,6 +369,7 @@ export class ViewerController {
       this.engine.setOverlaySources(i, []);
       this.engine.setOverlay(i, EMPTY_F32);
       this.engine.setLabels(i, EMPTY_F32);
+      this.engine.setVolumes(i, []);
     }
     useStore.getState().resetSession(name);
     this.invalidate();
@@ -321,9 +382,11 @@ export class ViewerController {
       if (sources.includes(slot)) this.setOverlaySlots(i, sources.filter((s) => s !== slot));
     }
     this.data[slot].loadHandle?.cancel();
+    this.data[slot].volumeRequest?.abort();
     this.data[slot] = emptySlotData();
     this.engine.setStructure(slot, null);
     this.engine.setGeometry(slot, null);
+    this.engine.setVolumes(slot, []);
     useStore.getState().clearSlot(slot);
     this.invalidate();
   }
@@ -568,6 +631,214 @@ export class ViewerController {
       if (this.data[i].structure) this.rebuild(i);
     }
     this.invalidate();
+  }
+
+  // -------------------------------------------------------------------------
+  // Experimental density
+  // -------------------------------------------------------------------------
+
+  /**
+   * Fetches the map for a pane and contours it.
+   *
+   * Which map exists is a property of how the structure was determined, not
+   * something to ask the user: X-ray entries have 2Fo-Fc and Fo-Fc if
+   * structure factors were deposited, EM entries have the deposited map under
+   * an EMDB accession, and everything else has nothing. Saying which of those
+   * it is when there is no map is more useful than a bare failure.
+   */
+  async showDensity(slot: number): Promise<void> {
+    const structure = this.data[slot].structure;
+    const state = useStore.getState().slots[slot];
+    const store = useStore.getState();
+    if (!structure) return;
+
+    const detail = state.detail;
+    const method = detail?.method ?? '';
+    const emdbId = detail?.emdbIds?.[0] ?? null;
+    let kind: MapKind;
+    let source: string;
+
+    if (emdbId) {
+      kind = 'em';
+      source = emdbId;
+    } else if (/X-RAY|NEUTRON/i.test(method) && state.entryId) {
+      // The validation summary already knows: fit to density can only be
+      // measured when structure factors were deposited, so a null there means
+      // there is no map to fetch. Asking anyway costs a request that fails as
+      // an opaque CORS error rather than as the 404 it really is.
+      if (detail && detail.validation.rsrzOutliers === null) {
+        store.updateDensity(slot, {
+          status: 'error',
+          error: 'No density map for this entry — structure factors were never '
+            + 'deposited, so there is nothing to compare the model against. '
+            + 'The validation panel says the same thing under "Density fit".',
+        });
+        return;
+      }
+      kind = 'x-ray';
+      source = state.entryId;
+    } else {
+      store.updateDensity(slot, {
+        status: 'error',
+        error: method
+          ? `${methodPhrase(method)} entries have no deposited map to show.`
+          : 'This pane was opened from a local file, so there is no deposited '
+            + 'map to fetch.',
+      });
+      return;
+    }
+
+    this.data[slot].volumeRequest?.abort();
+    const controller = new AbortController();
+    this.data[slot].volumeRequest = controller;
+    store.updateDensity(slot, {
+      status: 'loading',
+      error: null,
+      kind,
+      source,
+      // Sigma means something different in the two experiments. An X-ray map
+      // is conventionally read at 1σ-2σ; a cryo-EM map at that level is mostly
+      // noise and a solid blob, and is normally contoured far higher. Only
+      // applied when the kind changes, so a restored project keeps its own.
+      ...(state.density.kind === kind ? {} : { level: DEFAULT_LEVEL[kind] }),
+    });
+
+    try {
+      // Always a box around the model rather than the whole cell or map. For
+      // X-ray that is what makes the server apply the spacegroup and return
+      // density where the molecule actually is. For EM it is what spends the
+      // detail budget on the particle: an EMDB box is usually much larger than
+      // the model, and asking for the whole thing bought 4 Å sampling where
+      // the same bytes over the model give 2 Å. It also means sigma is
+      // computed over the region being looked at, which is the sigma a contour
+      // level ought to mean.
+      const box = paddedBox(structure, kind === 'em' ? 8 : 6);
+      const set = await fetchVolumes(
+        kind, source, box, kind === 'em' ? EM_DETAIL : XRAY_DETAIL, controller.signal,
+      );
+      if (this.data[slot].volumeRequest !== controller) return;
+      this.data[slot].volumes = set;
+      store.updateDensity(slot, { status: 'ready', bytes: set.bytes, error: null });
+
+      // How much surface a level buys varies enormously between maps, so the
+      // opening contour is checked against the budget before it is drawn. A
+      // fixed default lands on a clean surface for one entry and a truncated
+      // one for the next.
+      const main = set.maps.find((m) => !/^fo-fc$/i.test(m.name));
+      const wanted = useStore.getState().slots[slot].density;
+      if (main) {
+        const points = wanted.radius > 0 ? this.drawnAtomPositions(slot) : null;
+        const mask = points ? nearMask(main, points, wanted.radius) : null;
+        const level = levelWithinBudget(main, wanted.level, mask);
+        if (level !== wanted.level) store.updateDensity(slot, { level });
+      }
+      this.rebuildDensity(slot);
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      store.updateDensity(slot, {
+        status: 'error',
+        error: err instanceof NoVolumeError || err instanceof Error
+          ? err.message
+          : String(err),
+      });
+    } finally {
+      if (this.data[slot].volumeRequest === controller) {
+        this.data[slot].volumeRequest = null;
+      }
+    }
+  }
+
+  hideDensity(slot: number): void {
+    this.data[slot].volumeRequest?.abort();
+    this.data[slot].volumeRequest = null;
+    this.data[slot].volumes = null;
+    this.engine.setVolumes(slot, []);
+    useStore.getState().updateDensity(slot, {
+      status: 'off', error: null, triangles: 0, bytes: 0, truncated: false,
+    });
+    this.invalidate();
+  }
+
+  /**
+   * Re-contours the maps already in hand. Every control except the region
+   * radius comes through here, so moving the contour is local work rather than
+   * another few megabytes over the wire.
+   */
+  rebuildDensity(slot: number): void {
+    const set = this.data[slot].volumes;
+    const structure = this.data[slot].structure;
+    if (!set || !structure) return;
+
+    const d = useStore.getState().slots[slot].density;
+    const points = d.radius > 0 ? this.drawnAtomPositions(slot) : null;
+
+    const entries: { mesh: ReturnType<typeof isosurface>; style: {
+      color: [number, number, number]; opacity: number; wireframe: boolean;
+    } }[] = [];
+    let triangles = 0;
+    let truncated = false;
+
+    // The difference map is contoured twice, at +level and -level, over the
+    // same grid; rasterising the mask once for it rather than twice is most of
+    // the cost of turning the difference map on.
+    const masks = new Map<VolumeGrid, Uint8Array | null>();
+    const maskFor = (grid: VolumeGrid) => {
+      if (!masks.has(grid)) {
+        masks.set(grid, points ? nearMask(grid, points, d.radius) : null);
+      }
+      return masks.get(grid) ?? null;
+    };
+
+    const contour = (grid: VolumeGrid, sigma: number, color: [number, number, number]) => {
+      const mesh = isosurface(grid, { sigma, mask: maskFor(grid) });
+      triangles += mesh.triangleCount;
+      truncated = truncated || mesh.truncated;
+      entries.push({
+        mesh,
+        style: { color, opacity: d.opacity, wireframe: d.wireframe },
+      });
+    };
+
+    for (const grid of set.maps) {
+      const isDifference = /^fo-fc$/i.test(grid.name);
+      if (isDifference) {
+        if (!d.showDifference) continue;
+        // Both lobes: green where the data want atoms the model does not have,
+        // red where the model has atoms the data do not support. Showing only
+        // the positive half is the commonest way to misread a difference map.
+        contour(grid, d.diffLevel, DIFFERENCE_POSITIVE);
+        contour(grid, -d.diffLevel, DIFFERENCE_NEGATIVE);
+      } else {
+        contour(grid, d.level, set.kind === 'em' ? EM_COLOR : MAIN_COLOR);
+      }
+    }
+
+    this.engine.setVolumes(slot, entries);
+    useStore.getState().updateDensity(slot, { triangles, truncated });
+    this.invalidate();
+  }
+
+  /** Positions of the atoms actually drawn, for masking the map to the model. */
+  private drawnAtomPositions(slot: number): Float32Array | null {
+    const structure = this.data[slot].structure;
+    if (!structure) return null;
+    const mask = this.drawnAtomMask(slot);
+    const out: number[] = [];
+    for (let a = 0; a < structure.atomCount; a++) {
+      if (mask && !mask[a]) continue;
+      out.push(structure.x[a], structure.y[a], structure.z[a]);
+    }
+    return out.length > 0 ? Float32Array.from(out) : null;
+  }
+
+  /** Density at a point, in sigma, for the pane's main map. Null when absent. */
+  densitySigmaAt(slot: number, x: number, y: number, z: number): number | null {
+    const set = this.data[slot].volumes;
+    if (!set) return null;
+    const grid = set.maps.find((m) => !/^fo-fc$/i.test(m.name));
+    if (!grid) return null;
+    const value = sampleSigma(grid, x, y, z);
+    return Number.isNaN(value) ? null : value;
   }
 
 

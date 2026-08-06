@@ -124,6 +124,21 @@ export function CommandPalette() {
             >
               Save pane {activeSlot + 1} as PNG
             </Command.Item>
+            <Command.Item
+              value="density map electron microscopy experimental evidence"
+              onSelect={() => run(() => {
+                if (store.slots[activeSlot].density.status === 'ready') {
+                  viewer.hideDensity(activeSlot);
+                } else {
+                  store.setPanel('scene');
+                  void viewer.showDensity(activeSlot);
+                }
+              })}
+            >
+              {store.slots[activeSlot].density.status === 'ready'
+                ? 'Remove the density map'
+                : 'Show the experimental density map'}
+            </Command.Item>
           </Command.Group>
 
           <Command.Group heading="Layout">

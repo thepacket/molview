@@ -134,6 +134,12 @@ export function sceneContext(): string {
       superposedOnto: slot.superposedOnto === null ? undefined : slot.superposedOnto + 1,
       rmsd: slot.superposeRmsd ?? undefined,
       overlaying: slot.overlaySlots.map((s) => s + 1),
+      // Only when a map is up: the absence of the key is what tells the model
+      // there is none, and it can ask for one with the density action.
+      density: slot.density.status === 'ready'
+        ? `${slot.density.source} at ${slot.density.level} sigma`
+          + `${slot.density.showDifference ? ', Fo-Fc shown' : ''}`
+        : undefined,
     });
   }
 

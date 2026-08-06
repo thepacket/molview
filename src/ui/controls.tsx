@@ -58,12 +58,18 @@ export function Select<T extends string>({ value, options, onChange, ariaLabel }
   );
 }
 
-export function Slider({ value, min, max, step, onChange }: {
+export function Slider({ value, min, max, step, onChange, onCommit }: {
   value: number;
   min: number;
   max: number;
   step: number;
   onChange: (value: number) => void;
+  /**
+   * Fires once the drag ends. For anything too expensive to recompute per
+   * frame — contouring a density map is a fifth of a second — the work belongs
+   * here and only the label follows the thumb.
+   */
+  onCommit?: (value: number) => void;
 }) {
   return (
     <RSlider.Root
@@ -73,6 +79,7 @@ export function Slider({ value, min, max, step, onChange }: {
       max={max}
       step={step}
       onValueChange={([v]) => onChange(v)}
+      onValueCommit={([v]) => onCommit?.(v)}
     >
       <RSlider.Track className="slider-track">
         <RSlider.Range className="slider-range" />

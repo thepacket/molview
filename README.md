@@ -263,6 +263,27 @@ The disordered histone tails of `1KX5` are the case to look at. Chains
 can be hidden or focused individually. A front clipping plane slices into the
 interior of large assemblies.
 
+**Experimental density.** A model is an interpretation of an experiment, and
+MolView will show you the experiment. The Panes tool fetches the deposited map
+for the pane — 2Fo-Fc and Fo-Fc for X-ray entries, the EMDB map for cryo-EM —
+and contours it around the model. Contours are quoted in sigma, because that is
+the unit the argument is conducted in.
+
+The default presentation is chicken wire, which is what a crystallographer
+reads a map in and is also the only see-through surface a deferred renderer
+gets for free; a blended solid surface is one toggle away. The difference map
+is off until asked for and then appears as both lobes at once, green where the
+data want atoms the model does not have and red where the model has atoms the
+data do not support — reading only the green half is the classic way to talk
+yourself into a ligand that is not there.
+
+The map is fetched as a box around the model rather than as a whole unit cell,
+so the server applies the spacegroup and the density arrives where the molecule
+is. Density is then masked to within a few Ångströms of the atoms actually
+drawn, because an X-ray box contains the crystal packing too. Entries with no
+map say why: `4HHB` was deposited in 1984 without structure factors, which is
+the same fact the validation panel reports as a missing density fit.
+
 **Local files.** Drop an mmCIF or BinaryCIF file onto a pane, or open one from
 the Panes tool. Nothing is uploaded.
 
@@ -274,6 +295,7 @@ the Panes tool. Nothing is uploaded.
 | Search | `search.rcsb.org/rcsbsearch/v2/query` |
 | Coordinates (BinaryCIF) | `models.rcsb.org/{id}.bcif` |
 | Coordinates (mmCIF fallback) | `files.rcsb.org/download/{ID}.cif` |
+| Density maps (BinaryCIF) | `maps.rcsb.org/{x-ray\|em}/{id}/box/...` |
 
 Search returns identifiers only; a single batched GraphQL query then fetches the
 definition for a whole page of hits.
@@ -283,12 +305,12 @@ definition for a whole page of hits.
 ```
 src/
   rcsb/        GraphQL + Search clients, MessagePack, BinaryCIF, mmCIF text
-               parser, wwPDB validation summary
+               parser, wwPDB validation summary, density maps
   mol/         Structure model, element data, bond perception, colour schemes,
                selections, components, measurements, alignment, chain contacts,
                loading worker
   gfx/         WebGPU engine, camera, geometry generation, WGSL shaders, text,
-               first-view orientation
+               first-view orientation, marching-cubes isosurfaces
   ai/          Action vocabulary and executor, prompt, OpenRouter client,
                reply parser, Markdown/KaTeX renderer
   viewer/      Controller bridging React state to GPU resources
@@ -378,8 +400,15 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
 - A pane opened from a local file has no id to refetch, so a project must embed
   its bytes to restore it. That is an opt-in, capped at 25 MB per file, and
   never included in a shareable link.
-- The deferred pipeline is opaque-only — there is no transparency, and no
-  molecular surface representation.
+- There is no molecular surface representation yet. Transparency now exists —
+  the density isosurface is drawn in a forward pass blended over the deferred
+  resolve — but it is unsorted, so two transparent sheets in front of each other
+  blend in draw order rather than in depth order.
+- Density surfaces are generated on the CPU, so moving a contour costs a stall
+  of a tenth of a second on a small X-ray map and about a second on a large
+  cryo-EM one. The opening contour is chosen against a triangle budget rather
+  than fixed, so a map never arrives half-drawn, and the level it settles on is
+  the one the panel reports.
 - Chain contacts are proximity, not buried surface area, and symmetry contacts
   are found only around the deposited copy — enough to see every distinct
   interface in a symmetric assembly, not a per-copy census.

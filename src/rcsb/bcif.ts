@@ -185,28 +185,43 @@ function decodeColumn(col: Record<string, MsgPackValue>, rowCount: number): CifC
   return new ArrayColumn(rowCount, values, mask, numeric);
 }
 
-export function parseBinaryCif(buffer: ArrayBuffer): CifBlock {
+/**
+ * Every data block in the file.
+ *
+ * Coordinate files carry one and `parseBinaryCif` is the right door for them.
+ * Volume files carry three — a server-status block, then one per map — so the
+ * block header is data rather than decoration and the caller has to see them
+ * all.
+ */
+export function parseBinaryCifBlocks(buffer: ArrayBuffer): CifBlock[] {
   const root = decodeMsgPack(new Uint8Array(buffer)) as Record<string, MsgPackValue>;
   const blocks = root.dataBlocks as Record<string, MsgPackValue>[];
   if (!blocks?.length) throw new Error('bcif: file contains no data blocks');
 
-  const block = blocks[0];
-  const categories = new Map<string, MapCategory>();
+  return blocks.map((block) => {
+    const categories = new Map<string, MapCategory>();
 
-  for (const cat of (block.categories as Record<string, MsgPackValue>[]) ?? []) {
-    const name = (cat.name as string).replace(/^_/, '');
-    const rowCount = cat.rowCount as number;
-    const columns = new Map<string, CifColumn>();
+    for (const cat of (block.categories as Record<string, MsgPackValue>[]) ?? []) {
+      // Coordinate files name categories bare, volume files with the CIF
+      // leading underscore. Normalising here means neither caller has to know.
+      const name = (cat.name as string).replace(/^_/, '');
+      const rowCount = cat.rowCount as number;
+      const columns = new Map<string, CifColumn>();
 
-    for (const col of (cat.columns as Record<string, MsgPackValue>[]) ?? []) {
-      try {
-        columns.set(col.name as string, decodeColumn(col, rowCount));
-      } catch {
-        // A single unreadable column should not sink the whole structure.
+      for (const col of (cat.columns as Record<string, MsgPackValue>[]) ?? []) {
+        try {
+          columns.set(col.name as string, decodeColumn(col, rowCount));
+        } catch {
+          // A single unreadable column should not sink the whole structure.
+        }
       }
+      categories.set(name, new MapCategory(name, rowCount, columns));
     }
-    categories.set(name, new MapCategory(name, rowCount, columns));
-  }
 
-  return new MapBlock((block.header as string) ?? '', categories);
+    return new MapBlock((block.header as string) ?? '', categories);
+  });
+}
+
+export function parseBinaryCif(buffer: ArrayBuffer): CifBlock {
+  return parseBinaryCifBlocks(buffer)[0];
 }

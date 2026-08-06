@@ -19,7 +19,9 @@ import { createMeasurement, describeAtom, type MeasurementKind } from '../mol/me
 import { findInterfaces, interfaceSelection } from '../mol/interfaces';
 import { MolKind } from '../mol/structure';
 import type { NucleotideStyle } from '../gfx/geometry';
-import { LAYOUT_SLOT_COUNT, useStore, type LayoutMode } from '../state/store';
+import {
+  LAYOUT_SLOT_COUNT, useStore, type DensityState, type LayoutMode,
+} from '../state/store';
 import { viewer } from '../viewer/ViewerController';
 
 // ---------------------------------------------------------------------------
@@ -282,6 +284,65 @@ export async function applyAction(action: Action): Promise<string> {
       if (!m) return reject('view takes "orient", or an axis such as "x" or "-z"');
       viewer.viewAlongAxis(slot, m[2] as 'x' | 'y' | 'z', m[1] === '-');
       return `Looking down ${m[1]}${m[2].toUpperCase()}.`;
+    }
+
+    case 'density': {
+      const slot = store.activeSlot;
+      if (!viewer.getStructure(slot)) return reject(`pane ${slot + 1} has no structure`);
+      const want = value.toLowerCase();
+
+      if (/^(off|hide|no|false)$/.test(want)) {
+        viewer.hideDensity(slot);
+        return 'Density map removed.';
+      }
+
+      const loaded = () => useStore.getState().slots[slot].density.status === 'ready';
+      // Everything except "off" implies the map should be there, so a tuning
+      // value on a pane with no map loads it rather than being rejected.
+      if (!loaded()) {
+        await viewer.showDensity(slot);
+        const after = useStore.getState().slots[slot].density;
+        if (after.status !== 'ready') return reject(after.error ?? 'the map could not be fetched');
+      }
+
+      const patch: Partial<DensityState> = {};
+      const sigma = /(-?\d+(?:\.\d+)?)\s*(?:sigma|σ)?$/.exec(want);
+      if (/difference|fo-?fc/.test(want)) {
+        patch.showDifference = !/\b(off|no|hide)\b/.test(want);
+      } else if (/^around\b/.test(want)) {
+        const n = Number.parseFloat(want.replace(/^around\s*/, ''));
+        if (!Number.isFinite(n) || n < 0) return reject('"around" needs a distance in angstroms');
+        patch.radius = Math.min(n, 12);
+      } else if (/solid|surface|opaque/.test(want)) {
+        patch.wireframe = false;
+      } else if (/wire|mesh|chicken/.test(want)) {
+        patch.wireframe = true;
+      } else if (sigma && !/^(on|show|yes|true)$/.test(want)) {
+        const n = Number.parseFloat(sigma[1]);
+        if (!Number.isFinite(n) || n <= 0) return reject('a contour level must be positive');
+        patch.level = n;
+      }
+
+      if (Object.keys(patch).length > 0) {
+        store.updateDensity(slot, patch);
+        viewer.rebuildDensity(slot);
+      }
+
+      const now = useStore.getState().slots[slot].density;
+      const parts = [
+        `${now.source} at ${now.level.toFixed(1)} sigma`,
+        now.wireframe ? 'as wireframe' : `as a solid surface at ${now.opacity.toFixed(2)} opacity`,
+      ];
+      if (now.showDifference) parts.push(`with the Fo-Fc map at ±${now.diffLevel.toFixed(1)} sigma`);
+      parts.push(now.radius > 0
+        ? `within ${now.radius} A of the drawn atoms`
+        : 'over the whole box');
+
+      const summary = `Showing ${parts.join(', ')}.`;
+      return now.truncated
+        ? `${summary} The surface hit its triangle budget and is incomplete — `
+          + 'raise the contour or narrow the region around the model.'
+        : summary;
     }
 
     case 'nucleotides': {

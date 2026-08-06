@@ -1260,6 +1260,28 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+/* Explanatory paragraph inside a panel section. */
+.panel-note {
+  margin-bottom: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.density-source {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 9px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.density-source span:first-child {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
 .link {
   color: var(--accent);
   text-decoration: none;

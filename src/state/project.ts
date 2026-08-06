@@ -79,6 +79,21 @@ interface PaneDocument {
   showHydrogenBonds: boolean;
   showLabels: boolean;
   spinning: boolean;
+  /**
+   * Density settings, when a map was on screen. The map itself is refetched on
+   * restore — several megabytes of grid have no place in a shareable link, and
+   * the server is the authority on it anyway.
+   */
+  density?: {
+    /** Carried so the refetch does not reapply the per-experiment default level. */
+    kind: 'x-ray' | 'em' | null;
+    level: number;
+    diffLevel: number;
+    showDifference: boolean;
+    wireframe: boolean;
+    opacity: number;
+    radius: number;
+  };
 }
 
 export interface ProjectDocument {
@@ -183,6 +198,17 @@ export function serialiseProject(_options: SerialiseOptions = {}): ProjectDocume
       showHydrogenBonds: slot.showHydrogenBonds,
       showLabels: slot.showLabels,
       spinning: slot.spinning,
+      density: slot.density.status === 'ready'
+        ? {
+            kind: slot.density.kind,
+            level: slot.density.level,
+            diffLevel: slot.density.diffLevel,
+            showDifference: slot.density.showDifference,
+            wireframe: slot.density.wireframe,
+            opacity: slot.density.opacity,
+            radius: slot.density.radius,
+          }
+        : undefined,
     });
   }
 
@@ -362,6 +388,13 @@ export async function restoreProject(doc: ProjectDocument): Promise<RestoreRepor
       });
     }
     if (pane.showHydrogenBonds) viewer.toggleHydrogenBonds(i, true);
+    if (pane.density) {
+      // Settings first, so the fetch that follows contours at the saved level
+      // rather than flashing the default one. Not awaited: a project with four
+      // panes would otherwise open one map at a time.
+      useStore.getState().updateDensity(i, { ...pane.density });
+      void viewer.showDensity(i);
+    }
     viewer.refreshOverlay(i);
 
     report.panesRestored++;

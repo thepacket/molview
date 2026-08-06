@@ -31,38 +31,6 @@ these are deliberately declined under "Not planned".
 - **Movie recording.** Auto-rotate exists; capturing it does not.
 - **Per-model interactive transforms, settable pivot, draggable labels, a colour
   key.** Small, individually unremarkable, and each one is a real gap.
-- **Density maps.** The largest coherent absence: no volumetric data at all — no
-  map fetch, no isosurface, no contour level, no slices. It changes what the app
-  is for, since it is what lets you check a model against evidence rather than
-  admire it, and it pairs with the validation summary that already says which
-  residues to distrust.
-
-  Groundwork, probed and confirmed rather than assumed:
-
-  - **The maps are BinaryCIF.** `https://maps.rcsb.org/x-ray/{id}/cell?detail=1`
-    and `https://maps.rcsb.org/em/emd-{n}/cell?detail=1` both return MessagePack
-    from VolumeServer 0.9.7 — the same encoding `src/rcsb/msgpack.ts` and
-    `src/rcsb/bcif.ts` already decode. No CCP4/MRC parser is needed. 1UBQ is
-    590 kB, an EM entry about 1 MB.
-  - **Three data blocks per file**: `SERVER`, then `2FO-FC` and `FO-FC` for
-    X-ray. Each map block holds `_volume_data_3d_info` (origin, dimensions,
-    `sample_count[0..2]`, spacegroup cell, and `mean_sampled` / `sigma_sampled`
-    / `min` / `max`) and `_volume_data_3d` with a single `values` column —
-    290,304 samples for 1UBQ.
-  - **The existing parser will not read it as-is.** `parseBinaryCif` returned
-    zero rows: it takes the first data block only, and these category names
-    carry a leading underscore. Both are small fixes in `bcif.ts`, and doing
-    them there means the volume path reuses the decoder that is already
-    exercised by every structure load.
-  - `sigma_sampled` is what makes "contour at 1.5 σ" mean anything, and it
-    arrives in the file.
-
-  What remains is the graphics, and it is the real work: marching cubes over the
-  sampled grid, or a volume raycaster; a contour control; and transparency,
-  which the deferred opaque-only pipeline does not have and which also blocks
-  molecular surfaces. Whichever comes first should probably solve transparency,
-  since both features wait on it.
-
 Not taken: structure editing and dynamics (bond rotation, swapaa, tug,
 minimize), markers, and the map tab's analysis tools — see "Not planned".
 
@@ -72,10 +40,13 @@ Ideas that surfaced while building the assistant:
   reversible view change, so it runs directly; a toggle for people who want to
   approve each one would be cheap.
 
-Two that would be worth revisiting if the app grows:
+- **Molecular surfaces.** A Gaussian or solvent-excluded surface, reusing the
+  marching cubes and the forward transparent pass the density work added. What
+  is left is generating the field: a Gaussian sum over atoms on a grid, which is
+  the same shape of problem as `nearMask` already solves.
 
-- **Molecular surfaces** — see the note below. The blocker is transparency, not
-  the surface itself.
+One that would be worth revisiting if the app grows:
+
 - **A real command line** — the ⌘K palette and the selection grammar between
   them cover most of what a command line would, but typed commands compose in a
   way menus cannot.
@@ -83,6 +54,37 @@ Two that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **Density maps** — the deposited experimental density, fetched from RCSB's
+  VolumeServer and contoured with marching cubes.
+
+  Four decisions worth keeping:
+
+  - **A box around the model, not the unit cell.** The server then applies the
+    spacegroup, so density arrives where the molecule is rather than wherever
+    the asymmetric unit happens to sit. For cryo-EM the same request spends the
+    detail budget on the particle instead of on empty box — 2 Å sampling for the
+    bytes that a whole-map request spent on 4 Å — and it makes sigma mean the
+    variation over the region being looked at.
+  - **The 256-case triangle table is derived, not transcribed.** It is built at
+    module load from the cube's face connectivity, with ambiguous faces resolved
+    by a rule that depends only on the four shared corners, so the two cubes
+    meeting there always agree. The mesh is watertight at every contour tested,
+    and correctness is an argument rather than a proofread.
+  - **Wireframe first.** Chicken wire is how maps are read, and it is the only
+    see-through surface a deferred renderer gets for nothing. The solid surface
+    rides on a new forward pass that blends over the resolved image and
+    depth-tests against the G-buffer, which is the transparency that molecular
+    surfaces were waiting on.
+  - **The opening contour is chosen against a triangle budget.** Surface cells
+    are counted before any geometry is built, and the level rises until the
+    surface fits. A fixed default gives one entry a clean map and the next a
+    half-drawn one.
+
+  Validated against the coordinates rather than by eye: 2Fo-Fc sampled at the
+  660 atoms of 1UBQ averages 2.65 sigma with 90% above 1 sigma, while the same
+  atoms displaced 7 Å average 0.03 — which pins the axis order, the fractional
+  origin and the grid indexing all at once.
 
 - **Camera orientation on demand** (`c08ae3d`) — O re-orients a pane to its own
   principal axes, the palette offers views down X, Y and Z, and the assistant
@@ -158,7 +160,6 @@ Modeller, dockprep, mutation, docking — these need scientific backends there i
 no case for reimplementing. VR. And the full ChimeraX command surface: hundreds
 of commands built over decades, and chasing it is mimicry rather than design.
 
-Molecular surfaces (SES/Gaussian) are genuinely wanted but structurally awkward:
-the deferred pipeline is opaque-only, and a surface you cannot see the cartoon
-through is half a feature. It needs order-independent transparency or a second
-forward pass before it is worth starting.
+Molecular surfaces (SES/Gaussian) are genuinely wanted, and the blocker is now
+gone: the density work added the forward blended pass they were waiting on, so
+they have moved to "Open" above.

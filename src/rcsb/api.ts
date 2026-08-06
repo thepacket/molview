@@ -74,6 +74,8 @@ export interface EntryDetail extends EntrySummary {
   polymerEntities: PolymerEntity[];
   nonPolymerEntities: NonPolymerEntity[];
   assemblyCount: number;
+  /** EMDB accessions for this entry; the density server keys EM maps by them. */
+  emdbIds: string[];
 }
 
 interface GraphQLResponse<T> {
@@ -138,6 +140,7 @@ const DETAIL_FIELDS = `
     rcsb_nonpolymer_entity_container_identifiers { auth_asym_ids }
   }
   assemblies { rcsb_id }
+  rcsb_entry_container_identifiers { emdb_ids }
 `;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -224,6 +227,7 @@ export async function fetchEntryDetail(
     polymerEntities,
     nonPolymerEntities,
     assemblyCount: (e.assemblies ?? []).length,
+    emdbIds: e.rcsb_entry_container_identifiers?.emdb_ids ?? [],
   };
 }
 

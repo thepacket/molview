@@ -12,6 +12,12 @@ export interface CifColumn {
   num(row: number): number;
   /** True for CIF `.` (not applicable) or `?` (unknown). */
   isNull(row: number): boolean;
+  /**
+   * The backing array, when there is one. Volume data arrives as a single
+   * column of a few hundred thousand numbers, and going through `num()` for
+   * each of them costs more than the whole marching-cubes pass that follows.
+   */
+  raw?(): ArrayLike<number> | ArrayLike<string>;
 }
 
 export interface CifCategory {
@@ -74,6 +80,10 @@ export class ArrayColumn implements CifColumn {
 
   isNull(row: number): boolean {
     return this.mask ? this.mask[row] !== 0 : false;
+  }
+
+  raw(): ArrayLike<number> | ArrayLike<string> {
+    return this.values;
   }
 }
 
