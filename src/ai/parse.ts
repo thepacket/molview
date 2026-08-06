@@ -104,9 +104,14 @@ export function parseReply(raw: string): ParsedReply {
     // Valid message, unusable envelope: show the answer, drop the actions.
     if (recovered != null) return { message: recovered, actions: [] };
 
-    if (/^\s*\{\s*"message"\s*:/.test(trimmed)) {
+    // Anything that opens like the envelope but does not parse is a truncated
+    // envelope, not prose. The earlier test for this demanded a colon, so a
+    // reply cut at `{"message` slipped past it and was rendered verbatim — the
+    // app looked broken where it should have said the reply was.
+    if (/^\s*[{[]/.test(trimmed)) {
       throw new Error(
-        'The model returned an incomplete reply. Try again, or ask for something shorter.',
+        'The model returned an incomplete reply — it starts as JSON but does not '
+        + 'finish. Try again, or ask for something shorter.',
       );
     }
 
