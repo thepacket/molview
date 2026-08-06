@@ -23,6 +23,7 @@ import { buildLabelInstances, type LabelRequest } from '../gfx/text';
 import {
   AlignmentError, alignableChains, superposeChains, type AlignableChain,
 } from '../mol/align';
+import { evaluateSelection, parseSelection, selectionError } from '../mol/selection';
 import { fetchEntryDetail } from '../rcsb/api';
 import { orientationFor } from '../gfx/orient';
 import { useStore, visibleSlotCount, type SlotState } from '../state/store';
@@ -789,6 +790,46 @@ export class ViewerController {
     const camera = this.engine.getCamera(slot);
     camera.orientation.set([0, 0, 0, 1]);
     camera.frame(geometry.center, geometry.radius, true);
+    this.invalidate();
+  }
+
+  /**
+   * Frames whatever a selection covers. Distance comes from the selection's own
+   * extent rather than a fixed zoom, so an interface between two chains and a
+   * single side chain both end up filling the pane.
+   */
+  focusSelection(slot: number, selection: string): void {
+    const structure = this.data[slot].structure;
+    if (!structure) return;
+    if (selectionError(selection)) return;
+
+    const mask = evaluateSelection(parseSelection(selection), structure);
+    let n = 0, cx = 0, cy = 0, cz = 0;
+    for (let a = 0; a < mask.length; a++) {
+      if (!mask[a]) continue;
+      cx += structure.x[a]; cy += structure.y[a]; cz += structure.z[a];
+      n++;
+    }
+    if (n === 0) return;
+    cx /= n; cy /= n; cz /= n;
+
+    let radius = 0;
+    for (let a = 0; a < mask.length; a++) {
+      if (!mask[a]) continue;
+      radius = Math.max(radius, Math.hypot(
+        structure.x[a] - cx, structure.y[a] - cy, structure.z[a] - cz,
+      ));
+    }
+
+    const camera = this.engine.getCamera(slot);
+    camera.animateTo({
+      target: [cx, cy, cz],
+      orientation: [
+        camera.orientation[0], camera.orientation[1],
+        camera.orientation[2], camera.orientation[3],
+      ],
+      distance: Math.max(10, (radius + 4) * 2.6),
+    });
     this.invalidate();
   }
 

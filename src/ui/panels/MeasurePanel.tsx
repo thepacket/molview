@@ -1,7 +1,10 @@
 /** Distances, angles, torsions and hydrogen bonds for the active pane. */
 
-import { Ruler, Trash2, Triangle, Waypoints } from 'lucide-react';
+import { useState } from 'react';
+import { Crosshair, Layers, Ruler, Trash2, Triangle, Waypoints } from 'lucide-react';
 import { describeAtom, type MeasurementKind } from '../../mol/measure';
+import { findInterfaces, interfaceSelection, type ChainInterface } from '../../mol/interfaces';
+import { makeComponent, Style } from '../../mol/components';
 import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Segmented, Toggle, Tip } from '../controls';
@@ -120,6 +123,8 @@ export function MeasurePanel() {
         )}
       </div>
 
+      <InterfaceSection slot={activeSlot} />
+
       <div className="panel-section">
         <div className="section-label"><span>Display</span></div>
         <Toggle
@@ -132,5 +137,119 @@ export function MeasurePanel() {
         />
       </div>
     </>
+  );
+}
+
+/**
+ * Which chains touch which. The obvious question about an assembly, and the one
+ * the viewer could not answer — you can build a 900-chain capsid and still have
+ * no way to ask what packs against what.
+ */
+function InterfaceSection({ slot }: { slot: number }) {
+  const components = useStore((s) => s.slots[slot].components);
+  const setComponents = useStore((s) => s.setComponents);
+  const [list, setList] = useState<ChainInterface[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const structure = viewer.getStructure(slot);
+  if (!structure) return null;
+
+  const compute = () => {
+    setBusy(true);
+    // Yield first: on a large assembly this takes long enough to drop a frame,
+    // and a button that looks stuck is worse than one that says it is working.
+    window.setTimeout(() => {
+      setList(findInterfaces(structure));
+      setBusy(false);
+    }, 0);
+  };
+
+  const show = (entry: ChainInterface) => {
+    const name = `Interface ${entry.chainA}-${entry.chainB}`;
+    const selection = interfaceSelection(entry);
+    const existing = components.findIndex((c) => c.name === name);
+    const next = existing >= 0
+      ? components.map((c, i) => (i === existing ? { ...c, selection, visible: true } : c))
+      : [...components, makeComponent({ name, selection, style: Style.BallStick })];
+    setComponents(slot, next);
+  };
+
+  return (
+    <div className="panel-section">
+      <div className="section-label"><span>Interfaces</span></div>
+      {list === null ? (
+        <>
+          <button
+            type="button"
+            className="btn small"
+            style={{ width: '100%' }}
+            disabled={busy}
+            onClick={compute}
+          >
+            <Layers size={12} /> {busy ? 'Searching…' : 'Find chain contacts'}
+          </button>
+          <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
+            Heavy atoms within 4 Å, grouped by chain pair. Proximity, not buried
+            area — it says where to look, not how tightly anything binds.
+          </p>
+        </>
+      ) : list.length === 0 ? (
+        <p style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+          No chain touches another. A single-chain structure, or an assembly
+          whose copies are not built.
+        </p>
+      ) : (
+        <>
+          {list.slice(0, 12).map((entry) => (
+            <div key={`${entry.chainA}-${entry.chainB}`} className="measurement">
+              <div className="measurement-head">
+                <span style={{ fontSize: 11.5, marginRight: 'auto' }}>
+                  {entry.chainA} · {entry.chainB}
+                </span>
+                <Tip label="Frame this interface">
+                  <button
+                    type="button"
+                    className="pane-icon-btn"
+                    style={{ width: 20, height: 20 }}
+                    aria-label={`Focus interface ${entry.chainA} ${entry.chainB}`}
+                    onClick={() => viewer.focusSelection(slot, interfaceSelection(entry))}
+                  >
+                    <Crosshair size={11} />
+                  </button>
+                </Tip>
+                <Tip label="Draw it as a component">
+                  <button
+                    type="button"
+                    className="pane-icon-btn"
+                    style={{ width: 20, height: 20 }}
+                    aria-label={`Show interface ${entry.chainA} ${entry.chainB}`}
+                    onClick={() => show(entry)}
+                  >
+                    <Layers size={11} />
+                  </button>
+                </Tip>
+              </div>
+              <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text-faint)' }}>
+                {entry.contacts.toLocaleString()} contacts · {entry.polar} polar ·{' '}
+                {entry.residuesA.length}+{entry.residuesB.length} residues
+              </div>
+            </div>
+          ))}
+          {list.length > 12 && (
+            <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 6 }}>
+              {list.length - 12} weaker pair{list.length - 12 === 1 ? '' : 's'} not shown.
+            </p>
+          )}
+          <button
+            type="button"
+            className="btn small"
+            style={{ width: '100%', marginTop: 7 }}
+            onClick={() => setList(null)}
+          >
+            Search again
+          </button>
+        </>
+      )}
+    </div>
   );
 }

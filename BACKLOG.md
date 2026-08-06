@@ -29,10 +29,6 @@ Its seven toolbars read against what MolView has, ranked by payoff per unit of
 work rather than by how large the gap is. Mimicry is not the goal — several of
 these are deliberately declined under "Not planned".
 
-- **Interfaces.** Chain-chain contact analysis: what touches what, how much
-  area, and a way to select the interface between two chains. Fits the neighbour
-  search that H-bond detection already uses, and answers the obvious next
-  question about an assembly — which is the thing MolView is unusually good at.
 - **Shadows.** The deferred pipeline lights once after rasterisation, so a
   shadow pass is additive rather than invasive.
 - **Camera: orient and side view.** Snap to standard axes; a depth widget for
@@ -73,6 +69,13 @@ Two that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **Interfaces** (`pending`) — heavy-atom contacts grouped by chain pair, with
+  focus and draw-as-component actions. Validated against known architecture:
+  4HHB's alpha1beta1 pairs rank above alpha1beta2 above alpha1alpha2, 1AF6's
+  trimer is three equal interfaces, 1KX5 finds the DNA duplex then the four
+  histone dimers. Buried surface area was not attempted; it needs SASA, and
+  contacts answer the question the panel is actually asking.
 
 - **Nucleotide representations** (`4856936`) — ladder, stubs and none beside the
   existing slab, plus colouring by base. Watson-Crick pairing is geometric and

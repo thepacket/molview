@@ -134,6 +134,15 @@ heavy-atom criterion, restricted to what is actually visible and recomputed
 when the layers change. The haem Fe to proximal histidine NE2 in `4HHB`
 measures 2.14 Å.
 
+**Interfaces.** What touches what, which is the obvious question about an
+assembly and the one a viewer usually leaves you to answer by eye. Heavy-atom
+contacts within 4 Å are grouped by chain pair and ranked, and each pair can be
+framed or drawn as its own component in one click. On `4HHB` it recovers the
+architecture unprompted: the α1β1 pairs strongest, the α1β2 sliding interface
+weaker, the α1α2 contact barely there. It is proximity, not buried surface area
+— it says where to look, not how tightly anything binds. A 237k-atom ribosome
+takes about 300 ms and finds 244 pairs.
+
 **Overlay.** A pane can draw other panes' structures inside it, each keeping its
 own superposition, so two folds land on top of each other in one viewport
 rather than side by side.
