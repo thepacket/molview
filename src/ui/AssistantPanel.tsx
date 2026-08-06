@@ -24,6 +24,8 @@ import { Tip } from './controls';
 const HEIGHT_KEY = 'molview-assistant-height';
 const COLLAPSED_KEY = 'molview-assistant-collapsed';
 const DEFAULT_HEIGHT = 280;
+/** Actions that answer a question, rather than changing what is drawn. */
+const QUERY_ACTIONS = new Set(['interfaces', 'measure', 'superpose']);
 const MIN_HEIGHT = 160;
 const COLLAPSED_HEIGHT = 32;
 
@@ -173,7 +175,21 @@ export function AssistantPanel() {
     setDraft('');
     append('user', text);
     setBusy(true);
+    try {
+      await runTurn(text);
+    } finally {
+      setBusy(false);
+      abortRef.current = null;
+    }
+  };
 
+  /**
+   * One exchange. Re-entered once when an action was a question rather than a
+   * change: a search returns its answer *after* the model has already spoken,
+   * so without a second pass the reply is "let me check" and the findings are
+   * left on the floor for the user to interpret.
+   */
+  const runTurn = async (text: string, isFollowUp = false): Promise<void> => {
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -187,7 +203,11 @@ export function AssistantPanel() {
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt() },
       ...history,
-      { role: 'user', content: `${text}\n\nSCENE:\n${sceneContext()}` },
+      {
+        role: 'user',
+        // The scene is only worth resending when it may have changed.
+        content: isFollowUp ? text : `${text}\n\nSCENE:\n${sceneContext()}`,
+      },
     ];
 
     try {
@@ -202,11 +222,15 @@ export function AssistantPanel() {
       ];
 
       const results: string[] = [];
+      let answered = false;
       for (const action of parsed.actions) {
         try {
           const result = await applyAction(action);
           append('notice', result);
           results.push(`${action.type}: ${result}`);
+          if (QUERY_ACTIONS.has(action.type) && !result.startsWith('Rejected:')) {
+            answered = true;
+          }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           append('error', `Action failed: ${message}`);
@@ -230,12 +254,20 @@ export function AssistantPanel() {
       if (completion.totalTokens > 0) {
         append('notice', `${completion.model} · ${formatUsage(completion)}`);
       }
+
+      // Only for questions, only once, and only when one actually answered:
+      // a styling command has nothing to add, and a second pass on every turn
+      // would double the bill for nothing.
+      if (!isFollowUp && answered) {
+        await runTurn(
+          'Those are the results of what you just ran. Answer the question from '
+          + 'them, briefly, without running anything else.',
+          true,
+        );
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') append('notice', 'Stopped.');
       else append('error', err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-      abortRef.current = null;
     }
   };
 
