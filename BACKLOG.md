@@ -58,7 +58,7 @@ Two that would be worth revisiting if the app grows:
 
 ## Done
 
-- **Shadows** (`pending`) — screen-space contact shadows marched along the key
+- **Shadows** (`7a778e7`) — screen-space contact shadows marched along the key
   light, sixteen steps through the existing depth buffer. A shadow map was not
   taken: it would mean a light's-eye pass over every pane's geometry, for an
   effect that mostly matters at contact range. Reach follows the scene, so it
