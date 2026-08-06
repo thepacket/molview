@@ -1,25 +1,29 @@
 # MolView
 
-![Four structures side by side in MolView, with the assistant describing the active pane](docs/hero.png)
+**[molview.fly.dev](https://molview.fly.dev)**
 
-<sub>Four panes — 4HHB, 5ADH, 1FE3 and 2FT9 — 13,058 atoms at 0.26 ms/frame,
-with the assistant reading the active pane and the oleic acid buried in 1FE3's
-β-barrel.</sub>
+![MolView showing a SARS-CoV-2 spike/Fab complex beside haemoglobin, with the wwPDB validation summary and the assistant answering in a Markdown table](docs/hero.png)
+
+<sub>7A5R beside 4HHB — 15,387 atoms at 0.14 ms/frame. The definition panel
+carries the wwPDB validation summary (83% of this 3.7 Å cryo-EM model's backbone
+lies in the map), and the assistant answers in Markdown, reporting what the turn
+cost in tokens.</sub>
 
 A WebGPU molecular viewer for the RCSB Protein Data Bank. Browse and search the
 PDB, and display up to four structures side by side — including macromolecular
 assemblies of millions of atoms.
 
-Everything runs in the browser. There is no server component: the app talks
-directly to RCSB's public endpoints and does all decoding, geometry generation
-and rendering on the client.
+Everything runs in the browser. There is no server component: the deployment is
+static files, and the app talks directly to RCSB's public endpoints, doing all
+decoding, geometry generation and rendering on the client. Nothing you load or
+save leaves your machine except the requests to RCSB itself.
+
+Requires a WebGPU-capable browser (Chrome/Edge 113+, Safari 18+).
 
 ```bash
 npm install
 npm run dev
 ```
-
-Requires a WebGPU-capable browser (Chrome/Edge 113+, Safari 18+).
 
 `npm run build` produces a static `dist/`, which is all a deployment is — see
 [Deploying](#deploying) below.
@@ -64,8 +68,8 @@ component covering an atom wins. "Cartoon everywhere, spheres on chain A, sticks
 at the haem" is three rows, not a special case. Styles are cartoon ribbons with
 real secondary-structure cross-sections and β-strand arrowheads, backbone trace,
 ball-and-stick, licorice and spacefill. Colour by chain, element, secondary
-structure, residue type, B-factor/pLDDT, hydrophobicity, entity, or an N→C
-rainbow — per component or inherited from the pane.
+structure, residue type, B-factor/pLDDT, hydrophobicity, entity, nucleotide
+base, or an N→C rainbow — per component or inherited from the pane.
 
 Nucleic acid bases come in four styles. **Slab** fits a flat box in the base's
 own ring plane, so a double helix reads as one rather than as two bare tubes.
@@ -77,11 +81,13 @@ a rod, which is what stays readable on a ribosome. **None** leaves the bare
 backbone. Anything unpaired keeps a stub under Ladder, so a single strand never
 silently disappears. Colouring by nucleotide base puts purines warm and
 pyrimidines cool, so a strand reads as its purine/pyrimidine pattern and the two
-halves of a pair always contrast. Assembly copies can be
-tinted by symmetry operator, which is what makes an icosahedral capsid's facets
-and 5-fold vertices visible instead of undifferentiated mush. Shading comes as
-named presets — Studio, Soft, Flat, Plain — with the ambient-occlusion, outline
-and fog sliders still there underneath.
+halves of a pair always contrast.
+
+Assembly copies can be tinted by symmetry operator, which is what makes an
+icosahedral capsid's facets and 5-fold vertices visible instead of
+undifferentiated mush. Shading comes as named presets — Studio, Soft, Flat,
+Plain — with the ambient-occlusion, outline and fog sliders still there
+underneath.
 
 **NMR ensembles.** Every model at once as backbone traces, which is the usual
 way to read the spread, or one at a time with the camera held still as you step
@@ -131,12 +137,13 @@ works both cold and pasted into a tab already running the app.
 renamed by clicking it; **New project** clears every pane back to defaults.
 Save a session in the browser and reopen it later, or export it as
 `.molview.json` to move between machines. Saving an already-saved project
-updates it in place rather than making a copy. Saving never downloads a file;
+updates it in place; **Save as new** branches it instead, so a session built on
+an existing project does not overwrite its parent. Saving never downloads a file;
 export is the only operation that touches the file system. Coordinates are not
 stored — entries are referenced by PDB id and refetched, so a two-pane project
 is about 2 KB.
 
-**Assistant.** A panel above the status bar talks to any model on
+**Assistant.** A panel beneath the canvas talks to any model on
 [OpenRouter](https://openrouter.ai). It answers as a structural biologist would
 — Markdown with GitHub tables and LaTeX equations — and it can drive the viewer:
 loading entries, building representations from selections, measuring, colouring,
