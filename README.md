@@ -15,6 +15,9 @@ npm run dev
 
 Requires a WebGPU-capable browser (Chrome/Edge 113+, Safari 18+).
 
+`npm run build` produces a static `dist/`, which is all a deployment is — see
+[DEPLOY.md](DEPLOY.md) for the fly.io setup.
+
 ## What it does
 
 **Browse and search.** Full-text search across the PDB with filters for

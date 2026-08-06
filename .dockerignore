@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-ssr
+.git
+.gitignore
+.claude
+.vite
+*.local
+.DS_Store
+Dockerfile
+.dockerignore
+fly.toml
+*.md
