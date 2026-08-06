@@ -1260,6 +1260,40 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.side-view {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 6px 6px 4px;
+  background: var(--bg-input);
+}
+
+.side-view svg {
+  display: block;
+  touch-action: none;
+}
+
+.side-view-plane {
+  cursor: ew-resize;
+}
+
+.side-view-plane:hover line,
+.side-view-plane:hover rect {
+  filter: brightness(1.35);
+}
+
+.side-view-readout {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.side-view-readout span:nth-child(2) {
+  color: var(--text-dim);
+}
+
 /* Explanatory paragraph inside a panel section. */
 .panel-note {
   margin-bottom: 8px;

@@ -22,9 +22,6 @@ Its seven toolbars read against what MolView has, ranked by payoff per unit of
 work rather than by how large the gap is. Mimicry is not the goal — several of
 these are deliberately declined under "Not planned".
 
-- **A side view widget.** Setting the clipping plane by eye — the camera and
-  its planes drawn edge-on, draggable — rather than by the slider that exists.
-  The orient half of this is done (`c08ae3d`).
 - **Electrostatic colouring.** Needs a charge model and a Poisson-Boltzmann
   solve, or a crude Coulombic approximation that would be worse than nothing if
   presented as the real thing.
@@ -50,6 +47,15 @@ One that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **A side view, and a rear clipping plane** — the scene drawn edge-on with
+  both planes draggable, replacing the front-clipping slider. The widget is
+  schematic rather than a second render: what matters while clipping is where
+  the planes sit *relative to the molecule*, and that is three numbers, not
+  another pass over the geometry. A rear plane had to exist for it to be worth
+  drawing — with only a front plane there is no slab to show, and a thin
+  section through a large assembly reads as a silhouette against everything
+  behind it. The assistant gets `clip`, where "slab 20" is the one people mean.
 
 - **Molecular surfaces** — a Gaussian surface over the drawn atoms or any
   selection, coloured by the pane's scheme so subunit boundaries show on the

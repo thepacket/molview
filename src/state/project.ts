@@ -15,7 +15,7 @@ import { makeComponent, type Component } from '../mol/components';
 import type { ColorScheme } from '../mol/coloring';
 import { createMeasurement, type Measurement, type MeasurementKind } from '../mol/measure';
 import { atomNameOf, resNameOf, type Structure } from '../mol/structure';
-import type { SlotVisualSettings } from '../gfx/engine';
+import { DEFAULT_VISUAL_SETTINGS, type SlotVisualSettings } from '../gfx/engine';
 import type { NucleotideStyle } from '../gfx/geometry';
 import { LAYOUT_SLOT_COUNT, useStore, type LayoutMode } from './store';
 import { viewer } from '../viewer/ViewerController';
@@ -362,7 +362,10 @@ export async function restoreProject(doc: ProjectDocument): Promise<RestoreRepor
       assemblyId: pane.assemblyId ?? '',
       colorScheme: pane.colorScheme,
       uniformColor: pane.uniformColor,
-      visual: { ...pane.visual },
+      // Defaults first: a project saved before a visual setting existed has no
+      // value for it, and an undefined reaching the uniform buffer is a NaN in
+      // a shader rather than an obvious failure.
+      visual: { ...DEFAULT_VISUAL_SETTINGS, ...pane.visual },
       showHydrogenBonds: false,
       showLabels: pane.showLabels ?? true,
       spinning: pane.spinning ?? false,

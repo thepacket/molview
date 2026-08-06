@@ -260,8 +260,14 @@ a depositor left residues unmodelled the ribbon stops and a dashed Catmull-Rom
 curve carries on to the next observed residue — the chain is continuous there,
 the coordinates are not, and neither a solid ribbon nor a bare hole says that.
 The disordered histone tails of `1KX5` are the case to look at. Chains
-can be hidden or focused individually. A front clipping plane slices into the
-interior of large assemblies.
+can be hidden or focused individually.
+
+**Clipping, set by eye.** A front and a rear plane, perpendicular to the view,
+dragged on a small side-on schematic that shows where they sit relative to the
+structure — which is the thing a pair of sliders labelled in Ångströms cannot
+tell you. The pair defines a slab, so a section through a capsid stays a
+section instead of becoming a silhouette against everything behind it. The
+planes follow the camera, so rotating rotates the cut.
 
 **Molecular surfaces.** The envelope a molecule presents to the solvent, as a
 Gaussian surface over the atoms currently drawn or over any selection, blended

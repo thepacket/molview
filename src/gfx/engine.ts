@@ -44,8 +44,14 @@ export interface SlotVisualSettings {
   outline: number;
   fogDensity: number;
   orthographic: boolean;
-  /** Front clipping plane offset from the camera target, in Å. 0 disables. */
+  /**
+   * Clipping slab, as distances in Å measured inward from the front and back
+   * of the structure. 0 on either side leaves that side unclipped, so the pair
+   * (0, 0) is "no clipping" and the numbers mean the same thing whatever the
+   * structure's size.
+   */
   clipNear: number;
+  clipFar: number;
   /** Tint each assembly copy by its operator index. */
   colorBySymmetry: boolean;
   /** Contact shadow strength along the key light, 0 disables. */
@@ -61,6 +67,7 @@ export const DEFAULT_VISUAL_SETTINGS: SlotVisualSettings = {
   shadow: 0.55,
   orthographic: false,
   clipNear: 0,
+  clipFar: 0,
   colorBySymmetry: false,
 };
 
@@ -934,6 +941,8 @@ export class Engine {
     // of the structure so the slider sweeps through the molecule itself rather
     // than through empty space.
     uniformData[84] = camera.distance - camera.sceneRadius + visual.clipNear;
+    uniformData[106] = camera.distance + camera.sceneRadius - visual.clipFar;
+    uniformData[107] = visual.clipFar > 0 ? 1 : 0;
     // Labels lay themselves out in CSS pixels; the shader works in framebuffer
     // pixels, so it needs the ratio to keep text a constant apparent size.
     uniformData[85] = this.pixelRatio;

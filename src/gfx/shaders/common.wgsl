@@ -18,7 +18,8 @@ struct Camera {
   clip: vec4f,
   // Rigid transform applied to everything in this pane, for superposition.
   scene: mat4x4f,
-  // x = contact shadow strength, y = its reach in world units
+  // x = contact shadow strength, y = its reach in world units,
+  // z = rear clip distance, w = rear clip enabled
   shadow: vec4f,
 };
 
@@ -74,5 +75,11 @@ fn symmetryTint(base: vec3f, copyIndex: u32) -> vec3f {
 }
 
 fn clippedView(viewZ: f32) -> bool {
-  return cam.clip.w > 0.5 && viewZ > -cam.clip.x;
+  if (cam.clip.w > 0.5 && viewZ > -cam.clip.x) {
+    return true;
+  }
+  // The rear plane cuts away what is behind the slab, which is what lets a
+  // thin section through a large assembly read as a section rather than as a
+  // silhouette against everything behind it.
+  return cam.shadow.w > 0.5 && viewZ < -cam.shadow.z;
 }

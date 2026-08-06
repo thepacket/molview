@@ -287,6 +287,44 @@ export async function applyAction(action: Action): Promise<string> {
       return `Looking down ${m[1]}${m[2].toUpperCase()}.`;
     }
 
+    case 'clip': {
+      const slot = store.activeSlot;
+      const structure = viewer.getStructure(slot);
+      if (!structure) return reject(`pane ${slot + 1} has no structure`);
+      const want = value.toLowerCase();
+
+      if (/^(off|none|clear|no)$/.test(want)) {
+        store.updateVisual(slot, { clipNear: 0, clipFar: 0 });
+        viewer.syncSettings();
+        return 'Clipping cleared.';
+      }
+
+      const span = structure.radius * 2;
+      const m = /^(front|back|near|far|slab|section)\s+([\d.]+)/.exec(want);
+      if (!m) return reject('clip takes "off", or "front N", "back N" or "slab N" in angstroms');
+      const amount = Number(m[2]);
+      if (!Number.isFinite(amount) || amount < 0) return reject('the distance must be positive');
+
+      if (/slab|section/.test(m[1])) {
+        // A slab is described by its thickness, but stored as the two insets
+        // that produce it, centred on the middle of the structure.
+        const inset = Math.max(0, (span - Math.min(amount, span)) / 2);
+        store.updateVisual(slot, { clipNear: inset, clipFar: inset });
+        viewer.syncSettings();
+        return `Showing a ${Math.min(amount, span).toFixed(0)} A slab through the middle.`;
+      }
+
+      const key = /front|near/.test(m[1]) ? 'clipNear' : 'clipFar';
+      const other = key === 'clipNear' ? store.slots[slot].visual.clipFar
+        : store.slots[slot].visual.clipNear;
+      store.updateVisual(slot, { [key]: Math.min(amount, Math.max(0, span - other - 1)) });
+      viewer.syncSettings();
+      const v = useStore.getState().slots[slot].visual;
+      return `Clipping ${v.clipNear.toFixed(0)} A off the front and `
+        + `${v.clipFar.toFixed(0)} A off the back, leaving a `
+        + `${(span - v.clipNear - v.clipFar).toFixed(0)} A slab.`;
+    }
+
     case 'surface': {
       const slot = store.activeSlot;
       if (!viewer.getStructure(slot)) return reject(`pane ${slot + 1} has no structure`);

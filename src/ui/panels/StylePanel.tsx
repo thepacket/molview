@@ -10,6 +10,7 @@ import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Field, Segmented, Select, Slider, Toggle, Tip } from '../controls';
 import { ComponentList } from './ComponentList';
+import { SideView } from './SideView';
 
 const COLOR_SCHEMES = (Object.keys(COLOR_SCHEME_LABELS) as ColorScheme[])
   .map((value) => ({ value, label: COLOR_SCHEME_LABELS[value] }));
@@ -375,17 +376,8 @@ export function StylePanel() {
             onChange={(v) => updateVisual(activeSlot, { fogDensity: v })}
           />
         </Field>
-        <Field
-          label="Front clipping"
-          value={slot.visual.clipNear > 0 ? `${slot.visual.clipNear.toFixed(0)} Å` : 'off'}
-        >
-          <Slider
-            value={slot.visual.clipNear}
-            min={0}
-            max={Math.max(20, Math.round(structure.radius * 2))}
-            step={1}
-            onChange={(v) => updateVisual(activeSlot, { clipNear: v })}
-          />
+        <Field label="Clipping">
+          <SideView slot={activeSlot} radius={Math.max(structure.radius, 1)} />
         </Field>
         <Toggle
           label="Orthographic camera"
