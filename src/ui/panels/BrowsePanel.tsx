@@ -10,6 +10,7 @@ import { useStore, visibleSlotCount } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Chip, Field, Select, Slider, Tip } from '../controls';
 import { PredictedSearch } from './PredictedSearch';
+import { SimilarSection } from './SimilarSection';
 
 const PAGE_SIZE = 25;
 
@@ -318,6 +319,8 @@ export function BrowsePanel() {
           {search.error}
         </div>
       )}
+
+      {search.results.length === 0 && search.status !== 'loading' && <SimilarSection />}
 
       {search.results.length === 0 && search.status !== 'loading' && <PredictedSearch />}
 

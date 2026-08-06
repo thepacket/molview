@@ -20,6 +20,7 @@ import {
   findInterfaces, interfaceSelection, measureInterfaceAreas,
 } from '../mol/interfaces';
 import { searchUniProt } from '../rcsb/alphafold';
+import { fetchSummaries, searchByShape, searchBySequence } from '../rcsb/api';
 import { MolKind } from '../mol/structure';
 import type { NucleotideStyle } from '../gfx/geometry';
 import {
@@ -304,6 +305,48 @@ export async function applyAction(action: Action): Promise<string> {
       if (!m) return reject('view takes "orient", or an axis such as "x" or "-z"');
       viewer.viewAlongAxis(slot, m[2] as 'x' | 'y' | 'z', m[1] === '-');
       return `Looking down ${m[1]}${m[2].toUpperCase()}.`;
+    }
+
+    case 'similar': {
+      const slot = store.activeSlot;
+      const state = store.slots[slot];
+      if (!viewer.getStructure(slot)) return reject(`pane ${slot + 1} has no structure`);
+      if (!state.entryId || state.prediction) {
+        return reject('similar searches from a PDB entry; this pane holds a prediction or a file');
+      }
+
+      const want = value.toLowerCase();
+      const byShape = !/seq/.test(want);
+      const limit = Math.min(15, Number(/(\d+)/.exec(want)?.[1] ?? 8));
+
+      let result;
+      if (byShape) {
+        result = await searchByShape(state.entryId, state.assemblyId || '1', limit + 1);
+      } else {
+        const chain = state.detail?.polymerEntities
+          .filter((e) => e.sequence)
+          .sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0))[0];
+        if (!chain?.sequence) return reject('this entry has no polymer sequence to search with');
+        result = await searchBySequence(chain.sequence, 0.3, (limit + 1) * 2);
+      }
+
+      // An entry is always its own best match; reporting it is noise the model
+      // would otherwise repeat back as a finding.
+      const hits = result.hits.filter((h) => h.entryId !== state.entryId).slice(0, limit);
+      if (hits.length === 0) return `Nothing else in the archive matches ${state.entryId}.`;
+
+      const summaries = await fetchSummaries(hits.map((h) => h.entryId));
+      const lines = hits.map((h) => {
+        const summary = summaries.get(h.entryId);
+        const measure = byShape
+          ? `shape ${h.score.toFixed(3)}`
+          : `${Math.round((h.identity ?? 0) * 100)}% identity`;
+        return `${h.entryId} (${measure}): ${summary?.title ?? 'unknown'}`;
+      });
+
+      return `${result.total.toLocaleString()} structures resemble ${state.entryId} by `
+        + `${byShape ? 'shape' : 'sequence'}. Closest: ${lines.join('; ')}. `
+        + 'Use the load action to open any of them.';
     }
 
     case 'predicted': {

@@ -1361,6 +1361,15 @@ textarea {
   margin-top: 8px;
 }
 
+.similar-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.similar-buttons .btn {
+  flex: 1;
+}
+
 .pae-wrap {
   position: relative;
   margin-top: 6px;

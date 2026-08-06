@@ -16,25 +16,6 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
-### Finding related structures from the one on screen
-
-The search panel answers questions you can phrase. These answer questions you
-can only point at, and both are one request to an endpoint already in use:
-
-- **Shape similarity.** RCSB's `structure` search service, `strict_shape_match`
-  against the current entry's assembly. Probed: 4HHB returns 1,705 hits with
-  1COH and 2HHB at the top, which is the right answer.
-- **Sequence similarity.** The `sequence` service, from a chain rather than from
-  typed text — "what else has this fold" without leaving the pane.
-
-### Buried surface area
-
-The interfaces panel counts heavy-atom contacts, and the note in its entry says
-buried surface area "was not attempted; it needs SASA". It does, and SASA is a
-Shrake-Rupley sphere sampling that the neighbour search already built for
-hydrogen bonds makes cheap. ΔSASA is the number papers quote for an interface;
-a contact count is a proxy for it.
-
 ### Making a superposition legible
 
 Superposition computes a sequence alignment and then throws it away, reporting
@@ -74,6 +55,24 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **Similarity search from the pane, and buried surface area** — two answers
+  the app could not give about what was already on screen.
+
+  Shape and sequence similarity are one request each to services the search
+  panel was already talking to. Shape asks about the assembly rather than the
+  entry, because shape is a property of the biological molecule; sequence needs
+  `results_verbosity: verbose`, without which the identity and E-value — the
+  whole reason to run it — never come back.
+
+  Buried area is Shrake-Rupley over the spatial hash the contact search already
+  builds, quoted as interface area the way PISA does. Contacts still rank the
+  pairs and only the reported ones are measured. Validated against published
+  numbers: haemoglobin's alpha1beta1 at 816 and 831 A2 against PISA's 830-870,
+  the whole tetramer's surface at 24,713 A2 against a literature ~25,000, and
+  maltoporin's three-fold trimer giving three interfaces equal to within 16 A2.
+  Symmetry pairs report no area rather than a wrong one — the far side is a
+  matrix, not atoms.
 
 - **Predicted structures** — AlphaFold DB beside the PDB: searched through
   UniProt, loaded through the existing BinaryCIF path, with pLDDT in bands, the

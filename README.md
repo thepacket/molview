@@ -295,6 +295,15 @@ tell you. The pair defines a slab, so a section through a capsid stays a
 section instead of becoming a silhouette against everything behind it. The
 planes follow the camera, so rotating rotates the cut.
 
+**Finding structures from a structure.** The search box answers questions you
+can phrase; two more services answer one you can only point at. **By shape**
+compares the assembly on screen against every assembly in the archive — 4HHB
+returns 1COH and 2HHB at the top, which is the right answer. **By sequence**
+takes the longest chain and reports the identity of each hit, so 1CBS finds its
+own family of retinoic-acid-binding proteins, including versions solved at
+better resolution. The two disagree usefully: a hit in one and not the other is
+generally the interesting one.
+
 **Predicted structures.** AlphaFold DB alongside the PDB, searched by protein
 name, gene or UniProt accession. A prediction gets its own Definition panel,
 because the fields the experimental one is built from — method, resolution,
@@ -369,6 +378,7 @@ the Panes tool. Nothing is uploaded.
 | Coordinates (BinaryCIF) | `models.rcsb.org/{id}.bcif` |
 | Coordinates (mmCIF fallback) | `files.rcsb.org/download/{ID}.cif` |
 | Density maps (BinaryCIF) | `maps.rcsb.org/{x-ray\|em}/{id}/box/...` |
+| Shape and sequence similarity | the Search API's `structure` and `sequence` services |
 
 Predicted structures come from two more, both CORS-open:
 

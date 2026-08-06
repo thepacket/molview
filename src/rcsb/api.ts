@@ -389,6 +389,127 @@ export async function searchEntries(
 }
 
 // ---------------------------------------------------------------------------
+// Similarity, from a structure rather than from typed text
+// ---------------------------------------------------------------------------
+
+export interface SimilarHit {
+  /** PDB id, extracted from whatever identifier the service returned. */
+  entryId: string;
+  /** 0-1 from the shape service; sequence identity from the sequence one. */
+  score: number;
+  /** Only for sequence hits. */
+  identity?: number;
+  evalue?: number;
+}
+
+async function runSearch(body: unknown, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const res = await fetch(SEARCH_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (res.status === 204) return { total_count: 0, result_set: [] };
+  if (!res.ok) throw new Error(`RCSB Search ${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+/**
+ * The identifier services return is not an entry id: shape hits come back as
+ * `1COH-1` (entry and assembly) and sequence hits as `1BZ1_1` (entry and
+ * entity). Both need reducing before anything can be loaded or looked up.
+ */
+function entryIdOf(identifier: string): string {
+  return identifier.split(/[-_]/)[0].toUpperCase();
+}
+
+/**
+ * Structures shaped like this one.
+ *
+ * Asked of an assembly rather than of an entry, because shape is a property of
+ * the biological molecule: haemoglobin's tetramer resembles other tetramers,
+ * and its asymmetric unit resembles a different set of things.
+ */
+export async function searchByShape(
+  entryId: string,
+  assemblyId: string,
+  rows: number,
+  signal?: AbortSignal,
+): Promise<{ total: number; hits: SimilarHit[] }> {
+  const json = await runSearch({
+    query: {
+      type: 'terminal',
+      service: 'structure',
+      parameters: {
+        value: { entry_id: entryId.toUpperCase(), assembly_id: assemblyId || '1' },
+        operator: 'strict_shape_match',
+      },
+    },
+    return_type: 'assembly',
+    request_options: { paginate: { start: 0, rows } },
+  }, signal);
+
+  const rowsOut = (json.result_set as { identifier: string; score: number }[]) ?? [];
+  return {
+    total: (json.total_count as number) ?? 0,
+    hits: rowsOut.map((r) => ({ entryId: entryIdOf(r.identifier), score: r.score })),
+  };
+}
+
+/**
+ * Structures whose sequence resembles a chain of this one.
+ *
+ * `results_verbosity: verbose` is what carries the identity and E-value back;
+ * without it the hits arrive as a bare ranked list, and "83% identical" is the
+ * whole reason to run a sequence search rather than a text one.
+ */
+export async function searchBySequence(
+  sequence: string,
+  identityCutoff: number,
+  rows: number,
+  signal?: AbortSignal,
+): Promise<{ total: number; hits: SimilarHit[] }> {
+  const json = await runSearch({
+    query: {
+      type: 'terminal',
+      service: 'sequence',
+      parameters: {
+        value: sequence,
+        sequence_type: 'protein',
+        identity_cutoff: identityCutoff,
+        evalue_cutoff: 1,
+      },
+    },
+    return_type: 'polymer_entity',
+    request_options: {
+      paginate: { start: 0, rows },
+      results_verbosity: 'verbose',
+    },
+  }, signal);
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const rowsOut = (json.result_set as any[]) ?? [];
+  const seen = new Set<string>();
+  const hits: SimilarHit[] = [];
+  for (const r of rowsOut) {
+    const entry = entryIdOf(r.identifier);
+    // Several entities of one entry match the same chain; the entry is the
+    // thing that gets loaded, so the best of them is the useful row.
+    if (seen.has(entry)) continue;
+    seen.add(entry);
+    const context = r.services?.[0]?.nodes?.[0]?.match_context?.[0] ?? {};
+    hits.push({
+      entryId: entry,
+      score: r.score,
+      identity: context.sequence_identity,
+      evalue: context.evalue,
+    });
+  }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+  return { total: (json.total_count as number) ?? 0, hits };
+}
+
+// ---------------------------------------------------------------------------
 // Coordinates
 // ---------------------------------------------------------------------------
 
