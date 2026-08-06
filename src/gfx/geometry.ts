@@ -409,6 +409,7 @@ function buildCartoon(
     const end = s.chainResStart[c + 1];
 
     let segment: number[] = [];
+    let prevResidue = -1;
     const flush = () => {
       if (segment.length >= 2) {
         emitSegment(segment);
@@ -508,13 +509,19 @@ function buildCartoon(
       }
       prevStyle = style;
       if (prevAnchor >= 0) {
+        // Numbering first: a missing residue means the chain is not continuous
+        // however close the two ends happen to sit. 1KX5 chain C jumps 12 -> 15
+        // across only 4.4 A, and joining those draws a bond that was never
+        // observed. Distance still catches files whose numbering lies.
+        const skipped = s.resSeq[r] - s.resSeq[prevResidue] > 1;
         const d = Math.hypot(
           s.x[anchor] - s.x[prevAnchor],
           s.y[anchor] - s.y[prevAnchor],
           s.z[anchor] - s.z[prevAnchor],
         );
-        if (d > maxGap) flush();
+        if (skipped || d > maxGap) flush();
       }
+      prevResidue = r;
       segment.push(r);
       prevAnchor = anchor;
     }
