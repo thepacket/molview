@@ -80,6 +80,21 @@ export function CommandPalette() {
               Reset view <span className="shortcut">R</span>
             </Command.Item>
             <Command.Item
+              value="orient to principal axes"
+              onSelect={() => run(() => viewer.orientView(activeSlot))}
+            >
+              Orient to the structure&apos;s own axes <span className="shortcut">O</span>
+            </Command.Item>
+            {(['x', 'y', 'z'] as const).map((axis) => (
+              <Command.Item
+                key={axis}
+                value={`view down ${axis} axis`}
+                onSelect={() => run(() => viewer.viewAlongAxis(activeSlot, axis))}
+              >
+                View down the {axis.toUpperCase()} axis
+              </Command.Item>
+            ))}
+            <Command.Item
               value="auto rotate spin"
               onSelect={() => run(() => store.patchSlot(
                 activeSlot, { spinning: !store.slots[activeSlot].spinning },

@@ -45,6 +45,11 @@ stacked rings. Shapes too round for their axes to mean anything, capsids in
 particular, are fitted but not turned. Reset view never re-orients: once you
 have moved a structure, the camera is yours.
 
+**O** re-orients a pane to those axes at any time, which is the way back after
+turning a structure by hand — distinct from **R**, which returns to the
+deposited frame and its arbitrary orientation. The ⌘K palette also offers views
+straight down the X, Y and Z axes, for molecules with an axis of their own.
+
 **Up to four structures at once.** Single, split (horizontal or vertical) or
 quad layouts. Each pane has an independent camera, representation, colour
 scheme and shading, or you can link the cameras so rotating one rotates all of
@@ -200,7 +205,8 @@ carrying prose plus a list of actions; each action is re-validated against live
 state before it runs, so a wrong chain id becomes a stated rejection rather than
 a silent no-op. Twenty action types cover loading, layout, components, colour,
 assemblies, focus, lighting, background, hydrogen bonds, measurement,
-interfaces, nucleotide styles, superposition, overlay and ensembles. Every one
+interfaces, nucleotide styles, camera views, superposition, overlay and
+ensembles. Every one
 is a reversible local view change, so they run without a confirmation step.
 **Clear** discards the rolling history as well as the visible transcript, and
 aborts a request in flight.
@@ -347,6 +353,7 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
 | Search | ⌘F |
 | Panes 1–4 | `1` `2` `3` `4` |
 | Reset view | `R` |
+| Orient to the structure's axes | `O` |
 | Auto-rotate | `S` |
 | Link cameras | `L` |
 | Toggle panels | `[` `]` |

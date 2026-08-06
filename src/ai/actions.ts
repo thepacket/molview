@@ -270,6 +270,20 @@ export async function applyAction(action: Action): Promise<string> {
       return on ? `Showing ${count.toLocaleString()} hydrogen bonds.` : 'Hydrogen bonds hidden.';
     }
 
+    case 'view': {
+      const slot = store.activeSlot;
+      if (!viewer.getStructure(slot)) return reject(`pane ${slot + 1} has no structure`);
+      const want = (value ?? '').trim().toLowerCase();
+      if (want === 'orient') {
+        viewer.orientView(slot);
+        return 'Turned to the structure\'s own axes.';
+      }
+      const m = /^(-?)([xyz])$/.exec(want);
+      if (!m) return reject('view takes "orient", or an axis such as "x" or "-z"');
+      viewer.viewAlongAxis(slot, m[2] as 'x' | 'y' | 'z', m[1] === '-');
+      return `Looking down ${m[1]}${m[2].toUpperCase()}.`;
+    }
+
     case 'nucleotides': {
       const styles = ['slab', 'ladder', 'stubs', 'none'] as const;
       const want = (value ?? '').trim().toLowerCase();

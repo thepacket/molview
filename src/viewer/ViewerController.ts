@@ -369,7 +369,51 @@ export class ViewerController {
    * once someone has turned a structure, snapping it back to a computed pose
    * would be the app overruling them.
    */
-  private orientSlot(slot: number): boolean {
+  /**
+   * Re-orients an already-loaded pane to its own principal axes.
+   *
+   * The same computation that runs on load, offered as a command: after turning
+   * a structure by hand it is the only way back to a view that was chosen for
+   * the molecule rather than by the crystal. Distinct from reset, which returns
+   * to the deposited frame and its arbitrary orientation.
+   */
+  orientView(slot: number): void {
+    this.orientSlot(slot, true);
+  }
+
+  /**
+   * Looks down a world axis, keeping the structure framed.
+   *
+   * Useful when the molecule has an axis of its own that matters — a helix, a
+   * barrel, a fibre — and you want the standard views of it rather than the
+   * one that happens to show the most.
+   */
+  viewAlongAxis(slot: number, axis: 'x' | 'y' | 'z', negative = false): void {
+    const geometry = this.data[slot].geometry;
+    if (!geometry) return;
+    const camera = this.engine.getCamera(slot);
+
+    // Quaternions that put each world axis down the camera's line of sight.
+    const h = Math.SQRT1_2;
+    const table: Record<string, [number, number, number, number]> = {
+      x: [0, h, 0, h],
+      y: [-h, 0, 0, h],
+      z: [0, 0, 0, 1],
+    };
+    const q = table[axis];
+    const flip: [number, number, number, number] = negative
+      ? [q[1], -q[0], q[3], -q[2]]
+      : q;
+
+    camera.animateTo({
+      target: [geometry.center[0], geometry.center[1], geometry.center[2]],
+      orientation: flip,
+      distance: (geometry.radius * 1.15) / Math.sin(camera.fovY / 2),
+    });
+    this.invalidate();
+  }
+
+  private orientSlot(slot: number, animate = false): boolean {
     const s = this.data[slot].structure;
     const geometry = this.data[slot].geometry;
     if (!s || !geometry) return false;
@@ -390,7 +434,11 @@ export class ViewerController {
 
     const camera = this.engine.getCamera(slot);
     const { orientation: q, half, centre } = pose;
-    if (q) camera.setState({ ...camera.getState(), orientation: [q[0], q[1], q[2], q[3]] });
+    // On load the orientation is set before framing; as a command both happen
+    // in one animation, so the turn is passed to the fit rather than snapped.
+    if (q && !animate) {
+      camera.setState({ ...camera.getState(), orientation: [q[0], q[1], q[2], q[3]] });
+    }
 
     // Sampling misses the outermost atoms and ignores every radius, so pad by
     // a spacefill sphere's worth rather than clipping the silhouette.
@@ -400,8 +448,10 @@ export class ViewerController {
       ? element.clientWidth / element.clientHeight
       : 1;
     camera.fitExtents(
-      centre, half[0] + pad, half[1] + pad, half[2] + pad, aspect,
+      centre, half[0] + pad, half[1] + pad, half[2] + pad, aspect, animate,
+      animate && q ? [q[0], q[1], q[2], q[3]] : undefined,
     );
+    this.invalidate();
     return true;
   }
 

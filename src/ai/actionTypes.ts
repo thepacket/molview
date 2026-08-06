@@ -10,7 +10,7 @@ export const ACTION_TYPES = [
   'component', 'remove-component', 'color', 'assembly',
   'focus', 'reset-view', 'spin', 'lighting', 'background',
   'hbonds', 'interfaces', 'measure', 'superpose', 'overlay', 'ensemble',
-  'nucleotides',
+  'nucleotides', 'view',
 ] as const;
 
 export type ActionType = (typeof ACTION_TYPES)[number];
@@ -50,5 +50,6 @@ export const ACTION_REFERENCE: { type: ActionType; value: string; note: string }
   { type: 'superpose', value: '"2 onto 1" or "2 onto 1 chain B onto A"', note: 'Align one pane onto another by sequence, then fit the matched CA atoms.' },
   { type: 'overlay', value: '"2" or "2,3" or "off"', note: "Draw other panes' structures inside the active pane, in their superposed frames." },
   { type: 'nucleotides', value: '"slab" | "ladder" | "stubs" | "none"', note: 'How nucleic acid bases are drawn inside the cartoon. Ladder joins Watson-Crick partners into one rung. To colour by base, use the color action with the "base" scheme — it is not a style.' },
+  { type: 'view', value: '"orient" | "x" | "y" | "z" | "-x" | "-y" | "-z"', note: 'Point the camera. "orient" turns the pane to the structure\'s own principal axes and refits it — the view it was given on load, after the user has moved it. The axis values look straight down a world axis instead.' },
   { type: 'ensemble', value: '"on" | "off"', note: 'Draw every model of an NMR ensemble at once, or just one.' },
 ];

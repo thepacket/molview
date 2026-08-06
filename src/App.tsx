@@ -188,6 +188,9 @@ function useGlobalShortcuts(): void {
         case 'r': case 'R':
           viewer.resetView(store.activeSlot);
           break;
+        case 'o': case 'O':
+          viewer.orientView(store.activeSlot);
+          break;
         case 's': case 'S':
           store.patchSlot(store.activeSlot, {
             spinning: !store.slots[store.activeSlot].spinning,

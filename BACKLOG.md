@@ -22,8 +22,9 @@ Its seven toolbars read against what MolView has, ranked by payoff per unit of
 work rather than by how large the gap is. Mimicry is not the goal — several of
 these are deliberately declined under "Not planned".
 
-- **Camera: orient and side view.** Snap to standard axes; a depth widget for
-  setting the clipping plane by eye rather than by slider.
+- **A side view widget.** Setting the clipping plane by eye — the camera and
+  its planes drawn edge-on, draggable — rather than by the slider that exists.
+  The orient half of this is done (`pending`).
 - **Electrostatic colouring.** Needs a charge model and a Poisson-Boltzmann
   solve, or a crude Coulombic approximation that would be worse than nothing if
   presented as the real thing.
@@ -57,6 +58,11 @@ Two that would be worth revisiting if the app grows:
 ---
 
 ## Done
+
+- **Camera orientation on demand** (`pending`) — O re-orients a pane to its own
+  principal axes, the palette offers views down X, Y and Z, and the assistant
+  has a `view` action for both. Turning and refitting animate as one movement,
+  since snapping then gliding reads as two events.
 
 - **Shadows** (`7a778e7`) — screen-space contact shadows marched along the key
   light, sixteen steps through the existing depth buffer. A shadow map was not

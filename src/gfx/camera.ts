@@ -144,6 +144,7 @@ export class Camera {
   fitExtents(
     center: ArrayLike<number>, halfWidth: number, halfHeight: number,
     halfDepth: number, aspect: number, animate = false,
+    orientation?: readonly [number, number, number, number],
   ): void {
     const tan = Math.tan(this.fovY / 2);
     const forHeight = halfHeight / tan;
@@ -151,10 +152,14 @@ export class Camera {
     const distance = Math.max(forHeight, forWidth) * 1.06 + halfDepth;
     const state: CameraState = {
       target: [center[0], center[1], center[2]],
-      orientation: [
-        this.orientation[0], this.orientation[1],
-        this.orientation[2], this.orientation[3],
-      ],
+      // Turning and fitting have to be one animation, or the camera snaps
+      // round and then glides, which reads as two separate events.
+      orientation: orientation
+        ? [orientation[0], orientation[1], orientation[2], orientation[3]]
+        : [
+          this.orientation[0], this.orientation[1],
+          this.orientation[2], this.orientation[3],
+        ],
       distance,
     };
     if (animate) this.animateTo(state);
