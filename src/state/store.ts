@@ -126,6 +126,30 @@ export const DEFAULT_SURFACE: SurfaceState = {
   triangles: 0,
 };
 
+/**
+ * A predicted structure in a pane.
+ *
+ * Present only for AlphaFold models, and its presence is what tells the rest of
+ * the app that "resolution" and "validation" mean nothing here and confidence
+ * means everything. The PAE matrix itself lives in the controller — it is
+ * `n^2` floats and a large protein makes that a megabyte.
+ */
+export interface PredictionState {
+  accession: string;
+  uniprotId: string;
+  description: string;
+  gene: string | null;
+  organism: string | null;
+  meanPlddt: number;
+  version: number;
+  /** Loaded lazily, because most sessions never open the matrix. */
+  paeStatus: 'absent' | 'idle' | 'loading' | 'ready' | 'error';
+  paeSize: number;
+  paeMax: number;
+  missenseStatus: 'absent' | 'idle' | 'loading' | 'ready' | 'error';
+  error: string | null;
+}
+
 export interface SlotState {
   entryId: string | null;
   status: SlotStatus;
@@ -174,6 +198,8 @@ export interface SlotState {
   superposePairs: number | null;
   density: DensityState;
   surface: SurfaceState;
+  /** Set when this pane holds a predicted model rather than an experiment. */
+  prediction: PredictionState | null;
 }
 
 function emptySlot(): SlotState {
@@ -213,6 +239,7 @@ function emptySlot(): SlotState {
     superposePairs: null,
     density: { ...DEFAULT_DENSITY },
     surface: { ...DEFAULT_SURFACE },
+    prediction: null,
   };
 }
 
@@ -270,6 +297,7 @@ export interface AppState {
   updateVisual: (slot: number, patch: Partial<SlotVisualSettings>) => void;
   updateDensity: (slot: number, patch: Partial<DensityState>) => void;
   updateSurface: (slot: number, patch: Partial<SurfaceState>) => void;
+  updatePrediction: (slot: number, patch: Partial<PredictionState>) => void;
   clearSlot: (slot: number) => void;
 
   setFilters: (patch: Partial<SearchFilters>) => void;
@@ -384,6 +412,14 @@ export const useStore = create<AppState>((set) => ({
   updateSurface: (slot, patch) => set((s) => {
     const slots = s.slots.slice();
     slots[slot] = { ...slots[slot], surface: { ...slots[slot].surface, ...patch } };
+    return { slots };
+  }),
+
+  updatePrediction: (slot, patch) => set((s) => {
+    const slots = s.slots.slice();
+    const current = slots[slot].prediction;
+    if (!current) return {};
+    slots[slot] = { ...slots[slot], prediction: { ...current, ...patch } };
     return { slots };
   }),
 

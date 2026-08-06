@@ -397,7 +397,7 @@ export interface DownloadProgress {
   total: number;
 }
 
-async function fetchWithProgress(
+export async function fetchWithProgress(
   url: string,
   signal: AbortSignal | undefined,
   onProgress: (p: DownloadProgress) => void,

@@ -132,6 +132,8 @@ export interface ResolveOptions {
   paletteOffset: number;
   /** Per-residue wwPDB metrics, for the schemes that colour by them. */
   residueValidation?: ResidueValidation | null;
+  /** Per-residue AlphaMissense means, for the pathogenicity scheme. */
+  missense?: Float32Array | null;
 }
 
 export interface ResolvedScene {
@@ -186,6 +188,7 @@ export function resolveComponents(
         : options.paneUniformColor,
       paletteOffset: options.paletteOffset,
       residueValidation: options.residueValidation,
+      missense: options.missense,
     });
 
     let count = 0;

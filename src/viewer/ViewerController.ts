@@ -38,6 +38,9 @@ import {
   quatNormalize, quatRotateInverse,
 } from '../gfx/math';
 import { colorKeyFor, type ColorKey } from '../mol/colorKey';
+import {
+  fetchAlphaMissense, fetchPae, fetchPrediction, type PaeMatrix,
+} from '../rcsb/alphafold';
 import { paintColorKey } from '../ui/colorKeyPainter';
 import { VALIDATION_SCHEMES } from '../mol/coloring';
 import {
@@ -62,6 +65,10 @@ interface SlotData {
   builtSignature: string;
   /** Raw bytes of a locally opened file, kept so projects can embed them. */
   sourceFile: { name: string; buffer: ArrayBuffer } | null;
+  /** AlphaFold extras for this pane, if it holds a prediction. */
+  predictionUrls: { pae: string | null; missense: string | null; length: number } | null;
+  pae: PaeMatrix | null;
+  missense: Float32Array | null;
   /** Per-residue wwPDB metrics, fetched the first time a scheme wants them. */
   residueValidation: ResidueValidation | null;
   residueValidationRequest: Promise<void> | null;
@@ -164,6 +171,9 @@ function emptySlotData(): SlotData {
     loadHandle: null,
     builtSignature: '',
     sourceFile: null,
+    predictionUrls: null,
+    pae: null,
+    missense: null,
     residueValidation: null,
     residueValidationRequest: null,
     volumes: null,
@@ -262,7 +272,7 @@ export class ViewerController {
 
   async load(
     slot: number, entryId: string, file?: File, modelNum?: number,
-    allModels?: boolean,
+    allModels?: boolean, sourceUrl?: string,
   ): Promise<void> {
     const store = useStore.getState();
     const id = entryId.trim().toUpperCase();
@@ -306,7 +316,9 @@ export class ViewerController {
 
     // Metadata and coordinates are independent; the panel can populate while
     // the atoms are still downloading.
-    if (!file) {
+    // An AlphaFold model has no PDB entry behind it, so asking for one would
+    // only produce a 404 and an empty Definition panel.
+    if (!file && !sourceUrl) {
       void fetchEntryDetail(id)
         .then((detail) => {
           if (useStore.getState().slots[slot].entryId === id) {
@@ -334,7 +346,7 @@ export class ViewerController {
         progressLoaded: p.loaded,
         progressTotal: p.total,
       });
-    }, fileData, modelNum, allModels);
+    }, { file: fileData, modelNum, allModels, sourceUrl });
 
     this.data[slot].loadHandle = handle;
 
@@ -398,6 +410,113 @@ export class ViewerController {
    * guard is for icosahedral entries whose complete assembly is a few thousand
    * copies — those stay opt-in rather than ambushing the user on load.
    */
+  /**
+   * Loads an AlphaFold model by UniProt accession.
+   *
+   * Nearly all of this is the ordinary load path: the model is BinaryCIF and
+   * the worker fetches it from a different address. What is different is
+   * afterwards — a prediction has no experiment behind it, so the pane opens
+   * coloured by confidence rather than by chain, because "how much of this
+   * should I believe" is the first question a predicted structure raises and
+   * a per-chain rainbow answers a question nobody asked of a monomer.
+   */
+  async loadPrediction(slot: number, accession: string): Promise<void> {
+    const store = useStore.getState();
+    try {
+      const prediction = await fetchPrediction(accession);
+      const id = `AF-${prediction.accession}`;
+
+      await this.load(slot, id, undefined, undefined, undefined, prediction.bcifUrl);
+      if (useStore.getState().slots[slot].entryId !== id) return;
+
+      useStore.getState().patchSlot(slot, {
+        colorScheme: 'plddt',
+        prediction: {
+          accession: prediction.accession,
+          uniprotId: prediction.uniprotId,
+          description: prediction.description,
+          gene: prediction.gene,
+          organism: prediction.organism,
+          meanPlddt: prediction.meanPlddt,
+          version: prediction.version,
+          paeStatus: prediction.paeUrl ? 'idle' : 'absent',
+          paeSize: 0,
+          paeMax: 0,
+          missenseStatus: prediction.alphaMissenseUrl ? 'idle' : 'absent',
+          error: null,
+        },
+      });
+      this.data[slot].predictionUrls = {
+        pae: prediction.paeUrl,
+        missense: prediction.alphaMissenseUrl,
+        length: prediction.sequence.length,
+      };
+      this.rebuild(slot);
+    } catch (err) {
+      store.patchSlot(slot, {
+        status: 'error',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /** The PAE matrix for a pane, fetched on first use. */
+  async loadPae(slot: number): Promise<PaeMatrix | null> {
+    const data = this.data[slot];
+    if (data.pae) return data.pae;
+    const url = data.predictionUrls?.pae;
+    if (!url) return null;
+
+    useStore.getState().updatePrediction(slot, { paeStatus: 'loading', error: null });
+    try {
+      const pae = await fetchPae(url);
+      this.data[slot].pae = pae;
+      useStore.getState().updatePrediction(slot, {
+        paeStatus: 'ready', paeSize: pae.size, paeMax: pae.max,
+      });
+      return pae;
+    } catch (err) {
+      useStore.getState().updatePrediction(slot, {
+        paeStatus: 'error',
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    }
+  }
+
+  getPae(slot: number): PaeMatrix | null {
+    return this.data[slot].pae;
+  }
+
+  /** Per-residue AlphaMissense means, fetched on first use. */
+  async loadMissense(slot: number): Promise<Float32Array | null> {
+    const data = this.data[slot];
+    if (data.missense) return data.missense;
+    const urls = data.predictionUrls;
+    if (!urls?.missense) return null;
+
+    useStore.getState().updatePrediction(slot, { missenseStatus: 'loading', error: null });
+    try {
+      const scores = await fetchAlphaMissense(urls.missense, urls.length);
+      this.data[slot].missense = scores;
+      useStore.getState().updatePrediction(slot, { missenseStatus: 'ready' });
+      // The colour scheme reads it straight from here.
+      this.data[slot].builtSignature = '';
+      this.rebuild(slot);
+      return scores;
+    } catch (err) {
+      useStore.getState().updatePrediction(slot, {
+        missenseStatus: 'error',
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    }
+  }
+
+  getMissense(slot: number): Float32Array | null {
+    return this.data[slot].missense;
+  }
+
   private autoSelectAssembly(slot: number, s: Structure): number {
     const first = s.assemblies.find((a) => a.id === '1');
     const use = first && first.totalCopies * s.atomCount <= ASSEMBLY_AUTO_LIMIT;
@@ -630,6 +749,7 @@ export class ViewerController {
       showHydrogens: rep.showHydrogens,
       paletteOffset: slot * 3,
       residueValidation: data.residueValidation,
+      missense: data.missense,
     });
 
     // Whole-structure connectivity is only needed when a component covering
@@ -1496,10 +1616,25 @@ export class ViewerController {
     return true;
   }
 
-  focusSelection(slot: number, selection: string): void {
+  /**
+   * Frames a selection. Returns false when there was nothing to frame.
+   *
+   * The silent version of this shipped three separate callers that built
+   * selection strings the grammar rejects — `127` where it wants `:127` — and
+   * every one of them looked like a dead button rather than like a bug. A
+   * caller that cannot act on the answer can still ignore it; the dev warning
+   * is what makes the next one visible.
+   */
+  focusSelection(slot: number, selection: string): boolean {
     const structure = this.data[slot].structure;
-    if (!structure) return;
-    if (selectionError(selection)) return;
+    if (!structure) return false;
+    const problem = selectionError(selection);
+    if (problem) {
+      if (import.meta.env.DEV) {
+        console.warn(`focusSelection: "${selection}" is not a valid selection — ${problem}`);
+      }
+      return false;
+    }
 
     const mask = evaluateSelection(parseSelection(selection), structure);
     let n = 0, cx = 0, cy = 0, cz = 0;
@@ -1508,7 +1643,7 @@ export class ViewerController {
       cx += structure.x[a]; cy += structure.y[a]; cz += structure.z[a];
       n++;
     }
-    if (n === 0) return;
+    if (n === 0) return false;
     cx /= n; cy /= n; cz /= n;
 
     let radius = 0;
@@ -1529,6 +1664,7 @@ export class ViewerController {
       distance: Math.max(10, (radius + 4) * 2.6),
     });
     this.invalidate();
+    return true;
   }
 
   focusResidue(slot: number, residueIndex: number): void {

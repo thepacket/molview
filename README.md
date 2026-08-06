@@ -288,6 +288,29 @@ tell you. The pair defines a slab, so a section through a capsid stays a
 section instead of becoming a silhouette against everything behind it. The
 planes follow the camera, so rotating rotates the cut.
 
+**Predicted structures.** AlphaFold DB alongside the PDB, searched by protein
+name, gene or UniProt accession. A prediction gets its own Definition panel,
+because the fields the experimental one is built from — method, resolution,
+citation, validation — do not exist for it, and showing them empty would
+suggest the model merely lacks metadata rather than lacking an experiment.
+What it has instead is confidence, of two kinds:
+
+- **pLDDT**, per residue, read in AlphaFold's own four bands at 90/70/50 rather
+  than as a smooth ramp. The bands are how the number is actually used, and a
+  gradient hides exactly the two lines that matter.
+- **PAE**, the predicted error between every *pair* of residues, as a matrix
+  beside the structure. This is the one people skip, and it answers what pLDDT
+  cannot: two domains can each be confidently folded and still be placed
+  relative to each other with no confidence at all. Calmodulin is the case to
+  look at — two dark blocks on the diagonal, a pale everything else. Drag
+  across a block to focus those residues in the pane.
+
+**AlphaMissense** rides along where it exists: a predicted pathogenicity for
+every possible substitution, averaged per residue, as a colour scheme. It says
+where a mutation would matter, which is a different question from where the
+model is confident — p53 shows it plainly, with the DNA-binding domain scored
+pathogenic and the disordered tails benign.
+
 **Validation, per residue.** The entry summary says "9.5% rotamer outliers";
 two colour schemes say *which* residues. **Fit to density (RSRZ)** shows how
 badly each residue matches its own experimental density, and **Geometry
@@ -339,6 +362,18 @@ the Panes tool. Nothing is uploaded.
 | Coordinates (BinaryCIF) | `models.rcsb.org/{id}.bcif` |
 | Coordinates (mmCIF fallback) | `files.rcsb.org/download/{ID}.cif` |
 | Density maps (BinaryCIF) | `maps.rcsb.org/{x-ray\|em}/{id}/box/...` |
+
+Predicted structures come from two more, both CORS-open:
+
+| Purpose | Endpoint |
+| --- | --- |
+| Predicted models, PAE, AlphaMissense | `alphafold.ebi.ac.uk/api/prediction/{accession}` |
+| Name and gene to accession | `rest.uniprot.org/uniprotkb/search` |
+
+AlphaFold is keyed by UniProt accession and nothing else, which is why the
+UniProt lookup exists. File URLs are taken from the API response rather than
+composed: the database version is in every filename and it moves — the widely
+copied `_v4` URLs are already dead.
 
 Per-residue validation comes from the same GraphQL endpoint, as polymer
 *instance features* rather than as a validation category — `RSRZ`, `RSCC` and

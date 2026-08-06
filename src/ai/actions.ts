@@ -17,6 +17,7 @@ import { COLOR_SCHEME_LABELS, type ColorScheme } from '../mol/coloring';
 import { evaluateSelection, parseSelection, selectionError } from '../mol/selection';
 import { createMeasurement, describeAtom, type MeasurementKind } from '../mol/measure';
 import { findInterfaces, interfaceSelection } from '../mol/interfaces';
+import { searchUniProt } from '../rcsb/alphafold';
 import { MolKind } from '../mol/structure';
 import type { NucleotideStyle } from '../gfx/geometry';
 import {
@@ -200,7 +201,23 @@ export async function applyAction(action: Action): Promise<string> {
       const scheme = (Object.keys(COLOR_SCHEME_LABELS) as ColorScheme[])
         .find((s) => s === key || COLOR_SCHEME_LABELS[s].toLowerCase().startsWith(key));
       if (!scheme) return reject(`unknown colour scheme "${value}"`);
-      store.patchSlot(store.activeSlot, { colorScheme: scheme });
+
+      const slot = store.activeSlot;
+      // Two schemes need data fetched before they mean anything, and a scheme
+      // that silently paints everything "not measured" is worse than a refusal.
+      if (scheme === 'pathogenicity') {
+        if (!store.slots[slot].prediction) {
+          return reject('AlphaMissense only exists for predicted structures');
+        }
+        if (!await viewer.loadMissense(slot)) {
+          return reject('the AlphaMissense annotation could not be fetched');
+        }
+      }
+      if (scheme === 'plddt' && !store.slots[slot].prediction) {
+        return reject('pLDDT only exists for predicted structures — this pane holds an experiment');
+      }
+
+      store.patchSlot(slot, { colorScheme: scheme });
       return `Colouring by ${COLOR_SCHEME_LABELS[scheme].toLowerCase()}.`;
     }
 
@@ -287,6 +304,33 @@ export async function applyAction(action: Action): Promise<string> {
       return `Looking down ${m[1]}${m[2].toUpperCase()}.`;
     }
 
+    case 'predicted': {
+      const { pane, rest } = paneFrom(value);
+      if (!paneExists(pane)) return reject(`pane ${pane + 1} is not in the current layout`);
+      const query = rest.trim();
+      if (!query) return reject('predicted needs a protein name, a gene, or a UniProt accession');
+
+      const accession = /^[A-NR-Z][0-9][A-Z0-9]{3}[0-9]$|^[OPQ][0-9][A-Z0-9]{3}[0-9]$/i;
+      if (accession.test(query)) {
+        await viewer.loadPrediction(pane, query.toUpperCase());
+        const slot = useStore.getState().slots[pane];
+        if (slot.status === 'error') return reject(slot.error ?? 'the model could not be loaded');
+        const p = slot.prediction;
+        return `Loaded the AlphaFold model of ${p?.description ?? query} into pane ${pane + 1}`
+          + `${p ? `, mean pLDDT ${p.meanPlddt.toFixed(0)}` : ''}. It is a prediction, `
+          + 'not a measurement.';
+      }
+
+      // A name is ambiguous, so the hits come back for the model to choose from
+      // rather than the first one being loaded on its behalf.
+      const hits = await searchUniProt(query);
+      if (hits.length === 0) return reject(`nothing in UniProt matches "${query}"`);
+      const lines = hits.slice(0, 8).map((h) => `${h.accession} ${h.id}: ${h.name}`
+        + `${h.gene ? ` (${h.gene})` : ''}${h.organism ? ` — ${h.organism}` : ''}`);
+      return `UniProt entries matching "${query}":\n${lines.join('\n')}\n`
+        + 'Run predicted again with the accession you want.';
+    }
+
     case 'validation': {
       const slot = store.activeSlot;
       const state = store.slots[slot];
@@ -321,7 +365,7 @@ export async function applyAction(action: Action): Promise<string> {
       // The same shape the interfaces action returns: a ranked list and one
       // string that can be handed straight to a component or focus action.
       const selection = worst
-        .map((r) => `(/${r.chain} and ${r.seq})`)
+        .map((r) => `(/${r.chain} and :${r.seq})`)
         .join(' or ');
 
       return `Worst residues by ${metric === 'rsrz' ? 'fit to density' : 'geometry'}:\n`

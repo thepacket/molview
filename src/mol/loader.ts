@@ -56,22 +56,26 @@ export interface LoadHandle {
   cancel: () => void;
 }
 
+export interface LoadOptions {
+  file?: { buffer: ArrayBuffer; name: string };
+  modelNum?: number;
+  allModels?: boolean;
+  /** Fetch from here rather than from the PDB, as AlphaFold models do. */
+  sourceUrl?: string;
+}
+
 export function loadStructure(
   entryId: string,
   onProgress: (p: LoadProgress) => void,
-  file?: { buffer: ArrayBuffer; name: string },
-  modelNum?: number,
-  allModels?: boolean,
+  options: LoadOptions = {},
 ): LoadHandle {
   const w = ensureWorker();
   const requestId = nextId++;
 
   const promise = new Promise<LoadResult>((resolve, reject) => {
     pending.set(requestId, { resolve, reject, onProgress });
-    const req: LoadRequest = {
-      type: 'load', requestId, entryId, file, modelNum, allModels,
-    };
-    w.postMessage(req, file ? [file.buffer] : []);
+    const req: LoadRequest = { type: 'load', requestId, entryId, ...options };
+    w.postMessage(req, options.file ? [options.file.buffer] : []);
   });
 
   return {

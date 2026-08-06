@@ -9,6 +9,7 @@ import { validationBadge } from '../../rcsb/validation';
 import { useStore, visibleSlotCount } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Chip, Field, Select, Slider, Tip } from '../controls';
+import { PredictedSearch } from './PredictedSearch';
 
 const PAGE_SIZE = 25;
 
@@ -317,6 +318,8 @@ export function BrowsePanel() {
           {search.error}
         </div>
       )}
+
+      {search.results.length === 0 && search.status !== 'loading' && <PredictedSearch />}
 
       {search.results.length === 0 && search.status !== 'loading' && (
         <div className="panel-section">

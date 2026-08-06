@@ -97,11 +97,9 @@ export function paintColorKey(
 
     cursor += RAMP_HEIGHT + ITEM_SIZE + 2;
     ctx.fillStyle = '#b9c7db';
-    const [low, mid, high] = key.labels;
+    const [low, high] = key.labels;
     ctx.textAlign = 'left';
     ctx.fillText(low, left, cursor);
-    ctx.textAlign = 'center';
-    ctx.fillText(mid, left + RAMP_WIDTH / 2, cursor);
     ctx.textAlign = 'right';
     ctx.fillText(high, left + RAMP_WIDTH, cursor);
     ctx.textAlign = 'left';

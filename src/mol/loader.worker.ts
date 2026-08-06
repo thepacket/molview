@@ -7,7 +7,7 @@
  * that feels like an application and one that feels like a web page.
  */
 
-import { fetchCoordinates } from '../rcsb/api';
+import { fetchCoordinates, fetchWithProgress } from '../rcsb/api';
 import { parseBinaryCif } from '../rcsb/bcif';
 import { parseMmCif, STRUCTURE_CATEGORIES } from '../rcsb/mmcif';
 import { buildStructure, type Structure } from './structure';
@@ -20,6 +20,11 @@ export interface LoadRequest {
   entryId: string;
   /** Raw file contents for locally opened structures. */
   file?: { buffer: ArrayBuffer; name: string };
+  /**
+   * Fetch from here instead of from the PDB. Used by AlphaFold, whose models
+   * are BinaryCIF like everything else — only the address differs.
+   */
+  sourceUrl?: string;
   /** Which model of an NMR ensemble to build; defaults to the first. */
   modelNum?: number;
   /** Build every model at once, for an ensemble overlay. */
@@ -66,6 +71,18 @@ async function handleLoad(req: LoadRequest): Promise<void> {
     if (req.file) {
       buffer = req.file.buffer;
       format = req.file.name.toLowerCase().endsWith('.bcif') ? 'bcif' : 'cif';
+    } else if (req.sourceUrl) {
+      post({ type: 'progress', requestId: req.requestId, stage: 'Fetching', loaded: 0, total: 0 });
+      buffer = await fetchWithProgress(req.sourceUrl, controller.signal, (p) => {
+        post({
+          type: 'progress',
+          requestId: req.requestId,
+          stage: 'Fetching',
+          loaded: p.loaded,
+          total: p.total,
+        });
+      });
+      format = req.sourceUrl.endsWith('.bcif') ? 'bcif' : 'cif';
     } else {
       post({ type: 'progress', requestId: req.requestId, stage: 'Fetching', loaded: 0, total: 0 });
       const coords = await fetchCoordinates(req.entryId, controller.signal, (p) => {

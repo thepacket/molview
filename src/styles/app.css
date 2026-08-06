@@ -1361,6 +1361,34 @@ textarea {
   margin-top: 8px;
 }
 
+.pae-wrap {
+  position: relative;
+  margin-top: 6px;
+}
+
+.pae-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  /* Nearest-neighbour: the matrix is data, and smoothing it invents block
+     boundaries that are not in the file. */
+  image-rendering: pixelated;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.pae-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(72, 214, 255, 0.22);
+  border-left: 1px solid var(--accent);
+  border-right: 1px solid var(--accent);
+  pointer-events: none;
+}
+
 .legend-ramp {
   display: flex;
   height: 8px;

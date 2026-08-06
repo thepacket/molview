@@ -16,36 +16,6 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
-### Predicted structures
-
-**The largest gap by far.** MolView reads the PDB and nothing else, and the PDB
-is now the small half of the structures anyone looks at: AlphaFold DB covers
-over 200 million sequences against the archive's quarter of a million. A viewer
-that cannot open a predicted model is missing most of the field's working
-material.
-
-Everything needed is CORS-enabled and already half-supported:
-
-- `alphafold.ebi.ac.uk/api/prediction/{accession}` returns the metadata and the
-  current file URLs. It takes a UniProt accession only — not a gene name — so a
-  lookup step is needed; `rest.uniprot.org/uniprotkb/search` answers that and is
-  also CORS-open.
-- The model is BinaryCIF, which `bcif.ts` already decodes, so loading is the
-  existing path with a different URL.
-- pLDDT arrives in the B-factor column, which the colour scheme already reads.
-  What is missing is the *bands*: pLDDT is read at 90/70/50, not as a continuous
-  ramp, and colouring it like a B-factor invites exactly the wrong reading of a
-  disordered tail.
-- `-predicted_aligned_error_*.json` is the PAE matrix. This is the piece with no
-  equivalent anywhere else in the app: a heatmap where dragging a block selects
-  those residues in the structure would answer "are these two domains placed
-  relative to each other, or just individually confident" — the question pLDDT
-  cannot answer and everyone gets wrong.
-- `-aa-substitutions.csv` is AlphaMissense: a pathogenicity score for every
-  possible substitution at every position. Averaged per residue it is a colour
-  scheme, and it pairs exactly with the per-residue validation work — one says
-  where a model is uncertain, the other where a mutation would matter.
-
 ### Finding related structures from the one on screen
 
 The search panel answers questions you can phrase. These answer questions you
@@ -104,6 +74,28 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **Predicted structures** — AlphaFold DB beside the PDB: searched through
+  UniProt, loaded through the existing BinaryCIF path, with pLDDT in bands, the
+  PAE matrix, and AlphaMissense.
+
+  - **A prediction gets its own Definition panel.** Method, resolution,
+    citation and validation do not exist for it; showing those fields empty
+    would read as missing metadata rather than as a missing experiment.
+  - **pLDDT in AlphaFold's four bands, not as a ramp.** The number is used as a
+    threshold — above 90 trust the side chain, below 50 trust nothing — and a
+    smooth gradient hides both lines.
+  - **The PAE matrix is the point.** It is the only thing that shows two
+    confidently folded domains placed relative to each other with no confidence
+    at all, and dragging a diagonal block into a 3D selection is what makes it
+    worth having beside the structure rather than on another website.
+  - **File URLs come from the API, not from a template.** The database version
+    is in every filename and it moves; the `_v4` URLs everyone copies are dead.
+
+  It also turned up three bugs of my own: `focusSelection` failed silently on
+  an invalid selection, and three separate callers had been emitting `127`
+  where the grammar wants `:127`. It now returns whether it did anything and
+  warns in dev, which is what would have made them visible the first time.
 
 - **The four small gaps** — each unremarkable alone, and the set closes the
   ChimeraX comparison.

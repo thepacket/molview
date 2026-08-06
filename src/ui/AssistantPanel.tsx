@@ -26,7 +26,7 @@ const HEIGHT_KEY = 'molview-assistant-height';
 const COLLAPSED_KEY = 'molview-assistant-collapsed';
 const DEFAULT_HEIGHT = 280;
 /** Actions that answer a question, rather than changing what is drawn. */
-const QUERY_ACTIONS = new Set(['interfaces', 'measure', 'superpose', 'validation']);
+const QUERY_ACTIONS = new Set(['interfaces', 'measure', 'superpose', 'validation', 'predicted']);
 const MIN_HEIGHT = 160;
 const COLLAPSED_HEIGHT = 32;
 
@@ -67,12 +67,6 @@ function clampHeight(px: number): number {
   return Math.min(Math.max(px, MIN_HEIGHT), Math.round(window.innerHeight * 0.72));
 }
 
-/**
- * Input and output separately, because they are not priced alike — output
- * typically costs several times input, so a single total hides the number that
- * drives the bill. Reasoning is called out when there is any: it is billed as
- * output but never appears in the reply.
- */
 /**
  * The actions a turn wants to run, waiting to be let through.
  *
@@ -130,6 +124,12 @@ function ApprovalRow({ pending, onChange }: {
   );
 }
 
+/**
+ * Input and output separately, because they are not priced alike — output
+ * typically costs several times input, so a single total hides the number that
+ * drives the bill. Reasoning is called out when there is any: it is billed as
+ * output but never appears in the reply.
+ */
 function formatUsage(usage: Completion): string {
   const n = (v: number) => v.toLocaleString();
   if (!usage.promptTokens && !usage.completionTokens) {

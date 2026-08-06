@@ -80,7 +80,7 @@ export function ValidationLegend({ scheme, slot }: { scheme: ColorScheme; slot: 
               type="button"
               className="chain-toggle"
               style={{ width: '100%', textAlign: 'left' }}
-              onClick={() => viewer.focusSelection(slot, `/${r.chain} and ${r.seq}`)}
+              onClick={() => viewer.focusSelection(slot, `/${r.chain} and :${r.seq}`)}
             >
               <span className="chain-name">{r.chain} {r.seq}</span>
               <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10 }}>

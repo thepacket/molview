@@ -5,6 +5,7 @@ import {
 } from './elements';
 import { MolKind, SS, resNameOf, type Structure } from './structure';
 import type { ResidueValidation } from '../rcsb/residueValidation';
+import { plddtColor } from '../rcsb/alphafold';
 
 export type ColorScheme =
   | 'chain'
@@ -18,6 +19,8 @@ export type ColorScheme =
   | 'base'
   | 'rsrz'
   | 'outliers'
+  | 'plddt'
+  | 'pathogenicity'
   | 'uniform';
 
 export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
@@ -32,11 +35,16 @@ export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
   base: 'Nucleotide base',
   rsrz: 'Fit to density (RSRZ)',
   outliers: 'Geometry outliers',
+  plddt: 'Confidence (pLDDT)',
+  pathogenicity: 'AlphaMissense',
   uniform: 'Uniform',
 };
 
 /** Schemes that need per-residue validation fetched before they mean anything. */
 export const VALIDATION_SCHEMES: ReadonlySet<ColorScheme> = new Set(['rsrz', 'outliers']);
+
+/** Schemes that only mean anything on a predicted structure. */
+export const PREDICTION_SCHEMES: ReadonlySet<ColorScheme> = new Set(['plddt', 'pathogenicity']);
 
 /** Residues the validation report says nothing about — ligands, waters, gaps. */
 const UNMEASURED = 0x5b6472;
@@ -117,6 +125,8 @@ export interface ColorOptions {
   paletteOffset: number;
   /** Needed by the validation schemes; they fall back to grey without it. */
   residueValidation?: ResidueValidation | null;
+  /** Per-residue AlphaMissense means, indexed by residue number. */
+  missense?: Float32Array | null;
 }
 
 export function makeColorProvider(s: Structure, options: ColorOptions): ColorProvider {
@@ -184,6 +194,28 @@ export function makeColorProvider(s: Structure, options: ColorOptions): ColorPro
       case 'base':
         color = BASE_COLORS[comp] ?? KIND_FALLBACK[s.resKind[r]];
         break;
+      case 'plddt': {
+        // AlphaFold's own four bands and its own colours. A continuous ramp
+        // would be prettier and would misread the model: pLDDT is used as a
+        // threshold — above 90 trust the side chain, below 50 trust nothing,
+        // and a smooth gradient hides exactly those two lines.
+        let sum = 0;
+        const start = s.resAtomStart[r];
+        const end = s.resAtomStart[r + 1];
+        for (let a = start; a < end; a++) sum += s.bFactor[a];
+        color = plddtColor(end > start ? sum / (end - start) : 0);
+        break;
+      }
+      case 'pathogenicity': {
+        const scores = options.missense;
+        const value = scores && s.resSeq[r] < scores.length ? scores[s.resSeq[r]] : Number.NaN;
+        // 0.34 and 0.564 are AlphaMissense's own likely-benign and
+        // likely-pathogenic cut-offs, so the ramp turns where the paper does.
+        color = Number.isNaN(value)
+          ? UNMEASURED
+          : rainbow(Math.min(Math.max((value - 0.2) / 0.55, 0), 1));
+        break;
+      }
       case 'rsrz': {
         const m = metricsFor(s, r, options.residueValidation);
         // 2 sigma is the conventional outlier threshold and 4 is bad by any

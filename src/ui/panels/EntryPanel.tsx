@@ -6,6 +6,7 @@ import { RCSB_ENTRY_URL } from '../../rcsb/api';
 import { hasValidation, validationNote, validationRows } from '../../rcsb/validation';
 import { useStore } from '../../state/store';
 import { Chip } from '../controls';
+import { PredictionPanel } from './PredictionPanel';
 
 export function EntryPanel() {
   const slot = useStore((s) => s.slots[s.activeSlot]);
@@ -20,6 +21,10 @@ export function EntryPanel() {
       </div>
     );
   }
+
+  // A predicted structure has no deposition behind it, so the fields this
+  // panel is built from do not exist. It gets its own.
+  if (slot.prediction) return <PredictionPanel />;
 
   const detail = slot.detail;
   if (!detail) {

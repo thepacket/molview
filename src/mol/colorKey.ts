@@ -13,6 +13,7 @@ import {
   BASE_COLORS, CHAIN_PALETTE, COLOR_SCHEME_LABELS, type ColorScheme,
 } from './coloring';
 import { ELEMENT_COLORS, ELEMENT_SYMBOLS, elementIndex } from './elements';
+import { PLDDT_BANDS } from '../rcsb/alphafold';
 
 export interface KeySwatch {
   label: string;
@@ -21,9 +22,14 @@ export interface KeySwatch {
 
 export type ColorKey =
   | { kind: 'swatches'; title: string; items: KeySwatch[] }
-  | { kind: 'ramp'; title: string; stops: number[]; labels: [string, string, string] }
+  | { kind: 'ramp'; title: string; stops: number[]; labels: [string, string] }
   | null;
 
+/**
+ * Ramp keys carry only their two ends. A middle label would say what the ramp
+ * measures, which is what the title already says, and three labels across
+ * 132 pixels run into each other.
+ */
 /** The ramp `rainbow()` walks; repeated here so the key cannot drift from it. */
 const RAINBOW_STOPS = [0x3b4cc0, 0x39b8d8, 0x5ddb6f, 0xf5d13a, 0xe8483c];
 
@@ -117,12 +123,12 @@ export function colorKeyFor(
         // Reversed, because the scheme itself is: low B is the confident end
         // and gets the warm colour.
         stops: [...RAINBOW_STOPS].reverse(),
-        labels: [`${s.bMin.toFixed(0)}`, 'B-factor', `${s.bMax.toFixed(0)}`],
+        labels: [`${s.bMin.toFixed(0)}`, `${s.bMax.toFixed(0)}`],
       };
 
     case 'rainbow':
       return {
-        kind: 'ramp', title, stops: RAINBOW_STOPS, labels: ['N', 'residue', 'C'],
+        kind: 'ramp', title, stops: RAINBOW_STOPS, labels: ['N terminus', 'C terminus'],
       };
 
     case 'hydrophobicity':
@@ -130,17 +136,35 @@ export function colorKeyFor(
         kind: 'ramp',
         title,
         stops: RAINBOW_STOPS,
-        labels: ['polar', 'Kyte-Doolittle', 'nonpolar'],
+        labels: ['polar', 'nonpolar'],
+      };
+
+    case 'plddt':
+      return {
+        kind: 'swatches',
+        title,
+        items: PLDDT_BANDS.map((band) => ({
+          label: `${band.label} (${band.min === 0 ? '< 50' : `> ${band.min}`})`,
+          color: band.color,
+        })),
+      };
+
+    case 'pathogenicity':
+      return {
+        kind: 'ramp',
+        title,
+        stops: RAINBOW_STOPS,
+        labels: ['benign', 'pathogenic'],
       };
 
     case 'rsrz':
       return {
-        kind: 'ramp', title, stops: RAINBOW_STOPS, labels: ['0 σ', 'fit', '4 σ'],
+        kind: 'ramp', title, stops: RAINBOW_STOPS, labels: ['0 σ · fits', '4 σ+'],
       };
 
     case 'outliers':
       return {
-        kind: 'ramp', title, stops: RAINBOW_STOPS, labels: ['none', 'faults', '6+'],
+        kind: 'ramp', title, stops: RAINBOW_STOPS, labels: ['no faults', '6+'],
       };
 
     // Residue type has twenty-odd entries and uniform has one; neither is a key
