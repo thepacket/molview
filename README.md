@@ -156,6 +156,17 @@ A turn starts at about 1,300 input tokens; what grows it is the rolling history
 of three exchanges, not the size of the structure, since the scene is counts and
 chain names rather than coordinates. **Clear** is what resets it.
 
+**Validation.** The wwPDB validates the whole archive, and the definition panel
+shows what it found: steric clashes, Ramachandran and rotamer outliers, fit to
+density where structure factors were deposited, backbone coverage for cryo-EM.
+Numbers rather than a grade — a green tick would invite the uncritical reading
+this exists to prevent — with a dot for the judgement and a sentence only when
+something is genuinely poor. A metric that could not be measured says why:
+`4HHB` has no density fit because structure factors were not deposited in 1984.
+It is worth knowing that the same entry, the classic haemoglobin, has a
+clashscore of 142 where a modern structure at 1.74 Å sits near 2. The assistant
+sees the summary too, so it will mention a weak model unprompted.
+
 **Inspection.** Hover or click any atom for its residue, chain and atom name.
 The sequence track is built from the loaded coordinates, so gaps in the model
 appear as gaps and every residue you click actually exists in the scene. Chains

@@ -7,9 +7,21 @@ already exists are documented at the end of [README.md](README.md) instead.
 
 ## Open
 
-Nothing outstanding. Ideas that came up along the way and were deliberately not
-taken are under "Not planned" below; current limitations of what exists are at
-the end of [README.md](README.md).
+- **Validation in the browse results.** The definition panel now shows the wwPDB
+  summary (`2fdd77a`), but the decision it most affects is picking among the
+  dozens of entries for the same protein, where resolution is the usual and poor
+  tiebreaker. A three-segment bar per hit — clashes, geometry, density fit —
+  plus sorting by it. Not built because the result rows are much tighter than
+  the panel and the layout wants a real eye on it. Costs a second batched query,
+  since `fetchSummaries` does not carry the validation fields.
+- **Per-residue validation.** Entry-level numbers say "9.5% rotamer outliers"
+  but not which residues, so the structure cannot be coloured by fault. The
+  per-residue data is in the validation XML; whether RCSB exposes it through
+  GraphQL is unverified.
+
+Ideas that came up along the way and were deliberately not taken are under "Not
+planned" below; current limitations of what exists are at the end of
+[README.md](README.md).
 
 Ideas that surfaced while building the assistant:
 
