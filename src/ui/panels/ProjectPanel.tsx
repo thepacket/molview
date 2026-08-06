@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Download, FilePlus2, FolderOpen, Link, Loader2, Save, Trash2, Upload,
+  CopyPlus, Download, FilePlus2, FolderOpen, Link, Loader2, Save, Trash2, Upload,
 } from 'lucide-react';
 import {
   hasLocalFilePanes, parseProject, projectFilename, restoreProject,
@@ -19,6 +19,19 @@ import { buildShareLink } from '../../state/share';
 import { DEFAULT_PROJECT_NAME, useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Tip, Toggle } from '../controls';
+
+/**
+ * A copy needs a name of its own, or the list shows two identical rows and the
+ * only way to tell them apart is the timestamp.
+ */
+function uniqueName(base: string, existing: ProjectSummary[]): string {
+  const taken = new Set(existing.map((p) => p.name));
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base} copy${n === 2 ? '' : ` ${n - 1}`}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
 
 export function ProjectPanel() {
   const slots = useStore((s) => s.slots);
@@ -76,20 +89,31 @@ export function ProjectPanel() {
     }
   };
 
-  const doSave = () => withBusy('Saving…', async () => {
+  /**
+   * `asNew` forces a fresh record instead of overwriting the open one. Saving
+   * normally updates in place, which is right for going on working — but it
+   * means a session branched off an existing project would replace its parent,
+   * and the copy the user thought they were making would never exist.
+   */
+  const doSave = (asNew = false) => withBusy('Saving…', async () => {
     // Renaming here renames the project itself, so the title bar and the saved
     // record never disagree.
-    const finalName = name.trim() || projectName;
+    const typed = name.trim() || projectName;
+    const finalName = asNew ? uniqueName(typed, projects) : typed;
     setProjectName(finalName);
     const document = {
       ...(await serialiseProjectWithFiles({ includeCoordinates })),
       name: finalName,
     };
-    const saved = await saveProject(finalName, document, projectId ?? undefined);
+    const saved = await saveProject(
+      finalName, document, asNew ? undefined : projectId ?? undefined,
+    );
     setProjectId(saved.id);
     refresh();
     setStatus(
-      projectId ? `Updated "${saved.name}"` : `Saved "${saved.name}" in this browser`,
+      !asNew && projectId
+        ? `Updated "${saved.name}"`
+        : `Saved "${saved.name}" in this browser`,
     );
   });
 
@@ -220,18 +244,36 @@ export function ProjectPanel() {
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && hasContent) doSave(); }}
         />
-        <button
-          type="button"
-          className="btn primary small"
-          style={{ width: '100%', marginTop: 7 }}
-          disabled={!hasContent || busy}
-          onClick={doSave}
-        >
-          <Save size={12} /> {projectId ? 'Save changes' : 'Save project'}
-        </button>
+        <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+          <button
+            type="button"
+            className="btn primary small"
+            style={{ flex: 1 }}
+            disabled={!hasContent || busy}
+            onClick={() => doSave()}
+          >
+            <Save size={12} /> {projectId ? 'Save changes' : 'Save project'}
+          </button>
+          {/* Only meaningful once a project is open; without one, the button
+              beside it already creates a new record. */}
+          {projectId && (
+            <Tip label="Keep the open project as it was and save this as a separate one">
+              <button
+                type="button"
+                className="btn small"
+                style={{ flex: 1 }}
+                disabled={!hasContent || busy}
+                onClick={() => doSave(true)}
+              >
+                <CopyPlus size={12} /> Save as new
+              </button>
+            </Tip>
+          )}
+        </div>
         <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
           Stored in this browser only. Structures are referenced by PDB id and
           refetched on load, so a project stays small.
+          {projectId && ' Saving updates the open project; “Save as new” leaves it untouched.'}
         </p>
       </div>
 
