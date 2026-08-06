@@ -26,10 +26,11 @@ what exists are at the end of [README.md](README.md).
 
 ### Left from the ChimeraX comparison
 
-- **Electrostatic colouring.** Needs a charge model and a Poisson-Boltzmann
-  solve, or a crude Coulombic approximation that would be worse than nothing if
-  presented as the real thing.
-Not taken: structure editing and dynamics (bond rotation, swapaa, tug,
+Nothing, now. The last of it was electrostatic colouring, and the Coulombic
+half of that is done and labelled as Coulombic; a Poisson-Boltzmann solve is
+under "Not planned" with the other scientific backends.
+
+Also not taken: structure editing and dynamics (bond rotation, swapaa, tug,
 minimize), markers, and the map tab's analysis tools — see "Not planned".
 
 ---
@@ -375,8 +376,9 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 
 ## Not planned
 
-Modeller, dockprep, mutation, docking — these need scientific backends there is
-no case for reimplementing. VR. And the full ChimeraX command surface: hundreds
+Modeller, dockprep, mutation, docking, and a Poisson-Boltzmann solve — these
+need scientific backends there is no case for reimplementing in a viewer, and
+the Coulombic approximation that is here is labelled as one. VR. And the full ChimeraX command surface: hundreds
 of commands built over decades, and chasing it is mimicry rather than design.
 
 A true solvent-excluded surface. The Gaussian surface that exists answers the
