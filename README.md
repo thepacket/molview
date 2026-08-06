@@ -22,7 +22,7 @@ npm run dev
 Requires a WebGPU-capable browser (Chrome/Edge 113+, Safari 18+).
 
 `npm run build` produces a static `dist/`, which is all a deployment is — see
-[DEPLOY.md](DEPLOY.md) for the fly.io setup.
+[Deploying](#deploying) below.
 
 ## What it does
 
@@ -275,6 +275,54 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
   never included in a shareable link.
 - The deferred pipeline is opaque-only — there is no transparency, and no
   molecular surface representation.
+
+## Deploying
+
+The repo carries a [fly.io](https://fly.io) configuration. There is no server
+component, so a deployment is a Vite build served by nginx: no secrets, no
+environment variables, no volumes, no database.
+
+Install [flyctl](https://fly.io/docs/flyctl/install/) and sign in:
+
+```bash
+fly auth login
+```
+
+Claim the app name — this reserves it and starts nothing, so it costs nothing:
+
+```bash
+fly apps create molview
+```
+
+If the name is taken it fails immediately; pick another and change `app` in
+[fly.toml](fly.toml) to match. Then, from the repo root:
+
+```bash
+fly deploy
+```
+
+That builds the Dockerfile on Fly's remote builder — Docker does not need to be
+running locally — and starts one machine. Every later deploy is the same
+command. The app is then at `https://<app>.fly.dev`.
+
+**HTTPS is mandatory, not a preference:** WebGPU requires a secure context, so
+the app does not start over plain http. `force_https` in `fly.toml` covers it.
+
+The machine sleeps when idle (`auto_stop_machines = 'suspend'` with
+`min_machines_running = 0`), so an unvisited deployment costs nothing and the
+first request after an idle period pays about a second of wake-up. Set
+`min_machines_running = 1` if that matters.
+
+To check the image locally before deploying:
+
+```bash
+docker build -t molview:test . && docker run --rm -p 8099:80 molview:test
+```
+
+The files involved are `Dockerfile`, `nginx.conf`, `security-headers.conf`,
+`fly.toml` and `.dockerignore`. [DEPLOY.md](DEPLOY.md) explains what each one
+assumes — caching, the Content Security Policy and the hosts it allows, and why
+the token cost of the assistant is the only cost that scales.
 
 ## Contributions
 
