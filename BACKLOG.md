@@ -16,28 +16,6 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
-### What the residues are *for*
-
-MolView can now say a great deal about a structure's geometry — what touches
-what, how much it buries, where the cavities are, how well the model fits its
-density, how confident a prediction is. It says almost nothing about function.
-The active site, the catalytic residues, the glycosylation, the disease
-variants: all of that is annotation, all of it is keyed to UniProt, and none of
-it is on screen.
-
-Confirmed reachable through the GraphQL endpoint already in use:
-
-- `rcsb_uniprot_feature` gives typed, positioned annotations — `BINDING_SITE`,
-  `ACTIVE_SITE`, `MUTAGENESIS_SITE`, `MODIFIED_RESIDUE`, `DISULFIDE_BOND`,
-  `SHORT_SEQUENCE_MOTIF`, `CROSS_LINK` and more. 1CBS returns five kinds.
-- `rcsb_polymer_entity_align` gives the entity-to-UniProt offset as aligned
-  regions, which is what makes the positions land on the right residues. 1CBS
-  is offset by one, and an off-by-one in an active site is worse than nothing.
-
-Combined with `auth_to_entity_poly_seq_mapping`, already used by the per-residue
-validation, the chain from a UniProt feature to a residue in the pane is
-complete. Selectable and drawable annotations are the deliverable, not a list.
-
 ### A real command line
 
 Deferred twice on the grounds that the palette and the selection grammar cover
@@ -83,6 +61,20 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **UniProt functional annotations, on the residues** — active and binding
+  sites, modified residues, motifs, domains, mutagenesis results, each selectable
+  and drawable. The app could describe a structure's geometry in detail and say
+  nothing about what any of it does; this is the part that does.
+
+  All of the difficulty is numbering, and it is silent when wrong. UniProt
+  position to entity position through `rcsb_polymer_entity_align`, then to
+  `auth_seq_id` through `auth_to_entity_poly_seq_mapping`. Checked by distance
+  rather than by inspection: 101M's "proximal binding residue" comes out as
+  His93 with its NE2 2.20 A from the haem iron — the coordination bond — and
+  1CBS, which is offset by one and so is exactly where a missing alignment step
+  would show, puts its binding site on Arg132 and Tyr134 at 2.7 and 2.6 A from
+  the ligand carboxylate.
 
 - **Pocket detection** — the LIGSITE buriedness scan: enclosed along four of
   seven axes, clustered, ranked by volume, with lining residues and a ready

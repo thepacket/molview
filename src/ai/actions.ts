@@ -20,6 +20,7 @@ import {
   findInterfaces, interfaceSelection, measureInterfaceAreas,
 } from '../mol/interfaces';
 import { findPockets, pocketSelection } from '../mol/pockets';
+import { fetchAnnotations } from '../rcsb/annotations';
 import { searchUniProt } from '../rcsb/alphafold';
 import { fetchSummaries, searchByShape, searchBySequence } from '../rcsb/api';
 import { MolKind } from '../mol/structure';
@@ -306,6 +307,38 @@ export async function applyAction(action: Action): Promise<string> {
       if (!m) return reject('view takes "orient", or an axis such as "x" or "-z"');
       viewer.viewAlongAxis(slot, m[2] as 'x' | 'y' | 'z', m[1] === '-');
       return `Looking down ${m[1]}${m[2].toUpperCase()}.`;
+    }
+
+    case 'annotations': {
+      const slot = store.activeSlot;
+      const state = store.slots[slot];
+      if (!viewer.getStructure(slot)) return reject(`pane ${slot + 1} has no structure`);
+      if (!state.entryId || state.prediction || state.sourceFileName) {
+        return reject('annotations come from the PDB entry\'s UniProt reference');
+      }
+
+      const all = await fetchAnnotations(state.entryId);
+      if (all.length === 0) return 'UniProt has no positioned annotations for this entry.';
+
+      const want = value.trim().toLowerCase();
+      const matching = want
+        ? all.filter((a) => a.label.toLowerCase().includes(want)
+          || a.type.toLowerCase().includes(want.replace(/\s+/g, '_'))
+          || a.detail.toLowerCase().includes(want))
+        : all;
+      if (matching.length === 0) {
+        return reject(`no annotation matches "${value}" — available: `
+          + `${[...new Set(all.map((a) => a.label))].join(', ')}`);
+      }
+
+      const lines = matching.slice(0, 12).map((a) => {
+        const where = a.residues.slice(0, 8).map((r) => `${r.chain}${r.seq}`).join(' ');
+        return `${a.label}${a.detail ? ` (${a.detail})` : ''}: ${where}`
+          + `${a.residues.length > 8 ? ` and ${a.residues.length - 8} more` : ''}`
+          + ` — selection ${a.selection}`;
+      });
+      return `UniProt annotations for ${state.entryId}, mapped onto its own numbering:\n`
+        + lines.join('\n');
     }
 
     case 'pockets': {

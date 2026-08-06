@@ -7,6 +7,7 @@ import { hasValidation, validationNote, validationRows } from '../../rcsb/valida
 import { useStore } from '../../state/store';
 import { Chip } from '../controls';
 import { PredictionPanel } from './PredictionPanel';
+import { AnnotationSection } from './AnnotationSection';
 
 export function EntryPanel() {
   const slot = useStore((s) => s.slots[s.activeSlot]);
@@ -106,6 +107,8 @@ export function EntryPanel() {
           {note && <p className="vrpt-note">{note}</p>}
         </div>
       )}
+
+      <AnnotationSection />
 
       {detail.polymerEntities.length > 0 && (
         <div className="panel-section" style={{ padding: 0 }}>

@@ -26,7 +26,7 @@ const HEIGHT_KEY = 'molview-assistant-height';
 const COLLAPSED_KEY = 'molview-assistant-collapsed';
 const DEFAULT_HEIGHT = 280;
 /** Actions that answer a question, rather than changing what is drawn. */
-const QUERY_ACTIONS = new Set(['interfaces', 'measure', 'superpose', 'validation', 'predicted', 'similar', 'pockets']);
+const QUERY_ACTIONS = new Set(['interfaces', 'measure', 'superpose', 'validation', 'predicted', 'similar', 'pockets', 'annotations']);
 const MIN_HEIGHT = 160;
 const COLLAPSED_HEIGHT = 32;
 

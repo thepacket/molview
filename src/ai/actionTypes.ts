@@ -11,7 +11,7 @@ export const ACTION_TYPES = [
   'focus', 'reset-view', 'spin', 'lighting', 'background',
   'hbonds', 'interfaces', 'measure', 'superpose', 'overlay', 'ensemble',
   'nucleotides', 'view', 'density', 'surface', 'clip', 'validation', 'predicted',
-  'similar', 'pockets',
+  'similar', 'pockets', 'annotations',
 ] as const;
 
 export type ActionType = (typeof ACTION_TYPES)[number];
@@ -53,6 +53,7 @@ export const ACTION_REFERENCE: { type: ActionType; value: string; note: string }
   { type: 'nucleotides', value: '"slab" | "ladder" | "stubs" | "none"', note: 'How nucleic acid bases are drawn inside the cartoon. Ladder joins Watson-Crick partners into one rung. To colour by base, use the color action with the "base" scheme — it is not a style.' },
   { type: 'view', value: '"orient" | "x" | "y" | "z" | "-x" | "-y" | "-z"', note: 'Point the camera. "orient" turns the pane to the structure\'s own principal axes and refits it — the view it was given on load, after the user has moved it. The axis values look straight down a world axis instead.' },
   { type: 'ensemble', value: '"on" | "off"', note: 'Draw every model of an NMR ensemble at once, or just one.' },
+  { type: 'annotations', value: '"" or "binding" or "active site"', note: 'UniProt\'s functional annotations for the entry, mapped onto its own residue numbering — active and binding sites, modified residues, motifs, domains, mutagenesis results, variants. Each comes with a ready-made selection. This is the only source in the app for what a residue is *for*: everything else here is geometry. Positions are translated through the entity-to-UniProt alignment, so they are this entry\'s numbering and not the sequence database\'s.' },
   { type: 'pockets', value: '"" or "top 3"', note: 'Find the enclosed cavities, ranked by volume, with the residues lining each and any ligand sitting in one — plus a ready-made selection for the largest. Ligands are excluded from the scan, so a ligand named in the answer was found rather than assumed, which is the check on the method. It measures concavity, not affinity: use it to locate a site, not to claim one binds anything.' },
   { type: 'similar', value: '"shape" | "sequence" | "sequence 10"', note: 'Find structures resembling the one in the active pane — by the shape of the assembly on screen, or by the sequence of its longest chain, with the identity of each hit. This answers what the search box cannot: the interesting cases are the ones you cannot name, an unfamiliar fold or a family you are trying to establish. Shape and sequence disagree usefully, and a hit in one but not the other is usually the one worth looking at.' },
   { type: 'predicted', value: '"P69905" or "haemoglobin alpha human" or "P69905 pane 2"', note: 'Load an AlphaFold model. Given a UniProt accession it loads that model; given anything else it searches UniProt and returns the matching accessions for you to choose from — AlphaFold is keyed by accession only. Use it whenever a protein has no experimental structure, or when the question is about a sequence rather than about a deposition. What comes back is a prediction: say so, and reach for the pLDDT and AlphaMissense colour schemes rather than for resolution or validation, which do not exist for it.' },

@@ -363,6 +363,21 @@ where a mutation would matter, which is a different question from where the
 model is confident — p53 shows it plainly, with the DNA-binding domain scored
 pathogenic and the disordered tails benign.
 
+**What the residues are for.** Everything else here is geometry; this is
+function. UniProt's positioned annotations — active and binding sites, modified
+residues, motifs, domains, mutagenesis results, natural variants — landed on the
+residues of the loaded entry, each with a selection so it can be framed or drawn
+rather than merely read.
+
+The difficulty is entirely in the numbering, and it is a three-step chain:
+UniProt position → entity sequence position via `rcsb_polymer_entity_align` →
+`auth_seq_id` via `auth_to_entity_poly_seq_mapping` → a residue in the pane.
+Skipping the first step is the classic error and it fails silently. `1CBS` is
+offset by one, and doing it properly puts its binding site on Arg132 and Tyr134
+— 2.7 and 2.6 Å from the carboxylate of the retinoic acid, which is what those
+residues are there for. `101M`'s "proximal binding residue" comes out as His93,
+whose NE2 sits 2.20 Å from the haem iron: the coordination bond itself.
+
 **Validation, per residue.** The entry summary says "9.5% rotamer outliers";
 two colour schemes say *which* residues. **Fit to density (RSRZ)** shows how
 badly each residue matches its own experimental density, and **Geometry
