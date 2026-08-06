@@ -21,7 +21,7 @@ fly launch --no-deploy
 ```
 
 Answer no when it offers to overwrite `fly.toml`. It will rename the app if
-`molview2` is taken, and it may change `primary_region` — the config here
+`molview` is taken, and it may change `primary_region` — the config here
 defaults to `yul` (Montreal).
 
 Then:
@@ -126,5 +126,5 @@ under the policy.
 To repeat it:
 
 ```bash
-docker build -t molview2:test . && docker run --rm -p 8099:80 molview2:test
+docker build -t molview:test . && docker run --rm -p 8099:80 molview:test
 ```
