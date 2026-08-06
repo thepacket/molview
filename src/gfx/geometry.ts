@@ -98,9 +98,21 @@ function chainVisible(
   return !allowedAsyms || allowedAsyms.has(s.chainLabelId[chain]);
 }
 
-function atomRadius(style: number, element: number, rep: Representation): number {
+/**
+ * A lone ion drawn at its true van der Waals radius is the largest object in a
+ * cartoon scene — a 2.05 A manganese beside a 0.62 A ribbon reads as a beach
+ * ball parked on a shoelace, and in 1EHZ the magnesiums swamped the tRNA. It is
+ * only ever shown as an isolated sphere, where the volume means nothing to the
+ * eye, so it is drawn at half size: still obvious, no longer the subject.
+ */
+const ION_SPHERE_SCALE = 0.5;
+
+function atomRadius(
+  style: number, element: number, rep: Representation, isIon = false,
+): number {
   switch (style) {
-    case Style.Spacefill: return VDW_RADII[element];
+    case Style.Spacefill:
+      return isIon ? VDW_RADII[element] * ION_SPHERE_SCALE : VDW_RADII[element];
     case Style.BallStick: return VDW_RADII[element] * 0.25 * rep.atomScale;
     case Style.Licorice: return rep.bondRadius * rep.atomScale;
     default: return 0;
@@ -222,7 +234,7 @@ function buildGroup(
       if (style === Style.BallStick || style === Style.Licorice) wantsSticks = true;
 
       drawAtom[a] = 1;
-      const radius = atomRadius(style, s.element[a], rep);
+      const radius = atomRadius(style, s.element[a], rep, s.resKind[r] === MolKind.Ion);
       atomRadii[a] = radius;
       if (radius > 0) sphereCount++;
     }

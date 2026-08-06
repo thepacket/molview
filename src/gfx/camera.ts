@@ -133,6 +133,34 @@ export class Camera {
   }
 
   /** Frames a sphere; the default view for a freshly loaded structure. */
+  /**
+   * Fits half-extents already measured along the camera's own axes, against the
+   * pane's real aspect ratio.
+   *
+   * `frame` fits a bounding sphere, which is the right answer for a ball and a
+   * poor one for anything long: GroEL lying across a wide pane was sized as
+   * though its length had to fit vertically, and used half the frame.
+   */
+  fitExtents(
+    center: ArrayLike<number>, halfWidth: number, halfHeight: number,
+    halfDepth: number, aspect: number, animate = false,
+  ): void {
+    const tan = Math.tan(this.fovY / 2);
+    const forHeight = halfHeight / tan;
+    const forWidth = halfWidth / (tan * Math.max(aspect, 0.05));
+    const distance = Math.max(forHeight, forWidth) * 1.06 + halfDepth;
+    const state: CameraState = {
+      target: [center[0], center[1], center[2]],
+      orientation: [
+        this.orientation[0], this.orientation[1],
+        this.orientation[2], this.orientation[3],
+      ],
+      distance,
+    };
+    if (animate) this.animateTo(state);
+    else this.setState(state);
+  }
+
   frame(center: ArrayLike<number>, radius: number, animate = false): void {
     const distance = (radius * 1.15) / Math.sin(this.fovY / 2);
     const state: CameraState = {

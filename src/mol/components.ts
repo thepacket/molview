@@ -87,9 +87,14 @@ export function defaultComponents(s: Structure, effectiveAtoms: number): Compone
   const components: Component[] = [];
 
   if (polymerResidues > 0) {
-    // At assembly scale a ribbon is thinner than a pixel; spheres read better
-    // and skip building a mesh with millions of triangles.
-    const huge = effectiveAtoms > 400_000;
+    // At assembly scale a ribbon is thinner than a pixel: the detail that makes
+    // a cartoon worth drawing is gone, and what is left reads as dark noise
+    // while costing millions of triangles. Compared side by side at 60k atoms
+    // and up — GroEL, Photosystem I, the 26S proteasome, a CCMV capsid, the
+    // human ribosome — spheres won every time, and by a wide margin above 100k.
+    // Below this a ribbon still resolves, and secondary structure is the more
+    // informative thing to show.
+    const huge = effectiveAtoms > 70_000;
     components.push(makeComponent({
       name: 'Polymer',
       selection: 'polymer',

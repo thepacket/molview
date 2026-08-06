@@ -143,10 +143,18 @@ function quatFromRows(right: number[], up: number[], back: number[]): Quat {
  * Samples atoms through every assembly transform, so a capsid is judged on the
  * shape it actually presents rather than on its asymmetric unit.
  */
+export interface Pose {
+  /** Null when the shape is too round for its axes to mean anything. */
+  orientation: Quat | null;
+  /** Half-extents along the camera's right, up and back axes. */
+  half: [number, number, number];
+  centre: [number, number, number];
+}
+
 export function orientationFor(
   x: Float32Array, y: Float32Array, z: Float32Array, atomCount: number,
   transforms: Float32Array, transformCount: number,
-): Quat | null {
+): Pose | null {
   if (atomCount < 8) return null;
 
   const copies = Math.max(1, transformCount);
@@ -176,11 +184,35 @@ export function orientationFor(
   const { axes, values } = principalAxes(Float64Array.from(pts), count);
 
   // A capsid is a ball: its axes are noise, and rotating by them would land a
-  // different way round on every load for no gain. Only orient a shape that has
-  // a discernible long and short direction.
+  // different way round on every load for no gain. It still wants fitting to
+  // the pane, though, so fall through with the world axes instead.
   const longest = Math.sqrt(values[0]);
   const shortest = Math.sqrt(values[2]);
-  if (shortest <= 0 || longest / shortest < ISOTROPY_LIMIT) return null;
+  const round = shortest <= 0 || longest / shortest < ISOTROPY_LIMIT;
+  const frame = round
+    ? [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    : axes;
 
-  return quatFromRows(axes[0], axes[1], axes[2]);
+  // Extents along the axes we are about to look down, so the caller can fit
+  // the pane rather than a sphere drawn round the whole thing.
+  const mid = [0, 0, 0];
+  for (let i = 0; i < count; i++) {
+    mid[0] += pts[i * 3]; mid[1] += pts[i * 3 + 1]; mid[2] += pts[i * 3 + 2];
+  }
+  mid[0] /= count; mid[1] /= count; mid[2] /= count;
+
+  const half: [number, number, number] = [0, 0, 0];
+  for (let i = 0; i < count; i++) {
+    const dx = pts[i * 3] - mid[0], dy = pts[i * 3 + 1] - mid[1], dz = pts[i * 3 + 2] - mid[2];
+    for (let k = 0; k < 3; k++) {
+      const d = Math.abs(dx * frame[k][0] + dy * frame[k][1] + dz * frame[k][2]);
+      if (d > half[k]) half[k] = d;
+    }
+  }
+
+  return {
+    orientation: round ? null : quatFromRows(axes[0], axes[1], axes[2]),
+    half,
+    centre: [mid[0], mid[1], mid[2]],
+  };
 }

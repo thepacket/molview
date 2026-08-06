@@ -265,10 +265,9 @@ export class ViewerController {
       // have built this slot's geometry, and that path must never move a
       // camera the user is driving. Switching between models of one ensemble
       // keeps the current view, since the members are already superposed.
-      if (!keepCamera) {
-        this.orientSlot(slot);
-        this.frameSlot(slot);
-      }
+      // Orienting also frames, against the pane's aspect; fall back to the
+      // bounding-sphere fit when the shape has no axes worth using.
+      if (!keepCamera && !this.orientSlot(slot)) this.frameSlot(slot);
     } catch (err) {
       if (useStore.getState().slots[slot].entryId !== id) return;
       useStore.getState().patchSlot(slot, {
@@ -369,10 +368,10 @@ export class ViewerController {
    * once someone has turned a structure, snapping it back to a computed pose
    * would be the app overruling them.
    */
-  private orientSlot(slot: number): void {
+  private orientSlot(slot: number): boolean {
     const s = this.data[slot].structure;
     const geometry = this.data[slot].geometry;
-    if (!s || !geometry) return;
+    if (!s || !geometry) return false;
 
     // Judge the assembly as displayed, not the asymmetric unit: one group's
     // transforms are representative, and the largest group dominates the shape.
@@ -381,16 +380,28 @@ export class ViewerController {
       if (g.transformCount > group.transformCount) group = g;
     }
 
-    const q = orientationFor(
+    const pose = orientationFor(
       s.x, s.y, s.z, s.atomCount,
       group ? group.transforms : new Float32Array(0),
       group ? group.transformCount : 0,
     );
-    if (!q) return;
+    if (!pose) return false;
 
     const camera = this.engine.getCamera(slot);
-    const state = camera.getState();
-    camera.setState({ ...state, orientation: [q[0], q[1], q[2], q[3]] });
+    const { orientation: q, half, centre } = pose;
+    if (q) camera.setState({ ...camera.getState(), orientation: [q[0], q[1], q[2], q[3]] });
+
+    // Sampling misses the outermost atoms and ignores every radius, so pad by
+    // a spacefill sphere's worth rather than clipping the silhouette.
+    const pad = 3;
+    const element = this.paneElements[slot];
+    const aspect = element && element.clientHeight > 0
+      ? element.clientWidth / element.clientHeight
+      : 1;
+    camera.fitExtents(
+      centre, half[0] + pad, half[1] + pad, half[2] + pad, aspect,
+    );
+    return true;
   }
 
   frameSlot(slot: number, animate = false): void {

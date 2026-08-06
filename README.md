@@ -36,6 +36,15 @@ date. Results are ranked by relevance, recency or resolution. Typing a
 four-character PDB ID anywhere — the search box or the ⌘K palette — loads it
 directly.
 
+**A first view worth looking at.** A deposited coordinate frame is an accident
+of the crystal, so MolView turns a structure to its own principal axes as it
+loads — longest extent across the pane, thinnest towards the camera — and fits
+it to the pane's real aspect rather than to a bounding sphere. `1BNA` arrives as
+a double helix rather than as a circle seen down its axis, GroEL shows its two
+stacked rings. Shapes too round for their axes to mean anything, capsids in
+particular, are fitted but not turned. Reset view never re-orients: once you
+have moved a structure, the camera is yours.
+
 **Up to four structures at once.** Single, split (horizontal or vertical) or
 quad layouts. Each pane has an independent camera, representation, colour
 scheme and shading, or you can link the cameras so rotating one rotates all of
@@ -56,6 +65,12 @@ matrices rather than a copy of the atoms:
 | `1HHO` | 2 chains, 2.4k atoms | tetramer, 4 chains | 2 matrices |
 | `1EI7` | 2 chains, 2.8k atoms | 68-chain disk aggregate | 34 matrices |
 | `2BTV` | 15 chains, 49k atoms | 900-chain capsid, 2.9M atoms | 60 matrices |
+
+Above roughly 70,000 atoms in view the default representation becomes spacefill
+rather than cartoon: a ribbon is thinner than a pixel at that scale, and what
+survives is dark noise costing millions of triangles. Compared side by side —
+Photosystem I, the 26S proteasome, a CCMV capsid, the human ribosome — spheres
+won every time.
 
 2BTV's complete icosahedral capsid builds in ~1.6 s from a 2.4 MB download and
 encodes a frame in 0.17 ms. Assembly 1 is selected automatically unless the
