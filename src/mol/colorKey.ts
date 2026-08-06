@@ -10,7 +10,7 @@
 
 import { MolKind, type Structure } from './structure';
 import {
-  BASE_COLORS, chainPalette, COLOR_SCHEME_LABELS, type ColorScheme,
+  BASE_COLORS, chainPalette, COLOR_SCHEME_LABELS, isColorBlindSafe, type ColorScheme,
 } from './coloring';
 import { ELEMENT_COLORS, ELEMENT_SYMBOLS, elementIndex } from './elements';
 import { PLDDT_BANDS } from '../rcsb/alphafold';
@@ -73,8 +73,12 @@ export function colorKeyFor(
   options: ColorKeyOptions,
 ): ColorKey {
   const key = buildKey(s, scheme, options);
-  const saturation = options.saturation ?? 1;
-  const intensity = options.intensity ?? 1;
+  // Pinned to 1 under the colour-blind-safe palette, matching what the shader
+  // does. Both ends have to make this decision the same way or the legend
+  // stops describing the picture — and the legend is painted into screenshots.
+  const safe = isColorBlindSafe();
+  const saturation = safe ? 1 : options.saturation ?? 1;
+  const intensity = safe ? 1 : options.intensity ?? 1;
   if (!key || (saturation === 1 && intensity === 1)) return key;
   return key.kind === 'swatches'
     ? { ...key, items: key.items.map((i) => ({ ...i, color: adjust(i.color, saturation, intensity) })) }

@@ -341,6 +341,14 @@ the material colour in the resolve pass, before lighting, so they retune the
 palette rather than the exposure and cost nothing: no geometry rebuild, and the
 frame stays at 0.10 ms while you drag.
 
+They are held at 1 when the colour-blind-safe palette is on, and the sliders
+say so. Those eight colours are spaced so the closest pair survives
+deuteranopia, and the composite clamps to 0..1: at 2, every fragment facing the
+key light clips, and `#e69f00` and `#f0e442` come out identical under
+simulation. Measured separation is 24–60 units across the lit range at 1, and
+0.0 at 2. Strengthening a colour and preserving a distinction turn out to be
+opposite operations.
+
 They reach a molecular surface, because a chain-coloured envelope has to match
 the cartoon inside it, and the colour key, because a legend that no longer
 matches the picture is worse in an export than no legend. They deliberately do

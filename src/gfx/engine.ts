@@ -23,6 +23,7 @@ import labelsWgsl from './shaders/labels.wgsl?raw';
 import volumeWgsl from './shaders/volume.wgsl?raw';
 
 import { ISOSURFACE_STRIDE, type IsoMesh } from './isosurface';
+import { isColorBlindSafe as colorBlindSafe } from '../mol/coloring';
 
 export const MAX_SLOTS = 4;
 const IDENTITY_MATRIX = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -969,8 +970,18 @@ export class Engine {
     // Contact shadows march the depth buffer, so their reach is in world units
     // and has to follow the scene: 8% of the radius keeps the same look on a
     // ligand and on a capsid.
-    uniformData[108] = visual.saturation;
-    uniformData[109] = visual.intensity;
+    // The colour-blind-safe palette is exempt from both, and pinned to 1.
+    //
+    // Not a special case so much as the same rule the density maps follow: a
+    // colour that carries meaning must not be retuned for looks. Those eight
+    // colours are chosen so the closest pair stays apart under deuteranopia,
+    // and the pane's default of 2 destroys exactly that — the composite clamps
+    // to 0..1, so on any fragment facing the key light all eight clip, and
+    // #e69f00 and #f0e442 come out identical under simulation. Measured: 24-60
+    // units of separation at 1, and 0.0 at 2.
+    const palette = colorBlindSafe() ? 1 : 0;
+    uniformData[108] = palette ? 1 : visual.saturation;
+    uniformData[109] = palette ? 1 : visual.intensity;
 
     uniformData[104] = visual.shadow;
     uniformData[105] = Math.max(camera.sceneRadius * 0.25, 4);
