@@ -20,10 +20,12 @@ import {
   findInterfaces, interfaceSelection, measureInterfaceAreas,
 } from '../mol/interfaces';
 import { findPockets, pocketSelection } from '../mol/pockets';
+import { ligandContacts, contactSelection } from '../mol/ligandContacts';
+import { worstFits } from '../mol/densityFit';
 import { fetchAnnotations } from '../rcsb/annotations';
 import { searchUniProt } from '../rcsb/alphafold';
 import { fetchSummaries, searchByShape, searchBySequence } from '../rcsb/api';
-import { MolKind } from '../mol/structure';
+import { MolKind, resNameOf } from '../mol/structure';
 import type { NucleotideStyle } from '../gfx/geometry';
 import {
   LAYOUT_SLOT_COUNT, useStore,
@@ -278,6 +280,68 @@ export async function applyAction(action: Action): Promise<string> {
       if (!preset) return reject(`unknown lighting preset "${value}"`);
       store.updateVisual(store.activeSlot, preset);
       return `Lighting set to ${value.toLowerCase()}.`;
+    }
+
+    case 'ligand': {
+      const slot = store.activeSlot;
+      const structure = viewer.getStructure(slot);
+      if (!structure) return reject(`pane ${slot + 1} has no structure`);
+
+      const all = ligandContacts(structure);
+      if (all.length === 0) return 'No ligand large enough to describe — lone ions and waters are skipped.';
+
+      const want = value.trim().toUpperCase();
+      const shown = want ? all.filter((r) => r.name.toUpperCase() === want) : all;
+      if (shown.length === 0) {
+        return reject(`no ligand named "${value}" — this pane has `
+          + all.map((r) => r.name).join(', '));
+      }
+
+      const lines = shown.map((r) => {
+        const contacts = r.contacts.slice(0, 8).map((c) =>
+          `${resNameOf(structure, c.residue)}${structure.resSeq[c.residue]} `
+          + `${c.closest.toFixed(2)} A${c.kinds.length ? ` (${c.kinds.join(', ')})` : ''}`);
+        const covalent = r.covalent.length
+          ? `; covalently linked to ${r.covalent.map((c) =>
+            `${resNameOf(structure, c)}${structure.resSeq[c]}`).join(', ')}`
+          : '';
+        return `${r.name} ${structure.resSeq[r.residue]} — ${r.partnerCount} residues`
+          + `${covalent}: ${contacts.join('; ')}`;
+      });
+
+      // A named ligand is nearly always a prelude to drawing its site.
+      const selection = shown.length === 1 ? contactSelection(structure, shown[0]) : null;
+      return lines.join('\n')
+        + (selection ? `\nSelection for the site: ${selection}` : '');
+    }
+
+    case 'densityfit': {
+      const slot = store.activeSlot;
+      const structure = viewer.getStructure(slot);
+      if (!structure) return reject(`pane ${slot + 1} has no structure`);
+
+      const fits = viewer.densityFit(slot);
+      if (!fits) {
+        return reject('no density map is loaded in this pane — run the density '
+          + 'action first, since this correlates the model against the map shown');
+      }
+
+      const ligands = fits.filter((f) => Number.isFinite(f.rscc)
+        && structure.resKind[f.residue] === MolKind.Ligand);
+      const worst = worstFits(structure, fits, 6);
+      const name = (f: { residue: number }) =>
+        `${resNameOf(structure, f.residue)}${structure.resSeq[f.residue]}`;
+
+      const parts: string[] = [];
+      if (ligands.length > 0) {
+        parts.push('Ligands (wwPDB publishes no per-residue score for these): '
+          + ligands.map((f) => `${name(f)} ${f.rscc.toFixed(2)}`).join(', '));
+      }
+      parts.push('Worst fitting, water excluded: '
+        + worst.map((f) => `${name(f)} ${f.rscc.toFixed(2)}`).join(', '));
+      parts.push('These are not on wwPDB\'s scale — compare them with each other, '
+        + 'not with a published threshold.');
+      return parts.join('\n');
     }
 
     case 'palette': {

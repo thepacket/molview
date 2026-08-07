@@ -4,10 +4,11 @@
 
 ![MolView with four panes open at once — haemoglobin, myoglobin, a phenylalanine tRNA and a B-DNA dodecamer — beside the component list on the left, the wwPDB validation summary on the right explaining why a 1984 model scores badly, and the assistant comparing all four below](docs/hero.png)
 
-<sub>7A5R beside 4HHB — 15,387 atoms at 0.14 ms/frame. The definition panel
-carries the wwPDB validation summary (83% of this 3.7 Å cryo-EM model's backbone
-lies in the map), and the assistant answers in Markdown, reporting what the turn
-cost in tokens.</sub>
+<sub>Four structures at once — 8,579 atoms across four independent cameras at
+0.10 ms/frame. The definition panel carries the wwPDB validation summary and
+says why a 1984 model scores badly rather than only showing it three red dots,
+and the assistant compares all four in Markdown, reporting what the turn cost in
+tokens.</sub>
 
 A WebGPU molecular viewer for the RCSB Protein Data Bank. Browse and search the
 PDB, and display up to four structures side by side — including macromolecular
@@ -736,7 +737,18 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
   records. When a file carries none, a Cα-geometry heuristic stands in; it is
   not DSSP and will differ at the edges of helices and strands.
 - Only the dominant alternate conformation is read; altloc B and beyond are
-  discarded.
+  discarded. Occupancy is not carried on the model either, so a half-occupied
+  atom counts whole everywhere it is used, including the density correlation.
+- The computed real-space correlation is not on wwPDB's scale and must not be
+  read against published thresholds. It agrees with their per-residue RSCC at
+  r = 0.62 and runs about 0.2 lower, for reasons given where the feature is
+  described. Rank residues within one structure with it; do not quote it.
+- Ligand contacts are found only within the deposited coordinates. A ligand
+  sitting at a crystal contact has partners in a symmetry copy that are not
+  reported, and charge is assigned to the protein or nucleic side only — an
+  ionic contact requires the *partner* to be a known charged group, so a
+  charged group on the ligand meeting a neutral partner is reported as a plain
+  polar contact.
 - Whole-structure bond perception is skipped above 250,000 atoms, so
   ball-and-stick on very large structures falls back to ligand connectivity.
   Cartoon and spacefill are unaffected.
