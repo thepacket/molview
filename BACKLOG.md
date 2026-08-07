@@ -16,6 +16,39 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
+### Entry classification, computed rather than restated
+
+The pane shows `Content: Protein (only)`, which is RCSB's own `polymerTypes`
+field passed straight through. Nothing about what an entry *is* is derived
+here. The closest thing MolView computes for itself is MolKind per residue —
+protein, nucleic, ligand, ion, water — which drives colouring and the colour key
+and is never presented as a claim.
+
+Worth doing because the machinery is now unusually well placed to make the
+claim honestly: chain composition, the biological assembly the depositor
+declares, buried area between chains, and — since the lattice landed — whether a
+contact is packing or biology. "Two chains, 816 A2 buried, assembly says
+tetramer" is a classification with its evidence attached, which is the only kind
+worth showing.
+
+The failure mode to avoid is the one already avoided for interfaces: a badge
+saying "dimer" is believed further than the evidence goes.
+
+### A light theme
+
+Asked for and scoped but not built. The chrome is one hard-coded `:root` block
+in `styles/app.css` ending in `color-scheme: dark`, with no media query and no
+second palette — every colour already resolves through those variables, so
+swapping them reskins the whole UI. That half is nearly free.
+
+The canvas is the real work. Its background is a `VisualSettings` default that
+nothing in the UI or in project persistence ever writes, and it is not a CSS
+variable: it goes into the uniform buffer and the fog reads it, so depth cueing
+currently fades geometry *towards* black. On a light canvas that inverts, and
+the label backdrops (a dark plate behind bright text) and the hemispheric
+ambient were all chosen against near-black. Two commits: the CSS palette split,
+then the canvas with the fog and ambient re-checked rather than assumed.
+
 ### Blocked for now
 
 - **Conservation colouring.** ConSurf-DB has precomputed profiles for most PDB

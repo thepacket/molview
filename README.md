@@ -205,13 +205,13 @@ independently from the space group and cell, with no assembly at all, it buries
 
 Neighbours are then tagged, and the tag plus the area is the evidence:
 
-| | biological | largest crystal contact |
+| | biological interface | largest crystal contact |
 | --- | --- | --- |
 | HIV-1 protease 1HHP | 1,614 Å² | 258 Å² |
 | Haemoglobin 4HHB | 816 Å² (α1β1) | 353 Å² |
-| Ubiquitin 1UBQ | — | 292 Å² |
-| Myoglobin 101M | — | 399 Å² |
-| Lysozyme 1LYZ | — | 552 Å² |
+| Ubiquitin 1UBQ | none — it is a monomer | 292 Å² |
+| Myoglobin 101M | none — it is a monomer | 399 Å² |
+| Lysozyme 1LYZ | none — it is a monomer | 552 Å² |
 
 MolView shows those numbers rather than a verdict badge. The separation is
 real but it is a tendency, not a threshold — large crystal contacts and small
