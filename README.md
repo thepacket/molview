@@ -237,6 +237,28 @@ stay complete regardless. Haemoglobin's α1β1 is 816.4 Å² with or without the
 narrowing and takes 16 ms instead of 72. Bluetongue virus measures twelve pairs
 in 538 ms rather than 2,900.
 
+**Ligand contacts.** What each bound ligand touches, grouped by the residue
+touching it, with the kind of each contact: hydrogen bonds, ionic pairs,
+aromatic stacking and van der Waals. Rings are found from the bond graph and
+tested for planarity rather than read from a chemical dictionary, since MolView
+has none — a flat six-ring stacks whatever a dictionary would call it.
+
+Checked against structures whose sites are textbook. 1CBS puts retinoic acid on
+Tyr134 at 2.57 Å and Arg132 at 2.73 Å, the two residues UniProt annotates as its
+binding site. Benzamidine in trypsin lands its ionic contact on Asp189, the S1
+aspartate that makes trypsin specific for arginine — which is why benzamidine,
+an arginine mimic, binds there at all. Myoglobin's haem reports His93 at 2.20 Å,
+the proximal histidine.
+
+Two things it deliberately does not claim. Histidine is not counted as charged,
+because its imidazole is cationic only when protonated and the file does not say
+— 101M's His93 was being reported as an ionic contact when what it makes is a
+coordination bond to the iron. And a residue bonded to the ligand is reported as
+*covalently linked* rather than as a partner: GFP's chromophore is built from
+residues 65–67 and stays in the chain, so Phe64 and Val68 flank it through
+peptide bonds and are not binding it. Every criterion is geometric; a long list
+describes proximity, not affinity.
+
 **Fit to density, computed here.** Real-space correlation per residue: density
 calculated from the model, correlated against the map already loaded, over each
 residue's own envelope. It exists because MolView holds both halves in the same

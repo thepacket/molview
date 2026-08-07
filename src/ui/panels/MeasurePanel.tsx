@@ -8,6 +8,7 @@ import {
 } from '../../mol/interfaces';
 import { findPockets, pocketSelection, type Pocket } from '../../mol/pockets';
 import { worstFits, type ResidueFit } from '../../mol/densityFit';
+import { ligandContacts, contactSelection, type LigandReport } from '../../mol/ligandContacts';
 import { MolKind, resNameOf } from '../../mol/structure';
 import { makeComponent, Style } from '../../mol/components';
 import { useStore } from '../../state/store';
@@ -131,6 +132,8 @@ export function MeasurePanel() {
       <InterfaceSection slot={activeSlot} />
 
       <PocketSection slot={activeSlot} />
+
+      <LigandSection slot={activeSlot} />
 
       <DensityFitSection slot={activeSlot} />
 
@@ -538,6 +541,122 @@ function FitRow(
         {fit.rscc.toFixed(2)} correlation · {fit.sigma.toFixed(1)}σ mean ·{' '}
         {fit.points.toLocaleString()} points
       </div>
+    </div>
+  );
+}
+
+/**
+ * What each bound ligand touches, grouped by the residue touching it.
+ *
+ * Every criterion is geometric. The panel says so, because a list of eight
+ * residues reads like an explanation of binding and is only a description of
+ * proximity.
+ */
+function LigandSection({ slot }: { slot: number }) {
+  const components = useStore((s) => s.slots[slot].components);
+  const setComponents = useStore((s) => s.setComponents);
+  const [reports, setReports] = useState<LigandReport[] | null>(null);
+
+  const structure = viewer.getStructure(slot);
+  if (!structure) return null;
+
+  const show = (r: LigandReport) => {
+    const name = `${r.name} site`;
+    const selection = contactSelection(structure, r);
+    const existing = components.findIndex((c) => c.name === name);
+    setComponents(slot, existing >= 0
+      ? components.map((c, i) => (i === existing ? { ...c, selection, visible: true } : c))
+      : [...components, makeComponent({ name, selection, style: Style.BallStick })]);
+  };
+
+  return (
+    <div className="panel-section">
+      <div className="section-label"><span>Ligand contacts</span></div>
+      {reports === null ? (
+        <>
+          <button
+            type="button"
+            className="btn small"
+            style={{ width: '100%' }}
+            onClick={() => setReports(ligandContacts(structure))}
+          >
+            <Layers size={12} /> Find ligand contacts
+          </button>
+          <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
+            Hydrogen bonds, ionic pairs, aromatic stacking and van der Waals
+            contact, grouped by the residue making them. All geometric: a long
+            list describes proximity, not affinity. Water is left out because it
+            bridges everything, and a residue bonded to the ligand is reported as
+            covalently linked rather than as a partner — a modified residue is
+            not a bound one.
+          </p>
+        </>
+      ) : reports.length === 0 ? (
+        <p style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+          No ligand large enough to describe. Lone ions and waters are skipped.
+        </p>
+      ) : (
+        <>
+          {reports.map((r) => (
+            <div key={r.residue} className="measurement">
+              <div className="measurement-head">
+                <span style={{ fontSize: 11.5, marginRight: 'auto' }}>
+                  {r.name} {structure.resSeq[r.residue]}
+                  <span style={{ color: 'var(--text-faint)', fontSize: 10 }}>
+                    {' '}{r.partnerCount} residues
+                  </span>
+                </span>
+                <Tip label="Frame the site">
+                  <button
+                    type="button"
+                    className="pane-icon-btn"
+                    style={{ width: 20, height: 20 }}
+                    aria-label={`Focus ${r.name}`}
+                    onClick={() => viewer.focusSelection(slot, contactSelection(structure, r))}
+                  >
+                    <Crosshair size={11} />
+                  </button>
+                </Tip>
+                <Tip label="Draw the site">
+                  <button
+                    type="button"
+                    className="pane-icon-btn"
+                    style={{ width: 20, height: 20 }}
+                    aria-label={`Show ${r.name}`}
+                    onClick={() => show(r)}
+                  >
+                    <Layers size={11} />
+                  </button>
+                </Tip>
+              </div>
+              {r.covalent.length > 0 && (
+                <div style={{ fontSize: 10, color: 'var(--warn)', marginBottom: 3 }}>
+                  covalently linked to{' '}
+                  {r.covalent.map((c) => `${resNameOf(structure, c)}${structure.resSeq[c]}`).join(', ')}
+                </div>
+              )}
+              {r.contacts.slice(0, 6).map((c) => (
+                <div
+                  key={c.residue}
+                  style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text-faint)' }}
+                >
+                  {resNameOf(structure, c.residue)}{structure.resSeq[c.residue]}
+                  {' '}{c.closest.toFixed(2)} Å
+                  {c.kinds.length > 0 && ` · ${c.kinds.join(', ')}`}
+                </div>
+              ))}
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn small"
+            style={{ width: '100%', marginTop: 7 }}
+            onClick={() => setReports(null)}
+          >
+            Search again
+          </button>
+        </>
+      )}
     </div>
   );
 }
