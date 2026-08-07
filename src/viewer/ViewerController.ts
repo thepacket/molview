@@ -205,6 +205,13 @@ function emptySlotData(): SlotData {
 
 type DragMode = 'none' | 'rotate' | 'pan' | 'roll';
 
+/**
+ * The clicked residue's cage, and its label, share one colour so the two read
+ * as the same thing. Distinct from the measurement gold, the pending orange and
+ * the hydrogen-bond blue already in the overlay.
+ */
+const SELECTION_COLOR: [number, number, number] = [1.0, 0.45, 0.85];
+
 /** A label the pointer can pick up, in the frame the last render left it. */
 interface LabelHandle {
   key: string;
@@ -1605,6 +1612,44 @@ export class ViewerController {
       pushStick(state.pendingAtoms[i], state.pendingAtoms[i + 1], 0.08, [1.0, 0.55, 0.35]);
     }
 
+    // The clicked residue, as a cage around its own bonds.
+    //
+    // Until this existed, clicking marked a residue with a floating text label
+    // and nothing else, and double-clicking flew the camera to it — so you
+    // arrived somewhere inside the structure with no idea which part of it you
+    // had asked for. Worst on nucleic acids, where the base slabs are large,
+    // uniform and identical to their neighbours: "DT 20" written across a wall
+    // of slabs names one of them without pointing at it.
+    //
+    // Drawn as overlay sticks rather than by recolouring, because colours are
+    // baked into the geometry buffers and a click should not cost a rebuild.
+    if (state.selectedResidue !== null) {
+      const r = state.selectedResidue;
+      const start = structure.resAtomStart[r];
+      const end = structure.resAtomStart[r + 1];
+      const mask = new Uint8Array(structure.atomCount);
+      for (let a = start; a < end; a++) mask[a] = 1;
+
+      const bonds = computeBonds(structure, mask);
+      for (let i = 0; i < bonds.count; i++) {
+        pushStick(bonds.indices[i * 2], bonds.indices[i * 2 + 1], 0.11, SELECTION_COLOR);
+      }
+      // A lone ion or water has no bonds to outline, so it gets a small cross
+      // instead — clicking one is common and it would otherwise mark nothing.
+      if (bonds.count === 0 && end > start) {
+        const a = start;
+        const x = structure.x[a], y = structure.y[a], z = structure.z[a];
+        const arm = 0.55;
+        for (const [dx, dy, dz] of [[arm, 0, 0], [0, arm, 0], [0, 0, arm]]) {
+          sticks.push(
+            x - dx, y - dy, z - dz, 0.08,
+            x + dx, y + dy, z + dz, 0,
+            SELECTION_COLOR[0], SELECTION_COLOR[1], SELECTION_COLOR[2], 0,
+          );
+        }
+      }
+    }
+
     this.engine.setOverlay(slot, Float32Array.from(sticks));
 
     // ---- labels ----
@@ -1650,7 +1695,8 @@ export class ViewerController {
         labels.push({
           text: state.selectionLabel,
           x: structure.x[anchor], y: structure.y[anchor], z: structure.z[anchor],
-          color: [0.6, 0.92, 1, 1], background, offsetY: -16, fontSize: 12,
+          color: [SELECTION_COLOR[0], SELECTION_COLOR[1], SELECTION_COLOR[2], 1],
+          background, offsetY: -16, fontSize: 12,
         });
       }
     }

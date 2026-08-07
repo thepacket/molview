@@ -349,6 +349,11 @@ clashscore of 142 where a modern structure at 1.74 Å sits near 2. The assistant
 sees the summary too, so it will mention a weak model unprompted.
 
 **Inspection.** Hover or click any atom for its residue, chain and atom name.
+A click also cages the residue in magenta, drawn from its own bonds, so
+double-clicking to fly the camera in leaves you looking at something marked
+rather than at an anonymous part of the structure — which matters most on
+nucleic acids, where adjacent base slabs are identical. A single-atom
+residue, an ion or a water, gets a small cross instead of a cage.
 The sequence track is built from the loaded coordinates, so gaps in the model
 appear as gaps and every residue you click actually exists in the scene. Where
 a depositor left residues unmodelled the ribbon stops and a dashed Catmull-Rom
