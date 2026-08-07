@@ -406,6 +406,7 @@ export function StylePanel() {
             spacing rather than strengthening it.
           </p>
         ) : QUANTITATIVE_SCHEMES.has(slot.colorScheme)
+          || (slot.surface.status !== 'off' && slot.surface.coloring === 'coulombic')
           || slot.components.some((c) => c.colorScheme && QUANTITATIVE_SCHEMES.has(c.colorScheme)) ? (
             <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: -2, lineHeight: 1.5 }}>
               Both are held at 1 because this pane's colour is a measurement,

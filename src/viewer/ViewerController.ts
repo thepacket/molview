@@ -2535,8 +2535,17 @@ export const viewer = new ViewerController();
  * keep meaning. Erring this way costs a slightly duller picture; erring the
  * other way silently breaks the reading of a ramp.
  */
-function showsQuantity(state: { colorScheme: ColorScheme; components: { colorScheme?: ColorScheme | null }[] }): boolean {
+function showsQuantity(state: {
+  colorScheme: ColorScheme;
+  components: { colorScheme?: ColorScheme | null }[];
+  surface: { status: string; coloring: string };
+}): boolean {
   if (QUANTITATIVE_SCHEMES.has(state.colorScheme)) return true;
+  // A Coulombic surface is a ramp like any other, but it is a surface setting
+  // rather than a colour scheme, so it has to be asked for separately. Missed
+  // on the first pass, which is exactly the gap the scheme list was meant to
+  // close.
+  if (state.surface.status !== 'off' && state.surface.coloring === 'coulombic') return true;
   return state.components.some((c) => c.colorScheme && QUANTITATIVE_SCHEMES.has(c.colorScheme));
 }
 

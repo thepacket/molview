@@ -380,10 +380,18 @@ put them together. Cutting both is a matter of setting clipping on both.
 
 **Saturation and intensity.** Two sliders per pane adjust how strong the
 colours are without changing the scheme itself — 1 is the scheme as authored, 0
-saturation is greyscale, above 1 pushes further from grey. Both default to 2,
-not 1: the schemes were authored to be *distinguishable*, and against a
-near-black canvas with fog and ambient pulling everything towards the
-background, "distinguishable" arrives looking washed out. They are applied to
+saturation is greyscale, above 1 pushes further from grey. Saturation defaults
+to 2 and intensity to 1: the schemes were authored to be *distinguishable*, and
+against a near-black canvas with fog and ambient pulling everything towards the
+background, "distinguishable" arrives looking washed out.
+
+The asymmetry is measured, not tasteful. Saturation moves a colour away from
+grey, which *increases* the distance between colours; intensity is an exposure
+multiplier into a ceiling the composite clamps at 1. Minimum separation across
+the element palette on ordinarily lit geometry is 36 at 1/1, **41 at 2/1**, and
+**0 at 2/2** with all eleven colours clipped. So 2/1 is better than the authored
+1/1 on every palette measured, and 2/2 is worse than either. Vividness was never
+what cost anything; the exposure was. They are applied to
 the material colour in the resolve pass, before lighting, so they retune the
 palette rather than the exposure and cost nothing: no geometry rebuild, and the
 frame stays at 0.10 ms while you drag.
@@ -398,8 +406,8 @@ clips and `#e69f00` and `#f0e442` come out identical under simulation. Measured
 separation across the lit range: 24–60 units at 1, 0.0 at 2.
 
 With a **quantitative scheme** — B-factor, pLDDT, RSRZ, geometry outliers,
-hydrophobicity, AlphaMissense, and the N→C rainbow — the ramp flattens into a
-plateau. At 2, on ordinarily lit geometry, 47 of 100 steps become
+hydrophobicity, AlphaMissense, the N→C rainbow, and a Coulombic surface — the
+ramp flattens into a plateau. At 2, on ordinarily lit geometry, 47 of 100 steps become
 indistinguishable and values 13% and 33% along the scale render as the same
 colour; two of the four pLDDT bands collapse outright on the brightest
 fragments. A key that no longer maps to the picture is worse than a dull

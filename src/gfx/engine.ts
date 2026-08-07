@@ -73,14 +73,24 @@ export const DEFAULT_VISUAL_SETTINGS: SlotVisualSettings = {
   outline: 0.85,
   fogDensity: 0.006,
   shadow: 0.55,
-  // The schemes are authored at 1, and at 1 they read as washed out against a
-  // near-black canvas: element and chain colours were chosen to be
-  // distinguishable, not vivid, and the fog and hemispheric ambient both pull
-  // them further towards the background. 2 is what the panes are actually
-  // meant to look like; 1 is where a "reset" now returns to only in the sense
-  // of returning to this default.
+  // The schemes are authored at 1 and read as washed out there: the colours
+  // were chosen to be distinguishable rather than vivid, and the fog and the
+  // hemispheric ambient both pull them further towards a near-black canvas.
+  // Saturation 2 answers that by pushing away from grey.
+  //
+  // Intensity stays at 1, and the asymmetry is measured rather than tasteful.
+  // The two do different things: saturation moves a colour away from grey,
+  // which *increases* the distance between colours, while intensity is a plain
+  // exposure multiplier into a ceiling the composite clamps at 1. Minimum
+  // separation across the element palette on ordinarily lit geometry — 36 at
+  // 1/1, 41 at 2/1, and 0 at 2/2, with all eleven colours clipped. The rainbow
+  // ramp is 0 flat steps out of 100 at 2/1 and 47 at 2/2.
+  //
+  // So 2/1 is strictly better than the authored 1/1 on every palette measured,
+  // and 2/2 is worse than both. Vividness was never the thing that cost
+  // anything; the exposure was.
   saturation: 2,
-  intensity: 2,
+  intensity: 1,
   orthographic: false,
   clipNear: 0,
   clipFar: 0,
