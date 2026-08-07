@@ -185,6 +185,18 @@ function readGrid(block: CifBlock): VolumeGrid | null {
     for (let i = 0; i < total; i++) values[i] = column.num(i);
   }
 
+  // Contour levels are quoted in sigma, so a wrong sigma moves every surface
+  // the app draws. The header value is normally right and is the conventional
+  // one — computed by the server over its own sampling — so it stays the
+  // default. But it has been seen to arrive as another map's sigma: twice in a
+  // few dozen requests, a block named 2Fo-Fc carried the Fo-Fc value, which
+  // would put every contour at 2.5x its intended level. Rather than trust it
+  // blindly or discard it for a slightly different local number, check it
+  // against the data and fall back only when it is not credible.
+  const headerMean = n('mean_sampled');
+  const headerSigma = n('sigma_sampled');
+  const { mean, sigma } = checkedStats(values, headerMean, headerSigma);
+
   return {
     name: info.field('name').str(0) || 'map',
     values,
@@ -194,11 +206,46 @@ function readGrid(block: CifBlock): VolumeGrid | null {
     stepB: steps[1],
     stepC: steps[2],
     toGrid: invertSteps(steps[0], steps[1], steps[2]),
-    mean: n('mean_sampled'),
-    sigma: n('sigma_sampled'),
+    mean,
+    sigma,
     min: n('min_sampled'),
     max: n('max_sampled'),
   };
+}
+
+/**
+ * The header's mean and sigma, or the ones the samples actually have when the
+ * header is not credible.
+ *
+ * "Not credible" is deliberately loose — a factor of two either way. The server
+ * computes sigma over its own sampled region, which legitimately differs from
+ * the returned box by ten per cent or so (1AKE: header 0.2465, samples 0.2219),
+ * and second-guessing that would replace a convention with a private one. Only
+ * a value that cannot be a rounding of the same quantity is rejected.
+ */
+function checkedStats(
+  values: Float32Array, headerMean: number, headerSigma: number,
+): { mean: number; sigma: number } {
+  let sum = 0;
+  for (let i = 0; i < values.length; i++) sum += values[i];
+  const mean = sum / values.length;
+  let sq = 0;
+  for (let i = 0; i < values.length; i++) {
+    const d = values[i] - mean;
+    sq += d * d;
+  }
+  const sigma = Math.sqrt(sq / values.length);
+
+  const credible = Number.isFinite(headerSigma) && headerSigma > 0
+    && sigma > 0 && headerSigma / sigma > 0.5 && headerSigma / sigma < 2;
+  if (credible) return { mean: headerMean, sigma: headerSigma };
+  if (import.meta.env?.DEV) {
+    console.warn(
+      `Map header sigma ${headerSigma} disagrees with the samples (${sigma.toFixed(4)}); `
+      + 'using the samples. Contour levels would otherwise be wrong.',
+    );
+  }
+  return { mean, sigma };
 }
 
 /** The three cell edge vectors in Cartesian space, standard CIF convention. */

@@ -16,19 +16,6 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
-### Open question: 1AKE reads low
-
-With the non-orthogonal fix in, four of five test entries sample 2.6-3.2 sigma
-at their own atoms. 1AKE reads 0.56, with 28% of its atoms at *negative*
-density — and it is not a registration error: no translation within 3 A
-improves it, the density and atom centroids agree to 3.7 A, `sample_rate` is 1
-so nothing was downsampled, and its own wwPDB record says 0.7% RSRZ outliers
-and Rwork 0.196, meaning the model does fit its density.
-
-Something specific to that entry or that map is unaccounted for. Worth
-resolving because whatever it is presumably affects other entries silently;
-the same statistic is the only check the density path has.
-
 ### Blocked for now
 
 - **Conservation colouring.** ConSurf-DB has precomputed profiles for most PDB
@@ -49,6 +36,28 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **1AKE reads low — resolved, and not ours.** The entry samples 0.56 sigma at
+  its own atoms where every other entry tested reads 2.1-3.3. Ruled out, each by
+  measurement: the map type (its Fo-Fc reads -0.08 sigma with 53% negative,
+  exactly right for a fitted model, so the 2Fo-Fc is being identified
+  correctly), sampling density (detail saturates at 0.63 A per sample and the
+  number does not move), one bad chain (A and B agree at 0.64 and 0.49), atoms
+  outside the grid (none), B-factors (4AKE has mean B 42.7 against 1AKE's 43.3
+  and reads 2.17), a symmetry misplacement (all four operators of its space
+  group give 0.56-0.61 against a full-cell map), a rigid shift (best offset
+  0.14 A, worth 0.01 sigma), and a corrupt sigma in the header (11% from the
+  samples, not the 4x needed).
+
+  What it is: the map's strong features do not sit on the model. Of the grid
+  points above 3 sigma, 41% are within 1 A of an atom, against 95% for 4AKE and
+  100% for 1UBQ. The density exists — the map peaks at 9.5 sigma — but a
+  minority of it coincides with atoms. That is a property of the map RCSB
+  serves for this entry, and one entry in fourteen.
+
+  Left as an entry-specific fact rather than a code change. The statistic
+  behaved correctly throughout; it is the only check the density path has, and
+  it did its job by flagging the one entry that is different.
 
 - **Crystal lattice contacts** — the missing half of the interface story. The
   assembly says what the depositor believes; the lattice says what the crystal

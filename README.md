@@ -717,6 +717,13 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
 - A density map's opening contour is chosen against a triangle budget rather
   than fixed, so a map never arrives half-drawn; the level it settles on is the
   one the panel reports, and it is never lower than the one asked for.
+- Contour levels are quoted in sigma, taken from the map header, which is the
+  conventional value. The header has twice been seen to arrive carrying another
+  map's sigma — a block named 2Fo-Fc holding the Fo-Fc value, which would put
+  every contour at 2.5x its intended level — so it is checked against the
+  samples and replaced only when it is off by more than a factor of two. A ten
+  per cent difference is normal and is left alone: the server computes over its
+  own sampled region, not over the returned box.
 - Symmetry contacts are found only around the deposited copy — enough to see
   every distinct interface in a symmetric assembly, not a per-copy census.
 - Lattice contacts need a space group symbol the operator table knows. It is
