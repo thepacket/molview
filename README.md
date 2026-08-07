@@ -181,12 +181,22 @@ a single assembly copy, itself, and reported no contacts at all while sitting
 packed against eight neighbours.
 
 RCSB ships the cell and the space group but not the operators, so they are
-rebuilt from two or three generators per group, closed by composition. The
-expected multiplicity is stored beside each group as a checksum, which is the
-part that matters: a mistyped generator produces the wrong number of operators
-and the group is refused, instead of yielding a lattice that is plausible and
-wrong. It caught one — `P 42 3 2` is absent for exactly that reason. Only the
-65 Sohncke groups are listed, since a chiral molecule cannot occupy any other.
+rebuilt from two or three generators per group, closed by composition, keyed by
+Hermann-Mauguin symbol. The expected multiplicity is stored beside each group as
+a checksum: a mistyped generator produces the wrong number of operators and the
+group is refused, instead of yielding a lattice that is plausible and wrong. It
+caught one — `P 42 3 2` is absent for exactly that reason.
+
+Keying by symbol rather than by International Tables number is not pedantry.
+The number does not fix the setting, and the checksum cannot catch a wrong one
+because the order is identical: 1AKE is `P 21 2 21`, whose 2-fold runs along b,
+and a number-keyed lookup returned the standard `P 21 21 2` with its 2-fold
+along c. Ten of 300 sampled X-ray entries are in a setting the number alone gets
+wrong. The check that does catch it is geometric — a lattice neighbour must
+touch the model, never interpenetrate it — and it now runs across every entry
+tested: with the settings right, no entry has more than a handful of atoms
+inside 2.4 Å of a copy, and those sit on symmetry axes, where an atom is
+legitimately its own image.
 
 The proof it works is 1HHP, whose biological dimer *is* a crystallographic
 2-fold. Built from the deposited assembly operators it buries 1,614 Å². Built
@@ -709,11 +719,14 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
   one the panel reports, and it is never lower than the one asked for.
 - Symmetry contacts are found only around the deposited copy — enough to see
   every distinct interface in a symmetric assembly, not a per-copy census.
-- Lattice contacts need a space group the operator table can build. It covers
-  the Sohncke groups — the only ones a chiral molecule can occupy — bar `P 42 3
-  2`, whose generators failed their own checksum and were dropped rather than
-  guessed. Anything else, and anything without a real cell (NMR, cryo-EM and
-  predictions carry a placeholder 1 Å `P 1`), reports assembly contacts only.
+- Lattice contacts need a space group symbol the operator table knows. It is
+  keyed by symbol rather than by International Tables number, because the number
+  does not fix the setting — 1AKE is `P 21 2 21`, whose 2-fold runs along b
+  where the standard `P 21 21 2` puts it along c. It covers 299 of 300 sampled
+  X-ray entries; the miss was `P 42 3 2`, whose generators failed their own
+  checksum and were dropped rather than guessed. Anything unlisted, and anything
+  without a real cell (NMR, cryo-EM and predictions carry a placeholder 1 Å
+  `P 1`), reports assembly contacts only.
 - The assistant is only as good as the model behind it. Models that cannot be
   held to the reply schema mostly cope, since the shape is described in the
   prompt and fenced JSON is unwrapped, but a small one will emit prose where an

@@ -34,8 +34,8 @@ const CENTRING: Record<string, [number, number, number][]> = {
 };
 
 interface GroupSpec {
-  /** Hermann-Mauguin symbol, for messages. */
-  hm: string;
+  /** International Tables number, for messages. */
+  number: number;
   centring: keyof typeof CENTRING;
   /** Generators as coordinate triplets; the identity is implicit. */
   gens: string[];
@@ -44,77 +44,106 @@ interface GroupSpec {
 }
 
 /**
- * The Sohncke (chiral) space groups, by International Tables number.
+ * Keyed by Hermann-Mauguin symbol, not by International Tables number.
  *
- * Generators are given in the standard setting. Anything absent is a group a
- * protein cannot crystallise in, or one whose generators are not confirmed;
- * both are refused the same way.
+ * The number is not enough and assuming it was produced a real bug: 1AKE is
+ * `P 21 2 21`, a setting of #18 whose 2-fold runs along b, and looking up #18
+ * returned the standard `P 21 21 2` with its 2-fold along c. Same group, same
+ * order — so the multiplicity checksum passed — and every generated neighbour
+ * in the wrong place. In a 300-entry sample of X-ray structures, 10 were in a
+ * setting that number-only lookup gets wrong: `P 2 21 21`, `P 21 2 21` and
+ * `I 1 2 1`. RCSB also writes monoclinic symbols in full (`P 1 21 1`,
+ * `C 1 2 1`), which no number-keyed table would have matched either.
+ *
+ * Symbols are normalised by stripping spaces and upper-casing. Anything not
+ * listed is refused rather than approximated.
  */
-const GROUPS: Record<number, GroupSpec> = {
-  1: { hm: 'P 1', centring: 'P', gens: [], order: 1 },
-  3: { hm: 'P 2', centring: 'P', gens: ['-x,y,-z'], order: 2 },
-  4: { hm: 'P 21', centring: 'P', gens: ['-x,y+1/2,-z'], order: 2 },
-  5: { hm: 'C 2', centring: 'C', gens: ['-x,y,-z'], order: 4 },
-  16: { hm: 'P 2 2 2', centring: 'P', gens: ['-x,-y,z', 'x,-y,-z'], order: 4 },
-  17: { hm: 'P 2 2 21', centring: 'P', gens: ['-x,-y,z+1/2', 'x,-y,-z+1/2'], order: 4 },
-  18: { hm: 'P 21 21 2', centring: 'P', gens: ['-x,-y,z', '-x+1/2,y+1/2,-z'], order: 4 },
-  19: { hm: 'P 21 21 21', centring: 'P', gens: ['-x+1/2,-y,z+1/2', '-x,y+1/2,-z+1/2'], order: 4 },
-  20: { hm: 'C 2 2 21', centring: 'C', gens: ['-x,-y,z+1/2', 'x,-y,-z+1/2'], order: 8 },
-  21: { hm: 'C 2 2 2', centring: 'C', gens: ['-x,-y,z', 'x,-y,-z'], order: 8 },
-  22: { hm: 'F 2 2 2', centring: 'F', gens: ['-x,-y,z', 'x,-y,-z'], order: 16 },
-  23: { hm: 'I 2 2 2', centring: 'I', gens: ['-x,-y,z', 'x,-y,-z'], order: 8 },
-  24: { hm: 'I 21 21 21', centring: 'I', gens: ['-x+1/2,-y,z+1/2', '-x,y+1/2,-z+1/2'], order: 8 },
-  75: { hm: 'P 4', centring: 'P', gens: ['-y,x,z'], order: 4 },
-  76: { hm: 'P 41', centring: 'P', gens: ['-y,x,z+1/4'], order: 4 },
-  77: { hm: 'P 42', centring: 'P', gens: ['-y,x,z+1/2'], order: 4 },
-  78: { hm: 'P 43', centring: 'P', gens: ['-y,x,z+3/4'], order: 4 },
-  79: { hm: 'I 4', centring: 'I', gens: ['-y,x,z'], order: 8 },
-  80: { hm: 'I 41', centring: 'I', gens: ['-y,x+1/2,z+1/4'], order: 8 },
-  89: { hm: 'P 4 2 2', centring: 'P', gens: ['-y,x,z', 'x,-y,-z'], order: 8 },
-  90: { hm: 'P 4 21 2', centring: 'P', gens: ['-y+1/2,x+1/2,z', 'x+1/2,-y+1/2,-z'], order: 8 },
-  91: { hm: 'P 41 2 2', centring: 'P', gens: ['-y,x,z+1/4', 'x,-y,-z'], order: 8 },
-  92: { hm: 'P 41 21 2', centring: 'P', gens: ['-y+1/2,x+1/2,z+1/4', 'x+1/2,-y+1/2,-z+3/4'], order: 8 },
-  93: { hm: 'P 42 2 2', centring: 'P', gens: ['-y,x,z+1/2', 'x,-y,-z'], order: 8 },
-  94: { hm: 'P 42 21 2', centring: 'P', gens: ['-y+1/2,x+1/2,z+1/2', 'x+1/2,-y+1/2,-z+1/2'], order: 8 },
-  95: { hm: 'P 43 2 2', centring: 'P', gens: ['-y,x,z+3/4', 'x,-y,-z'], order: 8 },
-  96: { hm: 'P 43 21 2', centring: 'P', gens: ['-y+1/2,x+1/2,z+3/4', 'x+1/2,-y+1/2,-z+1/4'], order: 8 },
-  97: { hm: 'I 4 2 2', centring: 'I', gens: ['-y,x,z', 'x,-y,-z'], order: 16 },
-  98: { hm: 'I 41 2 2', centring: 'I', gens: ['-y+1/2,x+1/2,z+1/4', 'x+1/2,-y+1/2,-z+3/4'], order: 16 },
-  143: { hm: 'P 3', centring: 'P', gens: ['-y,x-y,z'], order: 3 },
-  144: { hm: 'P 31', centring: 'P', gens: ['-y,x-y,z+1/3'], order: 3 },
-  145: { hm: 'P 32', centring: 'P', gens: ['-y,x-y,z+2/3'], order: 3 },
-  146: { hm: 'R 3', centring: 'R', gens: ['-y,x-y,z'], order: 9 },
-  149: { hm: 'P 3 1 2', centring: 'P', gens: ['-y,x-y,z', '-y,-x,-z'], order: 6 },
-  150: { hm: 'P 3 2 1', centring: 'P', gens: ['-y,x-y,z', 'y,x,-z'], order: 6 },
-  151: { hm: 'P 31 1 2', centring: 'P', gens: ['-y,x-y,z+1/3', '-y,-x,-z+2/3'], order: 6 },
-  152: { hm: 'P 31 2 1', centring: 'P', gens: ['-y,x-y,z+1/3', 'y,x,-z'], order: 6 },
-  153: { hm: 'P 32 1 2', centring: 'P', gens: ['-y,x-y,z+2/3', '-y,-x,-z+1/3'], order: 6 },
-  154: { hm: 'P 32 2 1', centring: 'P', gens: ['-y,x-y,z+2/3', 'y,x,-z'], order: 6 },
-  155: { hm: 'R 32', centring: 'R', gens: ['-y,x-y,z', 'y,x,-z'], order: 18 },
-  168: { hm: 'P 6', centring: 'P', gens: ['x-y,x,z'], order: 6 },
-  169: { hm: 'P 61', centring: 'P', gens: ['x-y,x,z+1/6'], order: 6 },
-  170: { hm: 'P 65', centring: 'P', gens: ['x-y,x,z+5/6'], order: 6 },
-  171: { hm: 'P 62', centring: 'P', gens: ['x-y,x,z+1/3'], order: 6 },
-  172: { hm: 'P 64', centring: 'P', gens: ['x-y,x,z+2/3'], order: 6 },
-  173: { hm: 'P 63', centring: 'P', gens: ['x-y,x,z+1/2'], order: 6 },
-  177: { hm: 'P 6 2 2', centring: 'P', gens: ['x-y,x,z', 'y,x,-z'], order: 12 },
-  178: { hm: 'P 61 2 2', centring: 'P', gens: ['x-y,x,z+1/6', 'y,x,-z+1/3'], order: 12 },
-  179: { hm: 'P 65 2 2', centring: 'P', gens: ['x-y,x,z+5/6', 'y,x,-z+2/3'], order: 12 },
-  180: { hm: 'P 62 2 2', centring: 'P', gens: ['x-y,x,z+1/3', 'y,x,-z+2/3'], order: 12 },
-  181: { hm: 'P 64 2 2', centring: 'P', gens: ['x-y,x,z+2/3', 'y,x,-z+1/3'], order: 12 },
-  182: { hm: 'P 63 2 2', centring: 'P', gens: ['x-y,x,z+1/2', 'y,x,-z'], order: 12 },
-  195: { hm: 'P 2 3', centring: 'P', gens: ['-x,-y,z', 'x,-y,-z', 'z,x,y'], order: 12 },
-  196: { hm: 'F 2 3', centring: 'F', gens: ['-x,-y,z', 'x,-y,-z', 'z,x,y'], order: 48 },
-  197: { hm: 'I 2 3', centring: 'I', gens: ['-x,-y,z', 'x,-y,-z', 'z,x,y'], order: 24 },
-  198: { hm: 'P 21 3', centring: 'P', gens: ['-x+1/2,-y,z+1/2', '-x,y+1/2,-z+1/2', 'z,x,y'], order: 12 },
-  199: { hm: 'I 21 3', centring: 'I', gens: ['-x+1/2,-y,z+1/2', '-x,y+1/2,-z+1/2', 'z,x,y'], order: 24 },
-  207: { hm: 'P 4 3 2', centring: 'P', gens: ['-y,x,z', 'z,x,y', 'y,x,-z'], order: 24 },
-  // 208 P 42 3 2 is deliberately absent: the generators tried here closed to
-  // the wrong order, and the checksum caught it. An absent group is refused
+const GROUPS: Record<string, GroupSpec> = {
+  P1: { number: 1, centring: 'P', gens: [], order: 1 },
+
+  // Monoclinic. RCSB writes the full three-position symbol.
+  P121: { number: 3, centring: 'P', gens: ['-x,y,-z'], order: 2 },
+  P1211: { number: 4, centring: 'P', gens: ['-x,y+1/2,-z'], order: 2 },
+  C121: { number: 5, centring: 'C', gens: ['-x,y,-z'], order: 4 },
+  I121: { number: 5, centring: 'I', gens: ['-x,y,-z'], order: 4 },
+
+  // Orthorhombic. #18 and #17 appear in all three axis settings.
+  P222: { number: 16, centring: 'P', gens: ['-x,-y,z', 'x,-y,-z'], order: 4 },
+  P2221: { number: 17, centring: 'P', gens: ['-x,-y,z+1/2', 'x,-y,-z+1/2'], order: 4 },
+  P21212: { number: 18, centring: 'P', gens: ['-x,-y,z', '-x+1/2,y+1/2,-z'], order: 4 },
+  // The same group with the 2-fold along a, then along b.
+  P22121: { number: 18, centring: 'P', gens: ['x,-y,-z', '-x,y+1/2,-z+1/2'], order: 4 },
+  P21221: { number: 18, centring: 'P', gens: ['-x,y,-z', 'x+1/2,-y,-z+1/2'], order: 4 },
+  P212121: { number: 19, centring: 'P', gens: ['-x+1/2,-y,z+1/2', '-x,y+1/2,-z+1/2'], order: 4 },
+  C2221: { number: 20, centring: 'C', gens: ['-x,-y,z+1/2', 'x,-y,-z+1/2'], order: 8 },
+  C222: { number: 21, centring: 'C', gens: ['-x,-y,z', 'x,-y,-z'], order: 8 },
+  F222: { number: 22, centring: 'F', gens: ['-x,-y,z', 'x,-y,-z'], order: 16 },
+  I222: { number: 23, centring: 'I', gens: ['-x,-y,z', 'x,-y,-z'], order: 8 },
+  I212121: { number: 24, centring: 'I', gens: ['-x+1/2,-y,z+1/2', '-x,y+1/2,-z+1/2'], order: 8 },
+
+  // Tetragonal.
+  P4: { number: 75, centring: 'P', gens: ['-y,x,z'], order: 4 },
+  P41: { number: 76, centring: 'P', gens: ['-y,x,z+1/4'], order: 4 },
+  P42: { number: 77, centring: 'P', gens: ['-y,x,z+1/2'], order: 4 },
+  P43: { number: 78, centring: 'P', gens: ['-y,x,z+3/4'], order: 4 },
+  I4: { number: 79, centring: 'I', gens: ['-y,x,z'], order: 8 },
+  I41: { number: 80, centring: 'I', gens: ['-y,x+1/2,z+1/4'], order: 8 },
+  P422: { number: 89, centring: 'P', gens: ['-y,x,z', 'x,-y,-z'], order: 8 },
+  P4212: { number: 90, centring: 'P', gens: ['-y+1/2,x+1/2,z', 'x+1/2,-y+1/2,-z'], order: 8 },
+  P4122: { number: 91, centring: 'P', gens: ['-y,x,z+1/4', 'x,-y,-z'], order: 8 },
+  P41212: { number: 92, centring: 'P', gens: ['-y+1/2,x+1/2,z+1/4', 'x+1/2,-y+1/2,-z+3/4'], order: 8 },
+  P4222: { number: 93, centring: 'P', gens: ['-y,x,z+1/2', 'x,-y,-z'], order: 8 },
+  P42212: { number: 94, centring: 'P', gens: ['-y+1/2,x+1/2,z+1/2', 'x+1/2,-y+1/2,-z+1/2'], order: 8 },
+  P4322: { number: 95, centring: 'P', gens: ['-y,x,z+3/4', 'x,-y,-z'], order: 8 },
+  P43212: { number: 96, centring: 'P', gens: ['-y+1/2,x+1/2,z+3/4', 'x+1/2,-y+1/2,-z+1/4'], order: 8 },
+  I422: { number: 97, centring: 'I', gens: ['-y,x,z', 'x,-y,-z'], order: 16 },
+  I4122: { number: 98, centring: 'I', gens: ['-y+1/2,x+1/2,z+1/4', 'x+1/2,-y+1/2,-z+3/4'], order: 16 },
+
+  // Trigonal and hexagonal. R groups are deposited in the hexagonal setting
+  // and written with an H, which is the centring this table already assumes.
+  P3: { number: 143, centring: 'P', gens: ['-y,x-y,z'], order: 3 },
+  P31: { number: 144, centring: 'P', gens: ['-y,x-y,z+1/3'], order: 3 },
+  P32: { number: 145, centring: 'P', gens: ['-y,x-y,z+2/3'], order: 3 },
+  H3: { number: 146, centring: 'R', gens: ['-y,x-y,z'], order: 9 },
+  R3: { number: 146, centring: 'R', gens: ['-y,x-y,z'], order: 9 },
+  P312: { number: 149, centring: 'P', gens: ['-y,x-y,z', '-y,-x,-z'], order: 6 },
+  P321: { number: 150, centring: 'P', gens: ['-y,x-y,z', 'y,x,-z'], order: 6 },
+  P3112: { number: 151, centring: 'P', gens: ['-y,x-y,z+1/3', '-y,-x,-z+2/3'], order: 6 },
+  P3121: { number: 152, centring: 'P', gens: ['-y,x-y,z+1/3', 'y,x,-z'], order: 6 },
+  P3212: { number: 153, centring: 'P', gens: ['-y,x-y,z+2/3', '-y,-x,-z+1/3'], order: 6 },
+  P3221: { number: 154, centring: 'P', gens: ['-y,x-y,z+2/3', 'y,x,-z'], order: 6 },
+  H32: { number: 155, centring: 'R', gens: ['-y,x-y,z', 'y,x,-z'], order: 18 },
+  R32: { number: 155, centring: 'R', gens: ['-y,x-y,z', 'y,x,-z'], order: 18 },
+  P6: { number: 168, centring: 'P', gens: ['x-y,x,z'], order: 6 },
+  P61: { number: 169, centring: 'P', gens: ['x-y,x,z+1/6'], order: 6 },
+  P65: { number: 170, centring: 'P', gens: ['x-y,x,z+5/6'], order: 6 },
+  P62: { number: 171, centring: 'P', gens: ['x-y,x,z+1/3'], order: 6 },
+  P64: { number: 172, centring: 'P', gens: ['x-y,x,z+2/3'], order: 6 },
+  P63: { number: 173, centring: 'P', gens: ['x-y,x,z+1/2'], order: 6 },
+  P622: { number: 177, centring: 'P', gens: ['x-y,x,z', 'y,x,-z'], order: 12 },
+  P6122: { number: 178, centring: 'P', gens: ['x-y,x,z+1/6', 'y,x,-z+1/3'], order: 12 },
+  P6522: { number: 179, centring: 'P', gens: ['x-y,x,z+5/6', 'y,x,-z+2/3'], order: 12 },
+  P6222: { number: 180, centring: 'P', gens: ['x-y,x,z+1/3', 'y,x,-z+2/3'], order: 12 },
+  P6422: { number: 181, centring: 'P', gens: ['x-y,x,z+2/3', 'y,x,-z+1/3'], order: 12 },
+  P6322: { number: 182, centring: 'P', gens: ['x-y,x,z+1/2', 'y,x,-z'], order: 12 },
+
+  // Cubic. P 42 3 2 is deliberately absent: the generators tried closed to the
+  // wrong order, and the checksum caught it. An absent group is refused
   // loudly; a wrong one would have produced neighbours that look real.
-  209: { hm: 'F 4 3 2', centring: 'F', gens: ['-y,x,z', 'z,x,y', 'y,x,-z'], order: 96 },
-  211: { hm: 'I 4 3 2', centring: 'I', gens: ['-y,x,z', 'z,x,y', 'y,x,-z'], order: 48 },
+  P23: { number: 195, centring: 'P', gens: ['-x,-y,z', 'x,-y,-z', 'z,x,y'], order: 12 },
+  F23: { number: 196, centring: 'F', gens: ['-x,-y,z', 'x,-y,-z', 'z,x,y'], order: 48 },
+  I23: { number: 197, centring: 'I', gens: ['-x,-y,z', 'x,-y,-z', 'z,x,y'], order: 24 },
+  P213: { number: 198, centring: 'P', gens: ['-x+1/2,-y,z+1/2', '-x,y+1/2,-z+1/2', 'z,x,y'], order: 12 },
+  I213: { number: 199, centring: 'I', gens: ['-x+1/2,-y,z+1/2', '-x,y+1/2,-z+1/2', 'z,x,y'], order: 24 },
+  P432: { number: 207, centring: 'P', gens: ['-y,x,z', 'z,x,y', 'y,x,-z'], order: 24 },
+  F432: { number: 209, centring: 'F', gens: ['-y,x,z', 'z,x,y', 'y,x,-z'], order: 96 },
+  I432: { number: 211, centring: 'I', gens: ['-y,x,z', 'z,x,y', 'y,x,-z'], order: 48 },
 };
+
+/** Strips spaces and upper-cases, so "P 21 2 21" and "p212221" both key. */
+export function normaliseSpaceGroup(symbol: string): string {
+  return symbol.replace(/\s+/g, '').toUpperCase();
+}
 
 /** A symmetry operation in fractional space: 3x3 rotation and a translation. */
 export interface SymOp {
@@ -205,8 +234,8 @@ const identity: SymOp = {
  * having: it means a generator here is wrong, and half a lattice is more
  * dangerous than none.
  */
-export function spaceGroupOperators(number: number): SymOp[] | null {
-  const spec = GROUPS[number];
+export function spaceGroupOperators(symbol: string): SymOp[] | null {
+  const spec = GROUPS[normaliseSpaceGroup(symbol)];
   if (!spec) return null;
 
   const seeds = [identity, ...spec.gens.map(parseSymOp)];
@@ -237,8 +266,9 @@ export function spaceGroupOperators(number: number): SymOp[] | null {
   return [...found.values()];
 }
 
-export function spaceGroupName(number: number): string | null {
-  return GROUPS[number]?.hm ?? null;
+/** True when this symbol's operators can be built. */
+export function spaceGroupKnown(symbol: string): boolean {
+  return normaliseSpaceGroup(symbol) in GROUPS;
 }
 
 export interface UnitCell {
@@ -291,9 +321,9 @@ function invert3(m: Float64Array): Float64Array | null {
  * the neighbours sharing it.
  */
 export function latticeOperators(
-  spaceGroupNumber: number, cell: UnitCell, range = 1,
+  symbol: string, cell: UnitCell, range = 1,
 ): Float32Array[] | null {
-  const ops = spaceGroupOperators(spaceGroupNumber);
+  const ops = spaceGroupOperators(symbol);
   if (!ops) return null;
   const toCart = cellToCartesian(cell);
   const toFrac = invert3(toCart);

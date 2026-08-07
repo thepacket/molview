@@ -226,7 +226,7 @@ export function findInterfaces(
     }
   }
   if (options.lattice && s.crystal) {
-    const ops = latticeOperators(s.crystal.spaceGroupNumber, s.crystal.cell);
+    const ops = latticeOperators(s.crystal.spaceGroupName, s.crystal.cell);
     if (ops) {
       let index = 0;
       for (const transform of ops) {
