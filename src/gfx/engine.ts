@@ -955,17 +955,10 @@ export class Engine {
     uniformData[82] = 0.02;
     uniformData[83] = visual.outline;
 
-    // Front clip plane, as a distance from the camera. Measured from the front
-    // of the structure so the slider sweeps through the molecule itself rather
-    // than through empty space.
-    uniformData[84] = camera.distance - camera.sceneRadius + visual.clipNear;
-    uniformData[106] = camera.distance + camera.sceneRadius - visual.clipFar;
-    uniformData[107] = visual.clipFar > 0 ? 1 : 0;
     // Labels lay themselves out in CSS pixels; the shader works in framebuffer
     // pixels, so it needs the ratio to keep text a constant apparent size.
     uniformData[85] = this.pixelRatio;
     uniformData[86] = visual.colorBySymmetry ? 1 : 0;
-    uniformData[87] = visual.clipNear > 0 ? 1 : 0;
 
     // Contact shadows march the depth buffer, so their reach is in world units
     // and has to follow the scene: 8% of the radius keeps the same look on a
@@ -986,8 +979,27 @@ export class Engine {
     uniformData[104] = visual.shadow;
     uniformData[105] = Math.max(camera.sceneRadius * 0.25, 4);
 
-    // Emit one variant per source slot; only the scene transform differs.
+    // One variant per source slot. The scene transform differs, which is what
+    // puts a superposed guest in the right place — and so do the clip planes.
+    //
+    // Clipping belongs to the structure, not to the pane it is being shown in.
+    // Sectioning pane 1 used to cut a guest overlaid from pane 2 as well, even
+    // with pane 2's own clip at zero, because every source variant inherited
+    // the host's planes. That makes the commonest reason to overlay — a
+    // sectioned structure against an intact reference — impossible to draw.
+    // Cutting both is still available: set clipping on both panes.
+    //
+    // The plane is measured from the front of *this* pane's scene either way,
+    // since it is this pane's camera doing the looking; only the decision to
+    // cut, and by how much, comes from the source.
+    const front = camera.distance - camera.sceneRadius;
+    const back = camera.distance + camera.sceneRadius;
     for (let source = 0; source < MAX_SLOTS; source++) {
+      const sourceVisual = this.slots[source].visual;
+      uniformData[84] = front + sourceVisual.clipNear;
+      uniformData[87] = sourceVisual.clipNear > 0 ? 1 : 0;
+      uniformData[106] = back - sourceVisual.clipFar;
+      uniformData[107] = sourceVisual.clipFar > 0 ? 1 : 0;
       uniformData.set(this.slots[source].sceneTransform, 88);
       this.device.queue.writeBuffer(
         slot.uniformBuffers[source], 0, uniformData as unknown as BufferSource,

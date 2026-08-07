@@ -373,6 +373,11 @@ tell you. The pair defines a slab, so a section through a capsid stays a
 section instead of becoming a silhouette against everything behind it. The
 planes follow the camera, so rotating rotates the cut.
 
+The planes belong to the structure rather than to the pane showing it. Overlay
+one pane into another and each keeps its own: section pane 1 and its structure
+opens up while the guest from pane 2 stays whole, which is the usual reason to
+put them together. Cutting both is a matter of setting clipping on both.
+
 **Saturation and intensity.** Two sliders per pane adjust how strong the
 colours are without changing the scheme itself — 1 is the scheme as authored, 0
 saturation is greyscale, above 1 pushes further from grey. Both default to 2,
