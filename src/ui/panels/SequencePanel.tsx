@@ -102,6 +102,12 @@ export function SequencePanel() {
                     selectedResidue: r.index,
                     selectionLabel: `${r.name} ${r.seq} · ${track.authId}`,
                   });
+                  // The store holds the selection; the overlay draws it, and
+                  // nothing rebuilds itself. Without this the camera flew to a
+                  // residue that was never marked — which is exactly what a
+                  // click here does, and why it looked like the highlight did
+                  // not exist rather than like it was never asked for.
+                  viewer.refreshOverlay(activeSlot);
                   viewer.focusResidue(activeSlot, r.index);
                 }}
               >
