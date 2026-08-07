@@ -4,7 +4,8 @@ import { Crosshair, Eye, EyeOff } from 'lucide-react';
 import type { Assembly } from '../../mol/assembly';
 import type { NucleotideStyle } from '../../gfx/geometry';
 import {
-  COLOR_SCHEME_LABELS, chainPalette, isColorBlindSafe, VALIDATION_SCHEMES, type ColorScheme,
+  COLOR_SCHEME_LABELS, chainPalette, isColorBlindSafe, QUANTITATIVE_SCHEMES,
+  VALIDATION_SCHEMES, type ColorScheme,
 } from '../../mol/coloring';
 import { MolKind } from '../../mol/structure';
 
@@ -397,14 +398,22 @@ export function StylePanel() {
             onChange={(v) => updateVisual(activeSlot, { intensity: v })}
           />
         </Field>
-        {isColorBlindSafe() && (
+        {isColorBlindSafe() ? (
           <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: -2, lineHeight: 1.5 }}>
             Both are held at 1 while the colour-blind-safe palette is on. Those
             colours are spaced so the closest pair stays apart under
             deuteranopia, and pushing them further from grey collapses that
             spacing rather than strengthening it.
           </p>
-        )}
+        ) : QUANTITATIVE_SCHEMES.has(slot.colorScheme)
+          || slot.components.some((c) => c.colorScheme && QUANTITATIVE_SCHEMES.has(c.colorScheme)) ? (
+            <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: -2, lineHeight: 1.5 }}>
+              Both are held at 1 because this pane's colour is a measurement,
+              not a decoration. Pushed further the bright end of the ramp runs
+              into the ceiling and flattens, so different values arrive the same
+              colour and the key stops matching the picture.
+            </p>
+          ) : null}
         <Field label="Depth fog" value={slot.visual.fogDensity.toFixed(3)}>
           <Slider
             value={slot.visual.fogDensity}

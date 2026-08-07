@@ -152,6 +152,8 @@ interface Slot {
   groups: GpuGroup[];
   structure: Structure | null;
   visual: SlotVisualSettings;
+  /** Quantitative colouring or the safe palette: hold saturation/intensity at 1. */
+  pinPalette: boolean;
   rect: ViewportRect;
   active: boolean;
   /** Screen-space text drawn over this pane, rebuilt when it changes. */
@@ -726,6 +728,7 @@ export class Engine {
         groups: [],
         structure: null,
         visual: { ...DEFAULT_VISUAL_SETTINGS },
+        pinPalette: false,
         rect: { x: 0, y: 0, width: 1, height: 1 },
         active: false,
         labelBuffer: null,
@@ -749,8 +752,15 @@ export class Engine {
     return this.slots[slot].camera;
   }
 
-  setVisualSettings(slot: number, visual: SlotVisualSettings): void {
+  /**
+   * `pinPalette` holds saturation and intensity at 1 for this slot regardless
+   * of the sliders. Passed in rather than derived here because the engine
+   * knows nothing about colour schemes — colours arrive already baked into the
+   * geometry buffers — and the caller does.
+   */
+  setVisualSettings(slot: number, visual: SlotVisualSettings, pinPalette = false): void {
     this.slots[slot].visual = visual;
+    this.slots[slot].pinPalette = pinPalette;
     this.slots[slot].camera.orthographicMode = visual.orthographic;
   }
 
@@ -972,9 +982,9 @@ export class Engine {
     // to 0..1, so on any fragment facing the key light all eight clip, and
     // #e69f00 and #f0e442 come out identical under simulation. Measured: 24-60
     // units of separation at 1, and 0.0 at 2.
-    const palette = colorBlindSafe() ? 1 : 0;
-    uniformData[108] = palette ? 1 : visual.saturation;
-    uniformData[109] = palette ? 1 : visual.intensity;
+    const pinned = colorBlindSafe() || slot.pinPalette;
+    uniformData[108] = pinned ? 1 : visual.saturation;
+    uniformData[109] = pinned ? 1 : visual.intensity;
 
     uniformData[104] = visual.shadow;
     uniformData[105] = Math.max(camera.sceneRadius * 0.25, 4);

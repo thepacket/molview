@@ -388,13 +388,26 @@ the material colour in the resolve pass, before lighting, so they retune the
 palette rather than the exposure and cost nothing: no geometry rebuild, and the
 frame stays at 0.10 ms while you drag.
 
-They are held at 1 when the colour-blind-safe palette is on, and the sliders
-say so. Those eight colours are spaced so the closest pair survives
-deuteranopia, and the composite clamps to 0..1: at 2, every fragment facing the
-key light clips, and `#e69f00` and `#f0e442` come out identical under
-simulation. Measured separation is 24–60 units across the lit range at 1, and
-0.0 at 2. Strengthening a colour and preserving a distinction turn out to be
-opposite operations.
+They are held at 1 wherever colour carries meaning rather than decoration, and
+the sliders say which case applies. The composite clamps to 0..1 with only a
+1/1.05 gamma, so there is no rolloff and the bright end simply stops.
+
+With the **colour-blind-safe palette**, those eight colours are spaced so the
+closest pair survives deuteranopia; at 2, every fragment facing the key light
+clips and `#e69f00` and `#f0e442` come out identical under simulation. Measured
+separation across the lit range: 24–60 units at 1, 0.0 at 2.
+
+With a **quantitative scheme** — B-factor, pLDDT, RSRZ, geometry outliers,
+hydrophobicity, AlphaMissense, and the N→C rainbow — the ramp flattens into a
+plateau. At 2, on ordinarily lit geometry, 47 of 100 steps become
+indistinguishable and values 13% and 33% along the scale render as the same
+colour; two of the four pLDDT bands collapse outright on the brightest
+fragments. A key that no longer maps to the picture is worse than a dull
+picture.
+
+Strengthening a colour and preserving a distinction turn out to be opposite
+operations once there is a ceiling. Everything categorical — chain, element,
+residue, secondary structure, entity, base — is unaffected and still responds.
 
 They reach a molecular surface, because a chain-coloured envelope has to match
 the cartoon inside it, and the colour key, because a legend that no longer

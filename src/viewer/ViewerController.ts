@@ -45,7 +45,7 @@ import {
   fetchAlphaMissense, fetchPae, fetchPrediction, type PaeMatrix,
 } from '../rcsb/alphafold';
 import { paintColorKey } from '../ui/colorKeyPainter';
-import { VALIDATION_SCHEMES } from '../mol/coloring';
+import { QUANTITATIVE_SCHEMES, VALIDATION_SCHEMES, type ColorScheme } from '../mol/coloring';
 import {
   fetchResidueValidation, worstResidues, type ResidueValidation,
 } from '../rcsb/residueValidation';
@@ -1096,7 +1096,7 @@ export class ViewerController {
   syncSettings(): void {
     const { slots } = useStore.getState();
     for (let i = 0; i < MAX_SLOTS; i++) {
-      this.engine.setVisualSettings(i, slots[i].visual);
+      this.engine.setVisualSettings(i, slots[i].visual, showsQuantity(slots[i]));
       if (this.data[i].structure) this.rebuild(i);
     }
     this.invalidate();
@@ -2525,6 +2525,20 @@ function describePick(structure: Structure, hit: PickResult): string {
 }
 
 export const viewer = new ViewerController();
+
+/**
+ * Whether anything in a pane is coloured by a quantity — its own scheme or any
+ * component's.
+ *
+ * One component coloured by B-factor is enough to pin the whole pane, because
+ * the palette uniform is per pane and the legend beside that component has to
+ * keep meaning. Erring this way costs a slightly duller picture; erring the
+ * other way silently breaks the reading of a ramp.
+ */
+function showsQuantity(state: { colorScheme: ColorScheme; components: { colorScheme?: ColorScheme | null }[] }): boolean {
+  if (QUANTITATIVE_SCHEMES.has(state.colorScheme)) return true;
+  return state.components.some((c) => c.colorScheme && QUANTITATIVE_SCHEMES.has(c.colorScheme));
+}
 
 if (import.meta.env.DEV) {
   // Handy for poking at a loaded structure from the console.

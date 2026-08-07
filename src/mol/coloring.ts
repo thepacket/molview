@@ -43,6 +43,25 @@ export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
 /** Schemes that need per-residue validation fetched before they mean anything. */
 export const VALIDATION_SCHEMES: ReadonlySet<ColorScheme> = new Set(['rsrz', 'outliers']);
 
+/**
+ * Schemes whose colour *is* the number, read against a legend rather than used
+ * to tell one thing from another.
+ *
+ * These are exempt from the pane's saturation and intensity, for the reason
+ * already written into volume.wgsl for density maps: a colour carrying meaning
+ * must not be retuned for looks. The composite clamps to 0..1 with no rolloff,
+ * so at intensity 2 the bright end of a ramp flattens into a plateau — measured
+ * at 47 of 100 steps indistinguishable on ordinarily lit geometry, with values
+ * 13% and 33% along the scale rendering identically. A legend that no longer
+ * maps to the picture is worse than a dull picture.
+ *
+ * Rainbow is included even though N-to-C position is not a measurement: it is
+ * still read as an ordering, and half of it collapsing loses the ordering.
+ */
+export const QUANTITATIVE_SCHEMES: ReadonlySet<ColorScheme> = new Set([
+  'bfactor', 'hydrophobicity', 'rainbow', 'rsrz', 'outliers', 'plddt', 'pathogenicity',
+]);
+
 /** Schemes that only mean anything on a predicted structure. */
 export const PREDICTION_SCHEMES: ReadonlySet<ColorScheme> = new Set(['plddt', 'pathogenicity']);
 
