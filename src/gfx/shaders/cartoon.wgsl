@@ -44,7 +44,7 @@ fn fs(in: VSOut, @builtin(front_facing) frontFacing: bool) -> GBufferOut {
     n = -n;
   }
   var out: GBufferOut;
-  out.albedo = vec4f(in.color, 1.0);
+  out.albedo = vec4f(adjustPalette(in.color), 1.0);
   out.normal = encodeNormal(n);
   return out;
 }

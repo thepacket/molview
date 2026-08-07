@@ -97,7 +97,7 @@ fn fs(in: VSOut) -> FSOut {
   let clipPos = cam.proj * vec4f(hitView, 1.0);
 
   var out: FSOut;
-  out.albedo = vec4f(in.color, 1.0);
+  out.albedo = vec4f(adjustPalette(in.color), 1.0);
   out.normal = encodeNormal(normal);
   out.depth = clipPos.z / clipPos.w;
   return out;

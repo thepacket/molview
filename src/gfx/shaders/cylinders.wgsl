@@ -66,7 +66,7 @@ fn fs(in: VSOut) -> GBufferOut {
     discard;
   }
   var out: GBufferOut;
-  out.albedo = vec4f(in.color, 1.0);
+  out.albedo = vec4f(adjustPalette(in.color), 1.0);
   out.normal = encodeNormal(in.normalView);
   return out;
 }

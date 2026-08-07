@@ -402,9 +402,17 @@ the element palette on ordinarily lit geometry is 36 at 1/1, **41 at 2/1**, and
 **0 at 2/2** with all eleven colours clipped. So 2/1 is better than the authored
 1/1 on every palette measured, and 2/2 is worse than either. Vividness was never
 what cost anything; the exposure was. They are applied to
-the material colour in the resolve pass, before lighting, so they retune the
-palette rather than the exposure and cost nothing: no geometry rebuild, and the
-frame stays at 0.10 ms while you drag.
+the material colour as the geometry pass writes it, before lighting, so they
+retune the palette rather than the exposure and cost nothing: no geometry
+rebuild, and the frame stays at 0.10 ms while you drag.
+
+Applying them there rather than in the resolve is what lets each structure keep
+its own. The resolve sees one pane-wide uniform per pixel, so a guest overlaid
+from another pane was given the host's palette — restyled, and stripped of the
+pin that keeps its ramp readable. The geometry pass is the only place each
+structure is drawn under its own settings. Overlay a B-factor-coloured pane into
+a chain-coloured one and drag the host to greyscale: the host goes grey, the
+guest keeps its ramp.
 
 They are held at 1 wherever colour carries meaning rather than decoration, and
 the sliders say which case applies. The composite clamps to 0..1 with only a

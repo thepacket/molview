@@ -983,19 +983,6 @@ export class Engine {
     // Contact shadows march the depth buffer, so their reach is in world units
     // and has to follow the scene: 8% of the radius keeps the same look on a
     // ligand and on a capsid.
-    // The colour-blind-safe palette is exempt from both, and pinned to 1.
-    //
-    // Not a special case so much as the same rule the density maps follow: a
-    // colour that carries meaning must not be retuned for looks. Those eight
-    // colours are chosen so the closest pair stays apart under deuteranopia,
-    // and the pane's default of 2 destroys exactly that — the composite clamps
-    // to 0..1, so on any fragment facing the key light all eight clip, and
-    // #e69f00 and #f0e442 come out identical under simulation. Measured: 24-60
-    // units of separation at 1, and 0.0 at 2.
-    const pinned = colorBlindSafe() || slot.pinPalette;
-    uniformData[108] = pinned ? 1 : visual.saturation;
-    uniformData[109] = pinned ? 1 : visual.intensity;
-
     uniformData[104] = visual.shadow;
     uniformData[105] = Math.max(camera.sceneRadius * 0.25, 4);
 
@@ -1012,14 +999,29 @@ export class Engine {
     // The plane is measured from the front of *this* pane's scene either way,
     // since it is this pane's camera doing the looking; only the decision to
     // cut, and by how much, comes from the source.
+    //
+    // Saturation and intensity travel with the source for the same reason, and
+    // it matters more: they are a property of the colours, and those belong to
+    // the guest. Overlaying a B-factor-coloured structure into a chain-coloured
+    // pane used to hand it the host's palette, which both restyled it and — if
+    // the host was not showing a measurement — undid the pin that keeps its ramp
+    // readable. Whether a pane's colours are a measurement is the *source's*
+    // question, so pinPalette comes from the source too.
+    //
+    // Fog, background, outline and shadow stay the host's: those describe the
+    // scene one camera is looking at, not the structure being looked at.
     const front = camera.distance - camera.sceneRadius;
     const back = camera.distance + camera.sceneRadius;
     for (let source = 0; source < MAX_SLOTS; source++) {
-      const sourceVisual = this.slots[source].visual;
+      const sourceSlot = this.slots[source];
+      const sourceVisual = sourceSlot.visual;
       uniformData[84] = front + sourceVisual.clipNear;
       uniformData[87] = sourceVisual.clipNear > 0 ? 1 : 0;
       uniformData[106] = back - sourceVisual.clipFar;
       uniformData[107] = sourceVisual.clipFar > 0 ? 1 : 0;
+      const pinned = colorBlindSafe() || sourceSlot.pinPalette;
+      uniformData[108] = pinned ? 1 : sourceVisual.saturation;
+      uniformData[109] = pinned ? 1 : sourceVisual.intensity;
       uniformData.set(this.slots[source].sceneTransform, 88);
       this.device.queue.writeBuffer(
         slot.uniformBuffers[source], 0, uniformData as unknown as BufferSource,

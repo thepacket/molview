@@ -215,7 +215,11 @@ fn fs(in: VSOut) -> @location(0) vec4f {
   }
 
   let depth = textureLoad(gDepth, coord, 0);
-  let albedo = adjustPalette(textureLoad(gAlbedo, coord, 0).rgb);
+  // Already palette-adjusted: the geometry pass applies it when it writes
+  // albedo, because that is the only place each structure is drawn under its
+  // own uniform. Doing it here instead meant one pane-wide palette for every
+  // pixel, so a guest overlaid from another pane could not keep its own.
+  let albedo = textureLoad(gAlbedo, coord, 0).rgb;
   let normal = normalize(normalSample.xyz);
   let viewPos = viewPosFromDepth(ndc, depth);
   let viewDir = normalize(-viewPos);
