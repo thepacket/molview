@@ -16,6 +16,25 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
+The five that follow are **parity features, not differentiators** — checked
+after they were written, against Mol*, iCn3D, Coot, ChimeraX and PyMOL. Coot has
+had all five for twenty years. That is still a reason to build them, since a
+viewer missing table stakes is a toy, but it is not the reason they were first
+argued for: "no browser viewer does this" was asserted about real-space
+correlation and is wrong, since Mol* and iCn3D are browser viewers with serious
+validation features. The narrower claim survives — MolView could *compute*
+correlation from a map it already holds rather than display fetched per-residue
+scores — but whether the others compute or fetch was not verified either.
+
+Treat comparison tables carefully: the one consulted credited Coot with
+functions named `sampleSigma` and `gridIndexOf`, which are identifiers from this
+repository, so it was at least partly echoing its input back.
+
+Note also that this section's own preamble says the list came from asking what
+someone wants to do rather than what another viewer has. These five are the
+second kind, arrived at by reading MolView's gaps rather than another viewer's
+menus, which is the same list by a different route.
+
 ### Real-space correlation per residue, computed here
 
 The question asked of every crystal structure is whether an atom is supported by
