@@ -16,6 +16,91 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
+### Real-space correlation per residue, computed here
+
+The question asked of every crystal structure is whether an atom is supported by
+the data or by the modeller's hope. MolView answers it today with wwPDB's RSRZ,
+fetched per residue — and RSRZ **excludes ligands**, so the part you doubt most
+is the part not covered.
+
+Both halves are already in the client: the map is fetched for the density
+feature, the model is loaded, and the trilinear sampling with the inverse step
+matrix exists (`sampleSigma`, `gridIndexOf`). What is missing is the
+correlation itself — density from the model, density from the map, correlated
+over the residue's own envelope.
+
+Validation is unusually clean: correlate the computed per-residue value against
+wwPDB's RSRZ across a set of entries, where both should rank residues the same
+way. Disagreement is then either a bug or a ligand, and the ligands are the
+point.
+
+Worth doing first because it is the only item here that MolView is uniquely
+placed to do — no other browser viewer holds model and map in the same client.
+
+### A ligand interaction report
+
+Hydrogen bonds exist; the inventory does not. For a bound ligand: hydrogen
+bonds, salt bridges, hydrophobic contacts, pi-stacking, each with the residue
+making it and a selection that draws it. It is the first question anyone asks
+of a complex, and it is pure geometry over coordinates already in memory.
+
+Checkable against something independent: the UniProt binding-site annotations
+the app already fetches. 1CBS puts its binding site on Arg132 and Tyr134, and a
+contact report that does not name those two is wrong.
+
+The trap is the one the pockets feature already avoids — reporting a contact as
+an interaction. Distance and angle criteria are geometric; affinity is not.
+
+### Make absence visible: gaps and alternate conformations
+
+A disordered loop is not in the file, and the cartoon currently runs straight
+through the gap as though the chain were continuous. That is not a missing
+feature but a misleading picture, and it is misread constantly.
+
+Alternate conformations are the same shape of problem from the other side:
+`label_alt_id` and `occupancy` are parsed in `structure.ts` and then one
+conformer silently wins. A partially occupied side chain in an active site is
+exactly where the alternative matters.
+
+Both are cheap — a gap is a break in `auth_seq_id` within a chain, an altloc is
+a column already read. Draw the gap as a dashed line and mark it on the
+sequence track; let the alternates be switchable, and say when there are any.
+
+Fits the habit the app already has: show what the evidence does and does not
+support rather than drawing over the difference.
+
+### A Ramachandran plot
+
+The standard artefact for judging a model, and MolView reports wwPDB's
+percentile without ever drawing it. Phi and psi are four atoms and an arctangent
+over the backbone; the plot is a small 2D panel, and its points should be
+clickable to select the residue, which ties it to the per-residue validation
+colouring already there.
+
+Validates against itself: the fraction of residues in favoured regions should
+track the Ramachandran percentile the entry panel already displays.
+
+### Open your own structure
+
+Everything MolView can show is bounded by what RCSB serves. A refined model, a
+docking pose, a predicted complex — none of them can be opened, and the drop
+target says mmCIF. Legacy PDB is still what most tools emit.
+
+A PDB-format reader is fixed-column parsing, element inference, altlocs,
+insertion codes and multi-model — not large, but the kind of parser that fails
+silently on edge cases, so it wants a corpus of real files to check against
+rather than one example.
+
+It also unblocks the ESM Metagenomic Atlas. Probed and reachable —
+`api.esmatlas.com/fetchPredictedStructure/{MGYP...}` answers 200 with
+`Access-Control-Allow-Origin: *`, and there is a companion endpoint for the
+PAE — but it serves legacy PDB, and it is keyed by MGnify accession rather than
+UniProt, so the existing "predicted structures" path (UniProt search ->
+accession) cannot reach it. With a PDB reader in place it needs only a second
+entry point: an accession field, or search by sequence. Its value is coverage
+of sequences nobody has named, not accuracy; ESMFold is below AlphaFold2 on the
+same sequence.
+
 ### Entry classification, computed rather than restated
 
 The pane shows `Content: Protein (only)`, which is RCSB's own `polymerTypes`
@@ -454,6 +539,12 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Not planned
+
+Molecular dynamics trajectories. The formats alone are a zoo (DCD, XTC, TRR,
+NetCDF), a useful trajectory is larger than anything the app loads today, and
+the interesting questions about one — RMSF, clustering, occupancy over time —
+are an analysis application rather than a viewer. The NMR ensemble path already
+covers "several models of the same thing", which is the part that fits.
 
 Modeller, dockprep, mutation, docking, and a Poisson-Boltzmann solve — these
 need scientific backends there is no case for reimplementing in a viewer, and
