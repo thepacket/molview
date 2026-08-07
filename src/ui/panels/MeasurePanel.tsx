@@ -7,6 +7,8 @@ import {
   findInterfaces, interfaceSelection, measureInterfaceAreas, type ChainInterface,
 } from '../../mol/interfaces';
 import { findPockets, pocketSelection, type Pocket } from '../../mol/pockets';
+import { worstFits, type ResidueFit } from '../../mol/densityFit';
+import { MolKind, resNameOf } from '../../mol/structure';
 import { makeComponent, Style } from '../../mol/components';
 import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
@@ -129,6 +131,8 @@ export function MeasurePanel() {
       <InterfaceSection slot={activeSlot} />
 
       <PocketSection slot={activeSlot} />
+
+      <DensityFitSection slot={activeSlot} />
 
       <div className="panel-section">
         <div className="section-label"><span>Display</span></div>
@@ -408,6 +412,132 @@ function PocketSection({ slot }: { slot: number }) {
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Real-space correlation per residue, against the map already loaded.
+ *
+ * Ligands are listed separately and always, because they are the reason to ask:
+ * wwPDB's own per-residue scores cover polymer only, so a ligand is precisely
+ * the thing with no published number and the thing a reader doubts.
+ */
+function DensityFitSection({ slot }: { slot: number }) {
+  const density = useStore((s) => s.slots[slot].density);
+  const [fits, setFits] = useState<ResidueFit[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const structure = viewer.getStructure(slot);
+  if (!structure) return null;
+
+  const compute = () => {
+    setBusy(true);
+    // Yields first: a few hundred residues against a grid is long enough to
+    // drop a frame, and a button that looks stuck is worse than one that says
+    // it is working.
+    window.setTimeout(() => {
+      setFits(viewer.densityFit(slot) ?? []);
+      setBusy(false);
+    }, 0);
+  };
+
+  const label = (f: ResidueFit) =>
+    `${resNameOf(structure, f.residue)} ${structure.resSeq[f.residue]}`
+    + ` · ${structure.chainAuthId[structure.resChain[f.residue]]}`;
+
+  const ligands = (fits ?? []).filter(
+    (f) => Number.isFinite(f.rscc) && structure.resKind[f.residue] === MolKind.Ligand,
+  );
+  const worst = fits ? worstFits(structure, fits, 8) : [];
+
+  return (
+    <div className="panel-section">
+      <div className="section-label"><span>Fit to density</span></div>
+      {density.status !== 'ready' ? (
+        <p style={{ fontSize: 10.5, color: 'var(--text-faint)', lineHeight: 1.5 }}>
+          Load a density map first — this correlates the model against it, so
+          there is nothing to correlate until one is shown.
+        </p>
+      ) : fits === null ? (
+        <>
+          <button
+            type="button"
+            className="btn small"
+            style={{ width: '100%' }}
+            disabled={busy}
+            onClick={compute}
+          >
+            <Waypoints size={12} /> {busy ? 'Correlating…' : 'Check fit to density'}
+          </button>
+          <p style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 7, lineHeight: 1.5 }}>
+            Density calculated from the model, correlated against the map, over
+            each residue's own envelope. Compare residues within this structure
+            rather than against a published threshold: the calculation is
+            approximate and reads about 0.2 lower than wwPDB's, which it agrees
+            with at r = 0.62. Negative is the one absolute statement — the
+            density is somewhere the model is not.
+          </p>
+        </>
+      ) : (
+        <>
+          {ligands.length > 0 && (
+            <>
+              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 4 }}>
+                Ligands — wwPDB publishes no per-residue score for these
+              </div>
+              {ligands.map((f) => (
+                <FitRow key={f.residue} slot={slot} fit={f} label={label(f)} />
+              ))}
+            </>
+          )}
+          <div style={{ fontSize: 10, color: 'var(--text-faint)', margin: '7px 0 4px' }}>
+            Worst fitting, water excluded
+          </div>
+          {worst.map((f) => (
+            <FitRow key={f.residue} slot={slot} fit={f} label={label(f)} />
+          ))}
+          <button
+            type="button"
+            className="btn small"
+            style={{ width: '100%', marginTop: 7 }}
+            onClick={() => setFits(null)}
+          >
+            Check again
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function FitRow(
+  { slot, fit, label }: { slot: number; fit: ResidueFit; label: string },
+) {
+  const structure = viewer.getStructure(slot);
+  const selection = structure
+    ? `/${structure.chainAuthId[structure.resChain[fit.residue]]}:${structure.resSeq[fit.residue]}`
+    : '';
+  return (
+    <div className="measurement">
+      <div className="measurement-head">
+        <span style={{ fontSize: 11.5, marginRight: 'auto' }}>{label}</span>
+        <Tip label="Frame this residue">
+          <button
+            type="button"
+            className="pane-icon-btn"
+            style={{ width: 20, height: 20 }}
+            aria-label={`Focus ${label}`}
+            onClick={() => viewer.focusSelection(slot, selection)}
+          >
+            <Crosshair size={11} />
+          </button>
+        </Tip>
+      </div>
+      <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text-faint)' }}>
+        {fit.rscc.toFixed(2)} correlation · {fit.sigma.toFixed(1)}σ mean ·{' '}
+        {fit.points.toLocaleString()} points
+      </div>
     </div>
   );
 }

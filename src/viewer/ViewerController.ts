@@ -10,6 +10,7 @@ import { Engine, MAX_SLOTS, type PickResult, type ViewportRect } from '../gfx/en
 import type { Camera, CameraState } from '../gfx/camera';
 import { buildGeometry, type SceneGeometry } from '../gfx/geometry';
 import { computeBonds, type BondList } from '../mol/bonds';
+import { residueDensityFit, type ResidueFit } from '../mol/densityFit';
 import {
   defaultComponents, resolveComponents, Style, type ResolvedScene,
 } from '../mol/components';
@@ -1481,6 +1482,30 @@ export class ViewerController {
       out.push(structure.x[a], structure.y[a], structure.z[a]);
     }
     return out.length > 0 ? Float32Array.from(out) : null;
+  }
+
+  /**
+   * Real-space correlation per residue against the pane's loaded map.
+   *
+   * Null when there is no map — the caller is expected to say so rather than
+   * show an empty list, because "no density loaded" and "nothing fits badly"
+   * are opposite answers.
+   */
+  densityFit(slot: number): ResidueFit[] | null {
+    const structure = this.data[slot].structure;
+    const set = this.data[slot].volumes;
+    if (!structure || !set) return null;
+    const grid = set.maps.find((m) => !/^fo-fc$/i.test(m.name));
+    if (!grid) return null;
+
+    // The entry's own resolution when it is known. It only sets how wide a
+    // calculated atom is, so a missing value shifts every residue together
+    // rather than reordering them.
+    const resolution = useStore.getState().slots[slot].detail?.resolution ?? undefined;
+    return residueDensityFit(structure, grid, {
+      resolution: resolution ?? undefined,
+      mask: this.drawnAtomMask(slot),
+    });
   }
 
   /** Density at a point, in sigma, for the pane's main map. Null when absent. */

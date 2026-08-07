@@ -237,6 +237,25 @@ stay complete regardless. Haemoglobin's α1β1 is 816.4 Å² with or without the
 narrowing and takes 16 ms instead of 72. Bluetongue virus measures twelve pairs
 in 538 ms rather than 2,900.
 
+**Fit to density, computed here.** Real-space correlation per residue: density
+calculated from the model, correlated against the map already loaded, over each
+residue's own envelope. It exists because MolView holds both halves in the same
+client, and it covers the case wwPDB's per-residue report does not — those
+scores are polymer only, so a ligand, the part anyone actually doubts, has no
+published number. 1CBS's retinoic acid comes out at 0.91 over 1,441 grid points;
+the worst-fitting residues are Glu103 and Glu46, surface glutamates in solvent.
+Ubiquitin's worst three are Arg74, Gly75 and Gly76 — its flexible C-terminal
+tail, which is the answer a crystallographer would predict.
+
+Read it within one structure rather than against a published threshold. Measured
+against wwPDB's own per-residue RSCC on four entries it agrees at r = 0.62 and
+runs about 0.2 lower: the calculated density is one isotropic Gaussian per atom
+rather than real scattering factors, occupancy is not yet carried on the model,
+and the map is what the volume server sampled rather than one computed to match.
+The envelope radius was swept against that agreement rather than assumed, and
+peaks at 1.8 Å. Negative correlation is the one absolute statement — the density
+is somewhere the model is not. A 137-residue entry takes about 100 ms.
+
 **Morphing between conformations.** With two structures superposed, the mobile
 pane can be slid or played between its own conformation and the reference's,
 along the alignment the fit already computed. Adenylate kinase open to closed
