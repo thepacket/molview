@@ -14,7 +14,7 @@ no environment variables, no volumes, no database.
 | `nginx.conf` | Caching, gzip, SPA fallback, `/healthz` |
 | `security-headers.conf` | CSP and the other response headers, included per-location |
 | `fly.toml` | App name, region, machine size, health check |
-| `.dockerignore` | Keeps `node_modules`, `dist` and `.git` out of the build context |
+| `.dockerignore` | Keeps `node_modules`, `dist`, `.git` and `*.md` out of the build context |
 
 ## First deploy
 
@@ -106,8 +106,16 @@ have not taken effect.
 `security-headers.conf` restricts `connect-src` to the hosts the app actually
 uses:
 
-- `data.rcsb.org`, `search.rcsb.org`, `models.rcsb.org`, `files.rcsb.org`
+- `data.rcsb.org`, `search.rcsb.org`, `models.rcsb.org`, `files.rcsb.org` —
+  metadata, search, coordinates
+- `maps.rcsb.org` — density maps
+- `alphafold.ebi.ac.uk`, `rest.uniprot.org` — predicted structures and the
+  UniProt annotations that reach them
 - `openrouter.ai` — only reached when the user has entered their own key
+
+Eight in total. Do not maintain that list by hand against this file: `npm run
+check:csp` reads it from `security-headers.conf` and reports the count, and this
+list had gone stale by three hosts before that was written down.
 
 `style-src` needs `'unsafe-inline'` because KaTeX writes inline style
 attributes. `worker-src`/`img-src` allow `blob:` for the structure loader and
@@ -116,14 +124,38 @@ the runtime font atlas.
 If a future feature calls a new host, add it here — the failure mode is a
 blocked request logged in the browser console, not a visible error in the UI.
 
+## Build-time checks
+
+`npm run build` runs `check:csp` and `check:actions` before compiling, and both
+exist because something shipped broken and nothing failed at the time.
+
+They differ in what they can see inside the image. `check:csp` reads only
+source, so it behaves identically everywhere. `check:actions` also compares the
+README's stated action count against the vocabulary, and `.dockerignore`
+excludes `*.md` — deliberately, so that editing documentation neither enters the
+image nor invalidates its layer cache. So the README half is skipped in the
+deployment build and reported as skipped; the source half, which asks whether
+every action type has a description the model is actually handed, runs
+everywhere.
+
+That asymmetry has now caused a failure in each direction: a policy that only
+applies in production, and a file that only exists outside it. A check added
+here should be explicit about which of the two it needs.
+
 ## Verified locally
 
-The image was built and smoke-tested before this was written: headers correct on
+The image was built and smoke-tested when this was written: headers correct on
 the shell, on a fallback path and on a hashed asset; gzip active; 404 for a
 missing asset; `nginx -t` clean. The container was then driven in a browser —
 1UBQ loaded end to end (GraphQL metadata, BinaryCIF through the worker, cartoon
-rendered) with no CSP violations, and all five external endpoints returned 200
-under the policy.
+rendered) with no CSP violations, and the five external endpoints of the time
+returned 200 under the policy.
+
+That is a record of one occasion, not a standing guarantee: three hosts have
+been added since, and the features behind them were not part of that run. The
+image build itself is checked continuously — `check:csp` fails the build if the
+source reaches a host the policy omits — but reaching a host successfully from
+inside the container is a separate question, and only the browser answers it.
 
 To repeat it:
 

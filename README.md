@@ -445,7 +445,9 @@ scatter chart, and they are measured rather than transcribed:
 [scripts/build-ramachandran.ts](scripts/build-ramachandran.ts) derives them
 from 900 X-ray structures at 1.5 Å or better, keeping residues with mean
 B-factor at or below 30 and no alternate conformation — 156,015 residues in
-all. It agrees with wwPDB's own outlier percentage to a mean of 0.05
+all. `npm run build:rama` rebuilds them and rewrites the data module, which
+records what it was built from; coordinates are cached on disk, so changing a
+filter or the smoothing costs no downloads the second time. It agrees with wwPDB's own outlier percentage to a mean of 0.05
 percentage points across fifteen entries, including 7CGO's 44,376 residues at
 0.16% against 0.19%. The shapes were checked as well as the counts, since a
 contour can produce the right total from the wrong region: proline comes out
@@ -853,7 +855,12 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
 - The production Content-Security-Policy pins `connect-src` to an explicit host
   list, so an endpoint added without updating `security-headers.conf` works in
   development and is blocked once deployed. `npm run check:csp` diffs the source
-  against that list and runs as part of `npm run build`.
+  against that list and runs as part of `npm run build`, alongside
+  `npm run check:actions`. Both guard things that fail silently rather than
+  loudly, and both have to know which build they are in: the CSP applies only in
+  production, while the README the action count is checked against exists only
+  outside the image, since `.dockerignore` excludes `*.md`. That half is skipped
+  there, and says so.
 - Dragged label positions last for the session. A saved project restores its
   measurements by atom reference and gives them new ids, so the offsets have
   nothing to reattach to.
