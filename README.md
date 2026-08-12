@@ -21,6 +21,21 @@ save leaves your machine except the requests to RCSB itself.
 
 Requires a WebGPU-capable browser (Chrome/Edge 113+, Safari 18+).
 
+**Tested on Chrome only** — desktop Chrome on macOS, and Chrome on iPadOS for
+the touch gestures. That is a statement about what has been exercised, not a
+claim that anything else is broken: Safari, Edge and Firefox are untested
+rather than unsupported, and the versions above are what each browser's WebGPU
+support requires rather than what has been confirmed working. Wider testing is
+outstanding.
+
+Two areas are the most likely to differ and the least likely to fail loudly.
+Touch gesture handling refuses Safari's own non-standard `gesturestart`
+events to stop a pinch zooming the page instead of the molecule, and that path
+has only been reasoned about, never run in Safari. And WebGPU itself is young
+enough that limits, texture formats and shader compilation differ between
+implementations, so a rendering fault on another browser is more plausible than
+a logic one. A structure that renders wrong somewhere is worth an issue.
+
 ```bash
 npm install
 npm run dev
