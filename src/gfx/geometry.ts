@@ -10,6 +10,7 @@ import type { BondList } from '../mol/bonds';
 import { identityTransform, type Assembly } from '../mol/assembly';
 import { Style, type ResolvedScene } from '../mol/components';
 import { VDW_RADII } from '../mol/elements';
+import { classifyStep, isAbsence } from '../mol/gaps';
 import { MolKind, SS, atomNameOf, type Structure } from '../mol/structure';
 
 /**
@@ -416,7 +417,6 @@ function buildCartoon(
     if (kind !== MolKind.Protein && kind !== MolKind.Nucleic) continue;
     if (!chainVisible(s, c, allowedAsyms)) continue;
 
-    const maxGap = kind === MolKind.Nucleic ? 9 : 5.2;
     const start = s.chainResStart[c];
     const end = s.chainResStart[c + 1];
 
@@ -532,17 +532,20 @@ function buildCartoon(
       }
       prevStyle = style;
       if (prevAnchor >= 0) {
-        // Numbering first: a missing residue means the chain is not continuous
-        // however close the two ends happen to sit. 1KX5 chain C jumps 12 -> 15
-        // across only 4.4 A, and joining those draws a bond that was never
-        // observed. Distance still catches files whose numbering lies.
-        const skipped = s.resSeq[r] - s.resSeq[prevResidue] > 1;
+        // Numbering and distance are both consulted, because either alone is
+        // wrong. Trusting numbering alone dashed six phantom gaps through
+        // trypsin, whose chymotrypsinogen numbering skips 34->37, 67->69 and
+        // four more at a flat 3.8 A — real peptide bonds every one. Trusting
+        // distance alone joins the two ends of a hole that happens to fold
+        // back. See `mol/gaps.ts` for the thresholds and how they were set.
         const d = Math.hypot(
           s.x[anchor] - s.x[prevAnchor],
           s.y[anchor] - s.y[prevAnchor],
           s.z[anchor] - s.z[prevAnchor],
         );
-        if (skipped || d > maxGap) flush(true);
+        const step = s.resSeq[r] - s.resSeq[prevResidue];
+        const gapKind = classifyStep(step, d, kind);
+        if (gapKind && isAbsence(gapKind)) flush(true);
       }
       prevResidue = r;
       segment.push(r);

@@ -1066,6 +1066,72 @@ textarea {
   font-weight: 700;
 }
 
+/*
+ * A residue carrying alternate conformations. An underline rather than a
+ * background, because background already means secondary structure and a
+ * second meaning on the same channel would make both unreadable.
+ */
+.seq-res[data-alt] {
+  box-shadow: inset 0 -2px 0 var(--warn, #f7c948);
+}
+
+/*
+ * The hole between two residues. Sized to read as an interruption without
+ * pushing the cells out of their column rhythm — a gap marker as wide as a
+ * residue would look like a residue.
+ */
+.seq-gap {
+  min-width: 10px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 1px;
+  font-size: 8px;
+  font-family: var(--mono);
+  cursor: help;
+  color: var(--text-faint);
+  background: repeating-linear-gradient(
+    90deg,
+    var(--line) 0 2px,
+    transparent 2px 4px
+  );
+}
+
+/* Residues were not modelled: the loudest of the three, because it is the
+   only one where the molecule continues and the file does not. */
+.seq-gap[data-kind='unmodelled'] {
+  color: #f4576c;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(244, 87, 108, 0.55) 0 2px,
+    transparent 2px 4px
+  );
+}
+
+/* The numbering says nothing is missing and the geometry disagrees. */
+.seq-gap[data-kind='break'] {
+  color: #f7c948;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(247, 201, 72, 0.5) 0 2px,
+    transparent 2px 4px
+  );
+}
+
+/* Bookkeeping, not absence — a hairline, deliberately quiet. */
+.seq-gap[data-kind='renumbered'] {
+  min-width: 4px;
+  background: none;
+  border-left: 1px solid var(--line);
+  color: var(--text-faint);
+  opacity: 0.7;
+}
+
+.seq-missing {
+  color: #f4576c;
+  cursor: help;
+}
+
 /* --- component layers ----------------------------------------------------- */
 
 .component {
