@@ -15,7 +15,7 @@
  * it, and that the README's count is that number.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const NUMBER_WORDS = {
   ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
@@ -55,6 +55,24 @@ if (orphaned.length > 0) {
   console.error('\nActions: described in ACTION_REFERENCE but not a declared type:\n');
   for (const t of orphaned) console.error(`  ${t}`);
   failed = true;
+}
+
+/**
+ * The README half is skipped when there is no README, which is the case inside
+ * the Docker build: `.dockerignore` excludes `*.md` on purpose, so that editing
+ * documentation neither enters the image nor invalidates its layer cache.
+ *
+ * Skipping rather than failing is the right way round. This check exists to
+ * catch prose drifting away from code, and prose is edited in a working tree,
+ * where the file is present and the check runs. A deployment build has no
+ * README to disagree with the code, so there is nothing there to catch — but it
+ * says so rather than passing silently, because a check that quietly does
+ * nothing is worse than no check at all.
+ */
+if (!existsSync('README.md')) {
+  console.log(`Actions: ${documented.length} types, all described. `
+    + 'README count not checked — no README in this build context.');
+  process.exit(failed ? 1 : 0);
 }
 
 const readme = readFileSync('README.md', 'utf8');
