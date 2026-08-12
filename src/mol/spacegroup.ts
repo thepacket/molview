@@ -271,6 +271,19 @@ export function spaceGroupKnown(symbol: string): boolean {
   return normaliseSpaceGroup(symbol) in GROUPS;
 }
 
+/**
+ * International Tables number for a Hermann-Mauguin symbol, or null.
+ *
+ * Needed by the PDB reader, whose CRYST1 record carries the symbol and not the
+ * number, while everything downstream keys on the number. Going through this
+ * table rather than a symbol-to-number list of its own means a symbol nobody
+ * has entered operators for produces no cell at all, instead of a cell whose
+ * lattice cannot be built.
+ */
+export function spaceGroupNumber(symbol: string): number | null {
+  return GROUPS[normaliseSpaceGroup(symbol)]?.number ?? null;
+}
+
 export interface UnitCell {
   a: number; b: number; c: number;
   alpha: number; beta: number; gamma: number;
