@@ -340,13 +340,16 @@ loading entries, building representations from selections, measuring, colouring,
 switching assemblies, superposing panes. Replies come back as one JSON object
 carrying prose plus a list of actions; each action is re-validated against live
 state before it runs, so a wrong chain id becomes a stated rejection rather than
-a silent no-op. Thirty action types cover loading and layout; components, colour and
-palette; assemblies, ensembles, overlay and superposition; camera views,
-focus, spin, clipping, lighting and background; measurement, hydrogen bonds,
+a silent no-op. Thirty-three action types cover loading and layout; components, colour and
+palette; assemblies, ensembles, overlay and superposition; camera views, focus,
+reset, spin, clipping, lighting and background; measurement, hydrogen bonds,
 interfaces, ligand contacts and pockets; density maps, real-space fit and
-surfaces; validation and UniProt annotations; similarity search and predicted
-structures; and nucleotide styles. Every one
-is a reversible local view change, so they run without a confirmation step.
+surfaces; wwPDB validation, a computed Ramachandran analysis and UniProt
+annotations; similarity search and predicted structures; and nucleotide styles.
+Every one is a reversible local view change, so they run without a confirmation
+step. That count is checked against the vocabulary at build time by
+`npm run check:actions`, because this sentence has already gone stale once
+while nothing failed.
 **Clear** discards the rolling history as well as the visible transcript, and
 aborts a request in flight.
 
@@ -421,6 +424,33 @@ maximum 4.27 Å, so a numbering jump across less than 4.2 Å is a renumbering an
 gets a hairline on the track rather than a gap marker. A jump across more than
 that is a hole. Geometry alone catches the opposite case, a file whose
 numbering is consecutive across ends that cannot be bonded.
+
+**A Ramachandran plot, computed here.** Phi and psi for every residue, drawn
+against reference contours, with one point per residue and a ranked list of
+outliers that selects and focuses on click. The entry panel reported wwPDB's
+outlier percentage for a long time without ever drawing the thing the
+percentage counts — a number says how many residues are wrong, the plot says
+which and where, and a cluster just outside a contour is a different problem
+from one point stranded in empty space.
+
+Residues are judged against separate distributions for glycine, proline,
+pre-proline, Ile/Val and everything else, because they are genuinely different
+and scoring them all against one is the standard way to manufacture outliers
+that are not outliers. Because it is computed from coordinates rather than
+fetched, it works on a local file and on a predicted model, neither of which
+has a wwPDB report at all.
+
+The contours are the part that makes this a validation tool rather than a
+scatter chart, and they are measured rather than transcribed:
+[scripts/build-ramachandran.ts](scripts/build-ramachandran.ts) derives them
+from 900 X-ray structures at 1.5 Å or better, keeping residues with mean
+B-factor at or below 30 and no alternate conformation — 156,015 residues in
+all. It agrees with wwPDB's own outlier percentage to a mean of 0.05
+percentage points across fifteen entries, including 7CGO's 44,376 residues at
+0.16% against 0.19%. The shapes were checked as well as the counts, since a
+contour can produce the right total from the wrong region: proline comes out
+with no permitted region at positive phi anywhere in its 32,400 cells, which
+its ring forbids and which nothing in the pipeline was told.
 
 **Alternate conformations.** A residue modelled in two or three positions
 because the density supported more than one is underlined on the sequence
@@ -781,6 +811,14 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
   chromophore like GFP's CRO, an unusual modified residue — ends the run rather
   than being counted across, so a real gap adjacent to one is not reported.
   That is deliberate: nothing is claimed where nothing can be known.
+- The Ramachandran contours are measured from 156,015 residues, which is enough
+  for the favoured contour and thin for the allowed one: the 99.95% level is
+  cut from 7,587 prolines and 6,464 pre-prolines, where it is decided more by
+  the smoothing than by the data. Cis and trans proline share one distribution
+  rather than the two MolProbity separates. Outlier counts will also differ
+  from wwPDB's wherever an entry deposits backbone at zero occupancy, since
+  those atoms are dropped here and validated there — 1KX5 reads 3.98% against
+  wwPDB's 7.62% for that reason alone, and 7.41% with them restored.
 - The computed real-space correlation is not on wwPDB's scale and must not be
   read against published thresholds. It agrees with their per-residue RSCC at
   r = 0.62 and runs about 0.2 lower, for reasons given where the feature is

@@ -70,17 +70,6 @@ contact report that does not name those two is wrong.
 The trap is the one the pockets feature already avoids — reporting a contact as
 an interaction. Distance and angle criteria are geometric; affinity is not.
 
-### A Ramachandran plot
-
-The standard artefact for judging a model, and MolView reports wwPDB's
-percentile without ever drawing it. Phi and psi are four atoms and an arctangent
-over the backbone; the plot is a small 2D panel, and its points should be
-clickable to select the residue, which ties it to the per-residue validation
-colouring already there.
-
-Validates against itself: the fraction of residues in favoured regions should
-track the Ramachandran percentile the entry panel already displays.
-
 ### Open your own structure
 
 Everything MolView can show is bounded by what RCSB serves. A refined model, a
@@ -155,6 +144,34 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **A Ramachandran plot** — and the entry was wrong about where the work was.
+
+  It called phi and psi "four atoms and an arctangent", which is true, and
+  treated that as the feature. The angles took an afternoon; the contours are
+  the feature. Favoured and allowed regions are not computed from anything —
+  they are an empirical distribution, and without them the panel is a scatter
+  chart that judges nothing. So they are measured here rather than transcribed:
+  900 X-ray structures at 1.5 Å or better, 156,015 residues after filtering on
+  B-factor and alternate conformations, cut at the 98% and 99.95%
+  highest-density levels. The script is checked in and the file it writes says
+  what it was built from.
+
+  The proposed validation — that the favoured fraction "should track the
+  Ramachandran percentile the entry panel displays" — does not work. That field
+  is `percent_ramachandran_outliers`, a percentage rather than a percentile,
+  and favoured is not its complement because the plot has three bands.
+  Comparing outlier rate against outlier rate is exact instead of approximate:
+  mean absolute difference 0.05 points over fifteen entries.
+
+  It also found a bug older than itself. `torsionBetween` had been returning
+  the negative of the IUPAC value since it was written — magnitudes right,
+  sign inverted — and nothing noticed because no torsion in the app was ever
+  compared against an absolute reference. An alpha helix reading +63/+32
+  instead of -63/-43 is what surfaced it.
+
+  Left undone: cis and trans proline share one distribution, and the 99.95%
+  contour is thin for the smaller categories.
 
 - **Absence, made visible** — gaps and alternate conformations, and both turned
   out to be half-done or wrong rather than missing.

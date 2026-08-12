@@ -22,6 +22,7 @@ import {
 import { findPockets, pocketSelection } from '../mol/pockets';
 import { ligandContacts, contactSelection } from '../mol/ligandContacts';
 import { worstFits } from '../mol/densityFit';
+import { bandOf, computeRamachandran, summarise } from '../mol/ramachandran';
 import { fetchAnnotations } from '../rcsb/annotations';
 import { searchUniProt } from '../rcsb/alphafold';
 import { fetchSummaries, searchByShape, searchBySequence } from '../rcsb/api';
@@ -560,6 +561,49 @@ export async function applyAction(action: Action): Promise<string> {
 
       return `Worst residues by ${metric === 'rsrz' ? 'fit to density' : 'geometry'}:\n`
         + `${lines.join('\n')}\nSelection covering them: ${selection}`;
+    }
+
+    case 'ramachandran': {
+      const slot = store.activeSlot;
+      const structure = viewer.getStructure(slot);
+      if (!structure) return reject(`pane ${slot + 1} has no structure`);
+
+      const points = computeRamachandran(structure);
+      if (points.length === 0) {
+        return 'No residue in this pane has both a phi and a psi, so there is '
+          + 'nothing to plot — that needs a protein chain at least three residues long.';
+      }
+
+      const summary = summarise(points);
+      const limitMatch = /top\s+(\d+)/.exec(value.toLowerCase());
+      const limit = limitMatch ? Math.min(25, Number(limitMatch[1])) : 8;
+
+      const outliers = points.filter(
+        (p) => bandOf(p.phi, p.psi, p.category) === 'outlier',
+      );
+
+      const head = `${summary.favouredPercent.toFixed(1)}% of ${summary.total} residues `
+        + `are in favoured regions; ${summary.outliers} `
+        + `(${summary.outlierPercent.toFixed(2)}%) are outliers.`;
+
+      if (outliers.length === 0) return `${head} Nothing to flag.`;
+
+      const shown = outliers.slice(0, limit);
+      const lines = shown.map((p) => {
+        const chain = structure.chainAuthId[structure.resChain[p.residue]];
+        return `${chain} ${structure.resSeq[p.residue]} `
+          + `${resNameOf(structure, p.residue)} (${p.category}): `
+          + `phi ${p.phi.toFixed(0)}, psi ${p.psi.toFixed(0)}`;
+      });
+      // Same shape the interfaces and validation actions return: a ranked list
+      // and one string that can be handed straight to a component or focus.
+      const selection = shown
+        .map((p) => `(/${structure.chainAuthId[structure.resChain[p.residue]]} `
+          + `and :${structure.resSeq[p.residue]})`)
+        .join(' or ');
+
+      return `${head}\nOutliers:\n${lines.join('\n')}\n`
+        + `Selection covering them: ${selection}`;
     }
 
     case 'clip': {
