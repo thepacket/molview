@@ -698,8 +698,30 @@ drawn, because an X-ray box contains the crystal packing too. Entries with no
 map say why: `4HHB` was deposited in 1984 without structure factors, which is
 the same fact the validation panel reports as a missing density fit.
 
-**Local files.** Drop an mmCIF or BinaryCIF file onto a pane, or open one from
-the Panes tool. Nothing is uploaded.
+**Open your own structure.** Drop a file onto a pane, or open one from the Panes
+tool: mmCIF, BinaryCIF, or legacy PDB. Nothing is uploaded — parsing and
+rendering happen in your browser.
+
+Legacy PDB matters because it is what most tools still emit. A refined model, a
+docking pose, a predicted complex: none of them could be opened at all until
+the reader existed, and everything MolView could show was bounded by what RCSB
+serves.
+
+Anything computed from coordinates then works on it — representations,
+selections, measurements, hydrogen bonds, interfaces and buried area, pockets,
+surfaces, superposition and morphing, ligand contacts, chain gaps, alternate
+conformations, and the Ramachandran plot. That last one is the useful case: it
+is computed rather than fetched, so it gives outliers on a model wwPDB has
+never seen. What cannot work is anything keyed to an entry id — the Definition
+panel, the wwPDB validation summary, UniProt annotations, similarity search —
+and `/validation` says so rather than failing quietly.
+
+The reader is checked against the format it replaces rather than against
+examples: building the same entry from both its PDB and its mmCIF and comparing
+atom count, residue count, residue kinds, secondary structure, polymer chains,
+the element histogram, Ramachandran totals, unmodelled gaps and space group,
+forty-nine entries agree exactly — twenty picked for their edge cases and
+twenty-nine drawn at random.
 
 ## RCSB endpoints
 
