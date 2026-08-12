@@ -209,7 +209,7 @@ function Pane({ index, slot, active, dropping, onDropTarget }: {
               <Crosshair size={22} opacity={0.35} />
               <div className="pane-empty-hint">
                 Pane {index + 1} is empty. Pick a structure from the browser, or
-                drop an mmCIF file here.
+                drop a structure file here.
               </div>
             </div>
           )}
@@ -272,7 +272,7 @@ function Pane({ index, slot, active, dropping, onDropTarget }: {
           {dropping && (
             <div className="drop-overlay">
               <Upload size={20} />
-              Drop mmCIF or BinaryCIF to load into pane {index + 1}
+              Drop mmCIF, BinaryCIF or PDB to load into pane {index + 1}
             </div>
           )}
         </div>

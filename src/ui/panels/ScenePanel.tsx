@@ -111,13 +111,14 @@ export function ScenePanel() {
       <div className="panel-section">
         <div className="section-label"><span>Local file</span></div>
         <p style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 8, lineHeight: 1.5 }}>
-          Open an mmCIF or BinaryCIF file from disk. Nothing is uploaded — parsing
-          and rendering happen entirely in this browser.
+          Open an mmCIF, BinaryCIF or legacy PDB file from disk — a refined model,
+          a docking pose, a prediction. Nothing is uploaded: parsing and rendering
+          happen entirely in this browser.
         </p>
         <input
           ref={fileRef}
           type="file"
-          accept=".cif,.bcif,.mmcif"
+          accept=".cif,.bcif,.mmcif,.pdb,.ent"
           style={{ display: 'none' }}
           onChange={(e) => {
             const file = e.target.files?.[0];

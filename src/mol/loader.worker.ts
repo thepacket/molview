@@ -10,6 +10,7 @@
 import { fetchCoordinates, fetchWithProgress } from '../rcsb/api';
 import { parseBinaryCif } from '../rcsb/bcif';
 import { parseMmCif, STRUCTURE_CATEGORIES } from '../rcsb/mmcif';
+import { parsePdb } from '../rcsb/pdb';
 import { buildStructure, type Structure } from './structure';
 import { computeBonds, nonPolymerMask } from './bonds';
 import type { BondList } from './bonds';
@@ -47,6 +48,34 @@ export type WorkerResponse =
 
 const controllers = new Map<number, AbortController>();
 
+type CoordinateFormat = 'bcif' | 'cif' | 'pdb';
+
+/**
+ * Which parser these bytes need, given whatever name or URL they arrived under.
+ *
+ * The extension decides when it says something, and often it does not: files
+ * arrive named `model.txt` or `output`, and the ESM Atlas serves PDB from an
+ * address ending in an accession. So the content is consulted too, and it is
+ * unambiguous — mmCIF opens with `data_`, and a PDB file is a stack of
+ * fixed-column records whose names live in the first six columns.
+ *
+ * BinaryCIF is judged by extension alone, because it is the one format here
+ * that is not text and sniffing it would mean decoding MessagePack to find out.
+ */
+function formatOf(name: string, buffer: ArrayBuffer): CoordinateFormat {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.bcif')) return 'bcif';
+  if (lower.endsWith('.pdb') || lower.endsWith('.ent')) return 'pdb';
+  if (lower.endsWith('.cif') || lower.endsWith('.mmcif')) return 'cif';
+
+  // Enough to reach past a header comment or two without decoding a 200 MB
+  // file to identify it.
+  const head = new TextDecoder().decode(new Uint8Array(buffer, 0, Math.min(4096, buffer.byteLength)));
+  if (/^data_/m.test(head)) return 'cif';
+  if (/^(ATOM  |HETATM|HEADER|MODEL |CRYST1|REMARK)/m.test(head)) return 'pdb';
+  return 'cif';
+}
+
 function post(message: WorkerResponse, transfer: Transferable[] = []): void {
   (self as unknown as Worker).postMessage(message, transfer);
 }
@@ -68,11 +97,11 @@ async function handleLoad(req: LoadRequest): Promise<void> {
 
   try {
     let buffer: ArrayBuffer;
-    let format: 'bcif' | 'cif';
+    let format: CoordinateFormat;
 
     if (req.file) {
       buffer = req.file.buffer;
-      format = req.file.name.toLowerCase().endsWith('.bcif') ? 'bcif' : 'cif';
+      format = formatOf(req.file.name, buffer);
     } else if (req.sourceUrl) {
       post({ type: 'progress', requestId: req.requestId, stage: 'Fetching', loaded: 0, total: 0 });
       buffer = await fetchWithProgress(req.sourceUrl, controller.signal, (p) => {
@@ -84,7 +113,7 @@ async function handleLoad(req: LoadRequest): Promise<void> {
           total: p.total,
         });
       });
-      format = req.sourceUrl.endsWith('.bcif') ? 'bcif' : 'cif';
+      format = formatOf(req.sourceUrl, buffer);
     } else {
       post({ type: 'progress', requestId: req.requestId, stage: 'Fetching', loaded: 0, total: 0 });
       const coords = await fetchCoordinates(req.entryId, controller.signal, (p) => {
@@ -101,9 +130,15 @@ async function handleLoad(req: LoadRequest): Promise<void> {
     }
 
     post({ type: 'progress', requestId: req.requestId, stage: 'Decoding', loaded: 0, total: 0 });
-    const block = format === 'bcif'
-      ? parseBinaryCif(buffer)
-      : parseMmCif(new TextDecoder().decode(buffer), STRUCTURE_CATEGORIES);
+    let block;
+    if (format === 'bcif') {
+      block = parseBinaryCif(buffer);
+    } else {
+      const text = new TextDecoder().decode(buffer);
+      block = format === 'pdb'
+        ? parsePdb(text, req.entryId.toUpperCase())
+        : parseMmCif(text, STRUCTURE_CATEGORIES);
+    }
 
     if (controller.signal.aborted) return;
 
