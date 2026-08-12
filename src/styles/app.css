@@ -2329,3 +2329,100 @@ textarea {
   align-self: start;
   flex: none;
 }
+
+/* --- Ramachandran --------------------------------------------------------- */
+
+.rama-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-bottom: 7px;
+}
+
+.rama-summary strong { color: var(--text); font-weight: 600; }
+.rama-summary .rama-bad strong { color: #f4576c; }
+.rama-dim { color: var(--text-faint); }
+
+.rama-canvas-wrap {
+  position: relative;
+  margin: 8px 0 6px;
+  display: flex;
+  justify-content: center;
+}
+
+/*
+ * Square, and enforced rather than assumed. A fixed 320px width lost 30px to a
+ * narrow panel while the height held, which put phi and psi on different
+ * scales — on a plot whose entire content is where a point sits, that is not a
+ * cosmetic problem. aspect-ratio ties the two together at any panel width.
+ *
+ * Pixelated: the contour grid is 2 degrees per bin and painted per pixel, so
+ * the steps are the data. Smoothing them would imply a precision the reference
+ * set does not have.
+ */
+.rama-canvas {
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  cursor: crosshair;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  image-rendering: pixelated;
+}
+
+.rama-axis {
+  position: absolute;
+  font-size: 10px;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  pointer-events: none;
+}
+
+.rama-axis-x { bottom: 3px; right: 6px; }
+.rama-axis-y { top: 3px; left: 6px; }
+
+.rama-note {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  line-height: 1.5;
+  margin-top: 6px;
+  min-height: 2.4em;
+}
+
+.rama-outlier-head {
+  font-size: 10px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 8px 0 4px;
+}
+
+.rama-outliers {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rama-outlier {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  border: 1px solid transparent;
+  font-size: 10.5px;
+  font-family: var(--mono);
+  color: var(--text-dim);
+  cursor: pointer;
+  text-align: left;
+}
+
+.rama-outlier:hover { border-color: var(--line); color: var(--text); }
+.rama-outlier[data-selected='true'] {
+  border-color: var(--accent);
+  color: var(--text);
+}

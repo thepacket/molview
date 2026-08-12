@@ -14,6 +14,7 @@ import { makeComponent, Style } from '../../mol/components';
 import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Segmented, Toggle, Tip } from '../controls';
+import { RamachandranPlot } from './RamachandranPlot';
 
 const MODES: { value: string; label: React.ReactNode; title: string }[] = [
   { value: 'off', label: 'Off', title: 'Clicking selects residues' },
@@ -136,6 +137,8 @@ export function MeasurePanel() {
       <LigandSection slot={activeSlot} />
 
       <DensityFitSection slot={activeSlot} />
+
+      <RamachandranPlot slot={activeSlot} />
 
       <div className="panel-section">
         <div className="section-label"><span>Display</span></div>
