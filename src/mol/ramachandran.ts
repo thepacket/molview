@@ -17,6 +17,7 @@
 
 import { isAminoAcid } from './elements';
 import { torsionBetween } from './measure';
+import { RAMA_BIN, RAMA_CONTOURS, RAMA_GRID } from './ramachandranData';
 import { atomNameOf, MolKind, resNameOf, type Structure } from './structure';
 
 export type RamaCategory =
@@ -92,6 +93,77 @@ export function categoryFor(name: string, nextName: string | null): RamaCategory
  * the bug this feature surfaced.
  */
 export const torsionOf = torsionBetween;
+
+/**
+ * Decoded contour grids, built once on first use. The shipped form is
+ * run-length encoded because the grids are mostly flat, and decoding 32,400
+ * cells five times is not worth doing at module load for a panel most sessions
+ * never open.
+ */
+const decoded = new Map<string, Uint8Array>();
+
+function gridFor(category: RamaCategory): Uint8Array | null {
+  const cached = decoded.get(category);
+  if (cached) return cached;
+
+  const encoded = RAMA_CONTOURS[category];
+  if (!encoded) return null;
+
+  const grid = new Uint8Array(RAMA_GRID * RAMA_GRID);
+  let at = 0;
+  for (const part of encoded.split(',')) {
+    const colon = part.indexOf(':');
+    const value = Number(part.slice(0, colon));
+    const run = Number(part.slice(colon + 1));
+    grid.fill(value, at, at + run);
+    at += run;
+  }
+  decoded.set(category, grid);
+  return grid;
+}
+
+function binOf(angle: number): number {
+  let i = Math.floor((angle + 180) / RAMA_BIN);
+  // Wrap rather than clamp: phi/psi space is a torus, and an angle landing
+  // exactly on +180 belongs with -180 rather than off the end of the array.
+  if (i < 0) i += RAMA_GRID;
+  if (i >= RAMA_GRID) i -= RAMA_GRID;
+  return i;
+}
+
+/** Where a residue falls against the reference distribution for its category. */
+export function bandOf(phi: number, psi: number, category: RamaCategory): RamaBand {
+  const grid = gridFor(category);
+  if (!grid) return 'favoured';
+  const v = grid[binOf(psi) * RAMA_GRID + binOf(phi)];
+  return v === 2 ? 'favoured' : v === 1 ? 'allowed' : 'outlier';
+}
+
+export interface RamaSummary {
+  total: number;
+  favoured: number;
+  allowed: number;
+  outliers: number;
+  /** Percentages, which is the form wwPDB reports and papers quote. */
+  favouredPercent: number;
+  outlierPercent: number;
+}
+
+export function summarise(points: readonly RamaPoint[]): RamaSummary {
+  let favoured = 0, allowed = 0, outliers = 0;
+  for (const p of points) {
+    const band = bandOf(p.phi, p.psi, p.category);
+    if (band === 'favoured') favoured++;
+    else if (band === 'allowed') allowed++;
+    else outliers++;
+  }
+  const total = points.length;
+  return {
+    total, favoured, allowed, outliers,
+    favouredPercent: total ? (favoured / total) * 100 : 0,
+    outlierPercent: total ? (outliers / total) * 100 : 0,
+  };
+}
 
 /**
  * Every residue with a defined phi and psi.
