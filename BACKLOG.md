@@ -16,9 +16,10 @@ assumed.
 Ideas deliberately not taken are under "Not planned"; current limitations of
 what exists are at the end of [README.md](README.md).
 
-The five that follow are **parity features, not differentiators** — checked
-after they were written, against Mol*, iCn3D, Coot, ChimeraX and PyMOL. Coot has
-had all five for twenty years. That is still a reason to build them, since a
+What remains here began as five **parity features, not differentiators** —
+checked after they were written, against Mol*, iCn3D, Coot, ChimeraX and PyMOL.
+Coot has had all five for twenty years. Four are now done and listed below;
+entry classification is the one still open. That is still a reason to build them, since a
 viewer missing table stakes is a toy, but it is not the reason they were first
 argued for: "no browser viewer does this" was asserted about real-space
 correlation and is wrong, since Mol* and iCn3D are browser viewers with serious
@@ -34,62 +35,6 @@ Note also that this section's own preamble says the list came from asking what
 someone wants to do rather than what another viewer has. These five are the
 second kind, arrived at by reading MolView's gaps rather than another viewer's
 menus, which is the same list by a different route.
-
-### Real-space correlation per residue, computed here
-
-The question asked of every crystal structure is whether an atom is supported by
-the data or by the modeller's hope. MolView answers it today with wwPDB's RSRZ,
-fetched per residue — and RSRZ **excludes ligands**, so the part you doubt most
-is the part not covered.
-
-Both halves are already in the client: the map is fetched for the density
-feature, the model is loaded, and the trilinear sampling with the inverse step
-matrix exists (`sampleSigma`, `gridIndexOf`). What is missing is the
-correlation itself — density from the model, density from the map, correlated
-over the residue's own envelope.
-
-Validation is unusually clean: correlate the computed per-residue value against
-wwPDB's RSRZ across a set of entries, where both should rank residues the same
-way. Disagreement is then either a bug or a ligand, and the ligands are the
-point.
-
-Worth doing first because it is the only item here that MolView is uniquely
-placed to do — no other browser viewer holds model and map in the same client.
-
-### A ligand interaction report
-
-Hydrogen bonds exist; the inventory does not. For a bound ligand: hydrogen
-bonds, salt bridges, hydrophobic contacts, pi-stacking, each with the residue
-making it and a selection that draws it. It is the first question anyone asks
-of a complex, and it is pure geometry over coordinates already in memory.
-
-Checkable against something independent: the UniProt binding-site annotations
-the app already fetches. 1CBS puts its binding site on Arg132 and Tyr134, and a
-contact report that does not name those two is wrong.
-
-The trap is the one the pockets feature already avoids — reporting a contact as
-an interaction. Distance and angle criteria are geometric; affinity is not.
-
-### Open your own structure
-
-Everything MolView can show is bounded by what RCSB serves. A refined model, a
-docking pose, a predicted complex — none of them can be opened, and the drop
-target says mmCIF. Legacy PDB is still what most tools emit.
-
-A PDB-format reader is fixed-column parsing, element inference, altlocs,
-insertion codes and multi-model — not large, but the kind of parser that fails
-silently on edge cases, so it wants a corpus of real files to check against
-rather than one example.
-
-It also unblocks the ESM Metagenomic Atlas. Probed and reachable —
-`api.esmatlas.com/fetchPredictedStructure/{MGYP...}` answers 200 with
-`Access-Control-Allow-Origin: *`, and there is a companion endpoint for the
-PAE — but it serves legacy PDB, and it is keyed by MGnify accession rather than
-UniProt, so the existing "predicted structures" path (UniProt search ->
-accession) cannot reach it. With a PDB reader in place it needs only a second
-entry point: an accession field, or search by sequence. Its value is coverage
-of sequences nobody has named, not accuracy; ESMFold is below AlphaFold2 on the
-same sequence.
 
 ### Entry classification, computed rather than restated
 
@@ -144,6 +89,69 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **Real-space correlation per residue** (`b45a650`) — density calculated from
+  the model, correlated against the map over each residue's own envelope. It
+  exists because MolView holds map and model in the same client, and it answers
+  what wwPDB's per-residue report leaves open: those scores cover polymer only,
+  so the ligand — the part a reader doubts — has no published number.
+
+  Calibrated rather than assumed. The envelope radius was swept against wwPDB's
+  own per-residue RSCC across 1UBQ, 1CBS, 3PTB and 2HHB: agreement peaks at
+  1.8 Å (r = 0.62). That is also the honest ceiling — it runs about 0.2 below
+  their absolute values, because the calculated density is one isotropic
+  Gaussian per atom rather than real scattering factors. So it is presented as
+  a ranking within one structure and says so in three places. Ubiquitin's three
+  worst are Arg74, Gly75 and Gly76 — its flexible C-terminal tail.
+
+- **A ligand interaction report** (`b28b776`) — contacts grouped by the residue
+  making them, each labelled hbond, ionic, stacking or hydrophobic, with a
+  selection that draws the whole site.
+
+  Rings come from the bond graph and are kept only if flat, every atom within
+  0.25 Å of the ring's own Newell plane. There is no chemical component
+  dictionary here to ask about aromaticity, and planarity is the property that
+  actually matters for stacking, so it is measured. Validated against textbook
+  sites and it named them: 1CBS gives Tyr134 at 2.57 Å and Arg132 at 2.73 Å —
+  the two the backlog required it to find — 3PTB puts benzamidine's ionic
+  contact on Asp189, the aspartate that makes trypsin arginine-specific, and
+  101M reports His93 at 2.20 Å.
+
+- **Open your own structure, and the ESM Atlas with it** — the last of the five.
+
+  The reader produces a `CifBlock` rather than a `Structure`, which is the
+  decision the rest follows from: the structure builder, assemblies, altloc
+  resolution and the secondary-structure fallback then work unchanged, and a
+  PDB file never becomes a second kind of model with its own quirks. Two places
+  it is easy to be silently wrong. Element inference, because columns 77-78 are
+  often blank and the atom name is positional — a one-letter element is
+  right-justified into column 14, which is how CA the calcium is told from CA
+  the alpha carbon. And chain composition, because mmCIF gives waters and
+  ligands their own `label_asym_id` while PDB puts everything in one chain.
+
+  That second one took two attempts. Splitting on ATOM/HETATM cuts a chain at
+  every selenomethionine; splitting on whether the component name is a known
+  residue broke 6LU7's inhibitor — a peptide of 02J, Ala, Val, Leu, PJE and 010
+  — into four chains and cost the residues between them their backbone angles.
+  What works is measuring: a component belongs to a chain when it carries a
+  backbone to be part of one with.
+
+  The entry asked for a corpus rather than one example, and got one. Building
+  the same entry from both formats and comparing atom count, residue count,
+  residue kinds, secondary structure, polymer chains, the element histogram,
+  Ramachandran totals, unmodelled gaps and the space group: forty-nine entries
+  agree exactly, twenty picked for edge cases and twenty-nine at random.
+
+  The Atlas then needed only its entry point, as predicted — plus one thing
+  nobody predicted: ESMFold writes pLDDT on a 0-1 scale where AlphaFold writes
+  0-100, so a model with mean confidence 93.8 reported "0.9, very low" and
+  painted itself in the worst band until that was normalised.
+
+  Not done: `REMARK 350`, so a PDB file offers no biological assemblies. And
+  the Atlas is reachable by accession only — searching it by sequence would
+  need a different endpoint, and its long-term maintenance is uncertain since
+  Meta's protein team was disbanded, so it is deliberately a second entry point
+  rather than a headline.
 
 - **A Ramachandran plot** — and the entry was wrong about where the work was.
 

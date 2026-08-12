@@ -111,9 +111,10 @@ uses:
 - `maps.rcsb.org` — density maps
 - `alphafold.ebi.ac.uk`, `rest.uniprot.org` — predicted structures and the
   UniProt annotations that reach them
+- `api.esmatlas.com` — ESMFold models of metagenomic sequences
 - `openrouter.ai` — only reached when the user has entered their own key
 
-Eight in total. Do not maintain that list by hand against this file: `npm run
+Nine in total. Do not maintain that list by hand against this file: `npm run
 check:csp` reads it from `security-headers.conf` and reports the count, and this
 list had gone stale by three hosts before that was written down.
 
@@ -151,7 +152,7 @@ missing asset; `nginx -t` clean. The container was then driven in a browser —
 rendered) with no CSP violations, and the five external endpoints of the time
 returned 200 under the policy.
 
-That is a record of one occasion, not a standing guarantee: three hosts have
+That is a record of one occasion, not a standing guarantee: four hosts have
 been added since, and the features behind them were not part of that run. The
 image build itself is checked continuously — `check:csp` fails the build if the
 source reaches a host the policy omits — but reaching a host successfully from

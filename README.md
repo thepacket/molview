@@ -596,6 +596,28 @@ where a mutation would matter, which is a different question from where the
 model is confident — p53 shows it plainly, with the DNA-binding domain scored
 pathogenic and the disordered tails benign.
 
+**The ESM Metagenomic Atlas**, reached by MGnify accession in the same field.
+AlphaFold covers UniProt — proteins from organisms somebody has named. The
+Atlas covers sequence read straight out of soil, seawater and gut samples,
+where the source organism was frequently never cultured and often is not known
+at all. That coverage is the point, not accuracy: ESMFold folds from a single
+sequence with no alignment, which is what made hundreds of millions of
+predictions tractable and also what puts it below AlphaFold2 on the same
+protein.
+
+It needed the PDB reader, because the Atlas serves legacy PDB, and it needed
+its own way in: the existing route is UniProt search then accession, and
+searching UniProt can never produce an MGnify accession. The panel names
+ESMFold as the predictor and drops AlphaMissense entirely rather than reporting
+it missing — AlphaMissense is computed over UniProt, so a sequence nobody has
+named could not have one, and "no annotation for this entry" would read as a
+gap in the data instead of a category that does not apply.
+
+One trap worth recording: ESMFold writes pLDDT on a 0-1 scale where AlphaFold
+writes 0-100. Everything downstream assumes the hundred, so a confident model
+reported itself as "0.9, very low" and painted itself in the worst band. It is
+normalised where the scale is known.
+
 **A command line.** A line beginning with `/` in the assistant's composer runs
 as commands rather than going to a model — the same twenty-seven verbs the
 assistant has, executed by the same function, so a second vocabulary cannot
@@ -696,6 +718,8 @@ Predicted structures come from two more, both CORS-open:
 | --- | --- |
 | Predicted models, PAE, AlphaMissense | `alphafold.ebi.ac.uk/api/prediction/{accession}` |
 | Name and gene to accession | `rest.uniprot.org/uniprotkb/search` |
+| Metagenomic models (legacy PDB) | `api.esmatlas.com/fetchPredictedStructure/{MGYP…}` |
+| Their PAE | `api.esmatlas.com/fetchConfidencePrediction/{MGYP…}` |
 
 AlphaFold is keyed by UniProt accession and nothing else, which is why the
 UniProt lookup exists. File URLs are taken from the API response rather than
@@ -841,6 +865,11 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
   approximations, not DSSP, an energetic H-bond analysis, or a structure-based
   aligner. They are good enough to look at and to reason from; they are not
   what you would cite.
+- The PDB reader covers coordinates, secondary structure and the unit cell, but
+  not `REMARK 350`, so a PDB file offers no biological assemblies where the same
+  entry's mmCIF would. Legacy PDB also cannot express a structure past 99,999
+  atoms or a multi-character chain id, which is why RCSB serves no `.pdb` for
+  the largest entries — those still need mmCIF.
 - A pane opened from a local file has no id to refetch, so a project must embed
   its bytes to restore it. That is an opt-in, capped at 25 MB per file, and
   never included in a shareable link.
