@@ -37,20 +37,24 @@ export function PredictionPanel() {
           <span className="pdb-id" style={{ fontSize: 14 }}>{p.accession}</span>
           <a
             className="link"
-            href={`https://alphafold.ebi.ac.uk/entry/${p.accession}`}
+            href={p.source === 'esm'
+              ? `https://esmatlas.com/explore/detail/${p.accession}`
+              : `https://alphafold.ebi.ac.uk/entry/${p.accession}`}
             target="_blank"
             rel="noreferrer"
             style={{ marginLeft: 'auto', fontSize: 10.5 }}
           >
-            AlphaFold <ExternalLink size={9} style={{ verticalAlign: -1 }} />
+            {p.source === 'esm' ? 'ESM Atlas' : 'AlphaFold'}
+            {' '}<ExternalLink size={9} style={{ verticalAlign: -1 }} />
           </a>
         </div>
         <div style={{ fontSize: 12, lineHeight: 1.5, marginTop: 4 }}>{p.description}</div>
         <div className="chip-row">
           <Chip>Predicted</Chip>
+          {p.source === 'esm' && <Chip>Metagenomic</Chip>}
           {p.gene && <Chip accent>{p.gene}</Chip>}
           {p.organism && <Chip>{p.organism}</Chip>}
-          <Chip>v{p.version}</Chip>
+          {p.source !== 'esm' && <Chip>v{p.version}</Chip>}
         </div>
         <p className="panel-note" style={{ marginTop: 9, marginBottom: 0 }}>
           A model, not a measurement. Nothing here was observed; the confidence
@@ -67,8 +71,10 @@ export function PredictionPanel() {
             <i className="vrpt-dot" style={{ background: `#${band.color.toString(16)}` }} />
             {p.meanPlddt.toFixed(1)} · {band.label.toLowerCase()}
           </dd>
-          <dt>UniProt</dt>
+          <dt>{p.source === 'esm' ? 'MGnify' : 'UniProt'}</dt>
           <dd>{p.uniprotId || p.accession}</dd>
+          <dt>Predictor</dt>
+          <dd>{p.source === 'esm' ? 'ESMFold' : 'AlphaFold'}</dd>
         </dl>
         <button
           type="button"
@@ -82,6 +88,15 @@ export function PredictionPanel() {
 
       <PaeSection slot={activeSlot} />
 
+      {/*
+        * Hidden rather than empty for an ESM model. AlphaMissense is computed
+        * over UniProt, so a metagenomic sequence could never have one, and
+        * "no annotation for this entry" would read as a gap in the data
+        * instead of a category that does not apply. Same reason a prediction
+        * gets its own Definition panel rather than an experimental one with
+        * blank fields.
+        */}
+      {p.source !== 'esm' && (
       <div className="panel-section">
         <div className="section-label"><span>AlphaMissense</span></div>
         {p.missenseStatus === 'absent' ? (
@@ -115,6 +130,7 @@ export function PredictionPanel() {
           <p style={{ fontSize: 10.5, color: 'var(--error)', marginTop: 6 }}>{p.error}</p>
         )}
       </div>
+      )}
     </>
   );
 }

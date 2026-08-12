@@ -19,6 +19,9 @@ const LINK_ONLY = new Set([
   'https://doi.org',
   'https://github.com',
   'https://www.rcsb.org',
+  // The Atlas entry page. Coordinates come from api.esmatlas.com, which is a
+  // fetch and is in connect-src; this is only ever an href.
+  'https://esmatlas.com',
 ]);
 
 function sourceFiles(dir) {

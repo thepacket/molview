@@ -15,6 +15,7 @@
 import { useRef, useState } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
 import { searchUniProt, type UniProtHit } from '../../rcsb/alphafold';
+import { isMgnifyAccession } from '../../rcsb/esmatlas';
 import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Chip } from '../controls';
@@ -29,6 +30,17 @@ export function PredictedSearch() {
   const submit = async () => {
     const query = draft.trim();
     if (!query) return;
+
+    // An MGnify accession goes straight to the ESM Atlas. Searching UniProt for
+    // it is not merely slower, it can never succeed: the whole point of the
+    // Atlas is sequences UniProt does not have.
+    if (isMgnifyAccession(query)) {
+      setHits(null);
+      setError(null);
+      open(query);
+      return;
+    }
+
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -61,7 +73,7 @@ export function PredictedSearch() {
         {busy ? <Loader2 size={12} className="spin" /> : <Sparkles size={12} />}
         <input
           className="text-input"
-          placeholder="Protein, gene or UniProt accession"
+          placeholder="Protein, gene, UniProt or MGnify accession"
           value={draft}
           spellCheck={false}
           onChange={(e) => setDraft(e.target.value)}
@@ -78,6 +90,16 @@ export function PredictedSearch() {
           model and no experimental structure. These are predictions: confident
           ones are very good and unconfident ones are fiction, and the pane says
           which is which.
+        </p>
+      )}
+
+      {hits === null && !error && (
+        <p className="panel-note" style={{ marginTop: 8, marginBottom: 0 }}>
+          An MGnify accession like <code>MGYP000911143359</code> loads from the
+          ESM Metagenomic Atlas instead: sequence read out of soil and seawater,
+          from organisms nobody has named. Its value is that coverage rather
+          than accuracy — ESMFold folds from one sequence with no alignment, and
+          reads below AlphaFold on the same protein.
         </p>
       )}
 

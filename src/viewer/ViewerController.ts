@@ -45,6 +45,7 @@ import { colorKeyFor, type ColorKey } from '../mol/colorKey';
 import {
   fetchAlphaMissense, fetchPae, fetchPrediction, type PaeMatrix,
 } from '../rcsb/alphafold';
+import { checkEsmAccession, esmPrediction, fetchEsmPae, isMgnifyAccession } from '../rcsb/esmatlas';
 import { paintColorKey } from '../ui/colorKeyPainter';
 import { QUANTITATIVE_SCHEMES, VALIDATION_SCHEMES, type ColorScheme } from '../mol/coloring';
 import {
@@ -452,6 +453,11 @@ export class ViewerController {
    * a per-chain rainbow answers a question nobody asked of a monomer.
    */
   async loadPrediction(slot: number, accession: string): Promise<void> {
+    if (isMgnifyAccession(accession)) {
+      await this.loadEsmPrediction(slot, accession);
+      return;
+    }
+
     const store = useStore.getState();
     try {
       const prediction = await fetchPrediction(accession);
@@ -463,6 +469,7 @@ export class ViewerController {
       useStore.getState().patchSlot(slot, {
         colorScheme: 'plddt',
         prediction: {
+          source: 'alphafold',
           accession: prediction.accession,
           uniprotId: prediction.uniprotId,
           description: prediction.description,
@@ -491,6 +498,103 @@ export class ViewerController {
     }
   }
 
+  /**
+   * Loads an ESMFold model by MGnify accession.
+   *
+   * The same shape as the AlphaFold path with two differences. The coordinates
+   * are legacy PDB, which the loader now recognises from its content since the
+   * address ends in an accession rather than an extension. And the Atlas
+   * publishes no summary document, so there is nothing to ask for the mean
+   * confidence — it is measured from the model instead, where pLDDT rides in
+   * the B-factor column exactly as AlphaFold's does.
+   */
+  async loadEsmPrediction(slot: number, accession: string): Promise<void> {
+    const store = useStore.getState();
+    const model = esmPrediction(accession);
+    try {
+      // Confirms the accession before the pane commits to it: a 404 reaching
+      // the worker surfaces as a parse failure with nothing useful to say.
+      await checkEsmAccession(accession);
+
+      await this.load(slot, model.accession, undefined, undefined, undefined, model.structureUrl);
+      if (useStore.getState().slots[slot].entryId !== model.accession) return;
+
+      this.rescaleEsmConfidence(slot);
+
+      useStore.getState().patchSlot(slot, {
+        colorScheme: 'plddt',
+        prediction: {
+          source: 'esm',
+          accession: model.accession,
+          uniprotId: '',
+          description: 'ESMFold prediction of a metagenomic sequence',
+          gene: null,
+          organism: null,
+          meanPlddt: this.meanConfidence(slot),
+          version: 0,
+          paeStatus: 'idle',
+          paeSize: 0,
+          paeMax: 0,
+          // Never 'idle': AlphaMissense is computed over UniProt and there is
+          // no such thing for a sequence nobody has named. Offering to fetch
+          // one would promise something that cannot exist.
+          missenseStatus: 'absent',
+          error: null,
+        },
+      });
+      this.data[slot].predictionUrls = { pae: model.paeUrl, missense: null, length: 0 };
+      this.rebuild(slot);
+    } catch (err) {
+      store.patchSlot(slot, {
+        status: 'error',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
+   * ESMFold writes pLDDT on a 0-1 scale where AlphaFold writes 0-100.
+   *
+   * Everything downstream assumes the hundred: the four confidence bands, the
+   * pLDDT colour ramp, the mean shown in the panel and what the assistant is
+   * told. Left alone, a model with a mean pLDDT of 91.7 — a good one — reports
+   * "0.9, very low" and paints itself entirely in the worst band, which is not
+   * a display bug so much as an inverted verdict.
+   *
+   * Normalised here rather than in the reader, because the reader has no
+   * business knowing that a B-factor column is holding confidence at all. The
+   * test is the range: pLDDT is a percentage, so a whole model at or below 1
+   * is a scale, not a structure of uniformly hopeless residues.
+   */
+  private rescaleEsmConfidence(slot: number): void {
+    const s = this.data[slot].structure;
+    if (!s || s.atomCount === 0) return;
+
+    let max = 0;
+    for (let a = 0; a < s.atomCount; a++) if (s.bFactor[a] > max) max = s.bFactor[a];
+    if (max === 0 || max > 1.001) return;
+
+    for (let a = 0; a < s.atomCount; a++) s.bFactor[a] *= 100;
+    const mutable = s as { bMin: number; bMax: number };
+    mutable.bMin = s.bMin * 100;
+    mutable.bMax = s.bMax * 100;
+  }
+
+  /** Mean pLDDT over backbone anchors, for a model that reports none itself. */
+  private meanConfidence(slot: number): number {
+    const s = this.getStructure(slot);
+    if (!s) return Number.NaN;
+    let sum = 0;
+    let n = 0;
+    for (let r = 0; r < s.residueCount; r++) {
+      const a = s.resAnchor[r];
+      if (a < 0) continue;
+      sum += s.bFactor[a];
+      n++;
+    }
+    return n > 0 ? sum / n : Number.NaN;
+  }
+
   /** The PAE matrix for a pane, fetched on first use. */
   async loadPae(slot: number): Promise<PaeMatrix | null> {
     const data = this.data[slot];
@@ -500,7 +604,11 @@ export class ViewerController {
 
     useStore.getState().updatePrediction(slot, { paeStatus: 'loading', error: null });
     try {
-      const pae = await fetchPae(url);
+      // Same quantity, different document: the Atlas serves a bare `pae`
+      // matrix with no stated maximum, AlphaFold a `predicted_aligned_error`
+      // with one.
+      const source = useStore.getState().slots[slot].prediction?.source;
+      const pae = source === 'esm' ? await fetchEsmPae(url) : await fetchPae(url);
       this.data[slot].pae = pae;
       useStore.getState().updatePrediction(slot, {
         paeStatus: 'ready', paeSize: pae.size, paeMax: pae.max,

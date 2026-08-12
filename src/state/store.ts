@@ -138,6 +138,14 @@ export const DEFAULT_SURFACE: SurfaceState = {
  * `n^2` floats and a large protein makes that a megabyte.
  */
 export interface PredictionState {
+  /**
+   * Which predictor made this. Not decoration: AlphaMissense exists only for
+   * AlphaFold's UniProt models, and a panel that cannot tell the two apart
+   * reports "no AlphaMissense annotation for this entry" about a metagenomic
+   * sequence that could never have one — which reads as a gap in the data
+   * rather than as a category that does not apply.
+   */
+  source: 'alphafold' | 'esm';
   accession: string;
   uniprotId: string;
   description: string;
