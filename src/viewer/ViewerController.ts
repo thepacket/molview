@@ -252,6 +252,17 @@ export class ViewerController {
   private lastX = 0;
   private lastY = 0;
   private dragDistance = 0;
+
+  /**
+   * Every pointer currently down, so a second finger can be recognised.
+   *
+   * Without this a two-finger pinch was two competing orbits: each `move`
+   * overwrote `lastX`/`lastY` with whichever finger reported last, and the
+   * camera lurched between them.
+   */
+  private pointers = new Map<number, { x: number; y: number }>();
+  /** Separation and midpoint of the two fingers at the last move. */
+  private pinch: { distance: number; midX: number; midY: number } | null = null;
   private lastHoverTime = 0;
   private lastFrameTime = 0;
   private frameAccumulator = 0;
@@ -2227,6 +2238,18 @@ export class ViewerController {
     useStore.getState().setActiveSlot(slot);
     if (!this.data[slot].structure) return;
 
+    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    // A second finger turns the gesture into a pinch. Whatever the first one
+    // had started — an orbit, a label drag — is abandoned rather than run
+    // alongside it, because the two fingers of a pinch both report moves and
+    // an orbit fed from both is a fight between them.
+    if (this.pointers.size === 2) {
+      this.beginPinch();
+      return;
+    }
+    if (this.pointers.size > 2) return;
+
     this.dragSlot = slot;
     this.dragDistance = 0;
     this.lastX = event.clientX;
@@ -2275,7 +2298,70 @@ export class ViewerController {
     return null;
   }
 
+  /** Current separation and midpoint of the first two pointers down. */
+  private pinchGeometry(): { distance: number; midX: number; midY: number } | null {
+    const [a, b] = [...this.pointers.values()];
+    if (!a || !b) return null;
+    return {
+      distance: Math.hypot(b.x - a.x, b.y - a.y),
+      midX: (a.x + b.x) / 2,
+      midY: (a.y + b.y) / 2,
+    };
+  }
+
+  private beginPinch(): void {
+    this.dragMode = 'none';
+    this.draggingLabel = null;
+    this.pinch = this.pinchGeometry();
+  }
+
+  /**
+   * Pinch to zoom, and slide two fingers to pan.
+   *
+   * Both drive the camera even when the pane is in move-model mode: that mode
+   * redirects *drags* onto the structure, and zooming is not something a
+   * structure can do to itself.
+   */
+  private handlePinch(): void {
+    const slot = this.dragSlot >= 0 ? this.dragSlot : useStore.getState().activeSlot;
+    const next = this.pinchGeometry();
+    if (!this.pinch || !next || !this.data[slot].structure) return;
+
+    const el = this.paneElements[slot];
+    const height = el?.clientHeight || 1;
+    const camera = this.engine.getCamera(slot);
+    const before = camera.getState();
+
+    // Fingers apart means closer, so the ratio is inverted against the wheel's.
+    if (this.pinch.distance > 1 && next.distance > 1) {
+      camera.zoom(this.pinch.distance / next.distance);
+    }
+    camera.pan(next.midX - this.pinch.midX, next.midY - this.pinch.midY, height);
+
+    // Counts as movement, or lifting the fingers is read as a tap and selects
+    // whatever happens to be under them.
+    this.dragDistance += Math.abs(next.midX - this.pinch.midX)
+      + Math.abs(next.midY - this.pinch.midY)
+      + Math.abs(next.distance - this.pinch.distance);
+
+    this.pinch = next;
+    if (useStore.getState().linkedCameras) {
+      this.applyLinkedDelta(slot, before, camera.getState());
+    }
+    this.invalidate();
+  }
+
   onPointerMove(event: PointerEvent): void {
+    const tracked = this.pointers.get(event.pointerId);
+    if (tracked) {
+      tracked.x = event.clientX;
+      tracked.y = event.clientY;
+    }
+    if (this.pinch) {
+      this.handlePinch();
+      return;
+    }
+
     if (this.draggingLabel) {
       // The offset is in the same pixel space the label shader lays out in, so
       // the label tracks the pointer exactly and stays put as the camera moves.
@@ -2410,6 +2496,28 @@ export class ViewerController {
   }
 
   onPointerUp(event: PointerEvent): void {
+    const wasPinching = this.pinch !== null;
+    this.pointers.delete(event.pointerId);
+
+    if (wasPinching) {
+      if (this.pointers.size >= 2) {
+        // Three fingers down and one lifted: carry on from the pair that is
+        // left rather than from a separation that no longer exists.
+        this.pinch = this.pinchGeometry();
+        return;
+      }
+      this.pinch = null;
+      // One finger still down. Resume orbiting from where it actually is, or
+      // the camera jumps by however far the fingers had travelled apart.
+      const remaining = [...this.pointers.values()][0];
+      if (remaining) {
+        this.lastX = remaining.x;
+        this.lastY = remaining.y;
+        this.dragMode = 'rotate';
+        return;
+      }
+    }
+
     if (this.draggingLabel) {
       this.draggingLabel = null;
       this.dragSlot = -1;

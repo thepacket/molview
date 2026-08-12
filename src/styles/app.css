@@ -760,6 +760,19 @@ textarea {
   min-width: 0;
   min-height: 0;
   background: var(--bg-void);
+  /*
+   * The canvas already declares this; the stage has to as well, because the
+   * pointer listeners live here and a touch can land on the pane overlay
+   * rather than on the canvas itself. Without it a two-finger pinch is a
+   * browser gesture and zooms the page instead of the molecule.
+   *
+   * The viewport meta says user-scalable=no, which iOS Safari has ignored
+   * since iOS 10 and is right to ignore — pinching to enlarge text is not
+   * negotiable. That is why this is scoped to the stage: page zoom stays
+   * available over the panels and the assistant, and is suppressed only where
+   * the gesture means something else.
+   */
+  touch-action: none;
 }
 
 .stage-canvas {

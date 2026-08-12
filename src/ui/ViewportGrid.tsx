@@ -46,20 +46,40 @@ export function ViewportGrid() {
     const wheel = (e: WheelEvent) => viewer.onWheel(e);
     const dbl = (e: MouseEvent) => viewer.onDoubleClick(e);
 
+    /*
+     * Safari's own pinch gesture, which is what actually zooms the page on an
+     * iPad. `touch-action: none` and the viewport meta are both insufficient
+     * on their own: iOS has ignored `user-scalable=no` since iOS 10, and these
+     * non-standard events fire alongside pointer events rather than instead of
+     * them. Refusing them here — on the stage only — leaves pinch-to-zoom
+     * working everywhere else in the app, which is where it belongs.
+     */
+    const gesture = (e: Event) => e.preventDefault();
+
     const el = containerRef.current;
     if (!el) return;
 
     el.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    // A gesture the browser takes over never sends pointerup, and a pointer
+    // left in the map would make the next single touch look like a pinch.
+    window.addEventListener('pointercancel', up);
     el.addEventListener('wheel', wheel, { passive: false });
     el.addEventListener('dblclick', dbl);
+    el.addEventListener('gesturestart', gesture, { passive: false });
+    el.addEventListener('gesturechange', gesture, { passive: false });
+    el.addEventListener('gestureend', gesture, { passive: false });
     return () => {
       el.removeEventListener('pointerdown', down);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
       el.removeEventListener('wheel', wheel);
       el.removeEventListener('dblclick', dbl);
+      el.removeEventListener('gesturestart', gesture);
+      el.removeEventListener('gesturechange', gesture);
+      el.removeEventListener('gestureend', gesture);
     };
   }, []);
 
