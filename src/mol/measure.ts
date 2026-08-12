@@ -78,7 +78,13 @@ export function torsionBetween(
 
   const x = dot(n1, n2);
   const y = dot(m, n2);
-  return (Math.atan2(y, x) * 180) / Math.PI;
+  // Negated for the IUPAC sign, which this returned the mirror image of until
+  // the Ramachandran work put it against an absolute reference. A torsion is
+  // one of the few measurements where sign is the whole content: -60 and +60
+  // are different conformers, and the magnitude alone does not say which you
+  // are looking at. Caught because an alpha helix came out at +63/+32 rather
+  // than -63/-43, and confirmed against proline, whose ring pins phi negative.
+  return (-Math.atan2(y, x) * 180) / Math.PI;
 }
 
 export function createMeasurement(
