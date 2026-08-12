@@ -70,24 +70,6 @@ contact report that does not name those two is wrong.
 The trap is the one the pockets feature already avoids — reporting a contact as
 an interaction. Distance and angle criteria are geometric; affinity is not.
 
-### Make absence visible: gaps and alternate conformations
-
-A disordered loop is not in the file, and the cartoon currently runs straight
-through the gap as though the chain were continuous. That is not a missing
-feature but a misleading picture, and it is misread constantly.
-
-Alternate conformations are the same shape of problem from the other side:
-`label_alt_id` and `occupancy` are parsed in `structure.ts` and then one
-conformer silently wins. A partially occupied side chain in an active site is
-exactly where the alternative matters.
-
-Both are cheap — a gap is a break in `auth_seq_id` within a chain, an altloc is
-a column already read. Draw the gap as a dashed line and mark it on the
-sequence track; let the alternates be switchable, and say when there are any.
-
-Fits the habit the app already has: show what the evidence does and does not
-support rather than drawing over the difference.
-
 ### A Ramachandran plot
 
 The standard artefact for judging a model, and MolView reports wwPDB's
@@ -173,6 +155,40 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **Absence, made visible** — gaps and alternate conformations, and both turned
+  out to be half-done or wrong rather than missing.
+
+  The dashed ribbon across unmodelled residues had already shipped in
+  `701a465`; this entry was written as though it had not. What was actually
+  missing was the sequence track, which ran 34, 37, 69 with nothing between the
+  cells and so read as a continuous chain.
+
+  The rule underneath both was wrong, and in the direction this feature exists
+  to prevent. It took any jump in `auth_seq_id` as a gap, so trypsin — numbered
+  by chymotrypsinogen alignment, jumping 34->37, 67->69 and four more across a
+  flat 3.8 Å with nothing missing — was drawn with six dashed gaps that do not
+  exist. The comment defending that rule cited 1KX5 chain C jumping 12 -> 15;
+  that chain runs 1 to 128 with no skips, and the example does not exist.
+  Numbering and geometry are now both consulted, against a threshold measured
+  from 49,852 certainly-real peptide bonds (median 3.80 Å, maximum 4.27 Å, so
+  4.2 Å admits all but 0.014%). A jump across less than that is a renumbering
+  and gets a hairline; across more, a hole. GFP supplied the second false
+  positive — Thr65-Tyr66-Gly67 is one CRO residue at position 66, and stepping
+  over it reported three residues missing from a continuous chain — so an
+  unrecognised component inside a polymer chain now ends the run and claims
+  nothing.
+
+  For alternates, the choice had to become per residue rather than per file:
+  only 3 of crambin's 17 alternate positions carry a C conformer, so selecting
+  C globally would strip fourteen side chains. 1EJG also settled the shape of
+  the feature, being a mixture of two natural isoforms — position 22 is Pro in
+  A and Ser in B and C, sharing one backbone N — so switching conformer changes
+  the sequence and not merely a side chain.
+
+  What is deliberately not done: occupancy is still not carried, so the 21%
+  conformer counts the same as the 57% one, and there is no way to draw two
+  conformers at once or to mix them per residue.
 
 - **1AKE reads low — resolved, and not ours.** The entry samples 0.56 sigma at
   its own atoms where every other entry tested reads 2.1-3.3. Ruled out, each by
