@@ -340,10 +340,12 @@ loading entries, building representations from selections, measuring, colouring,
 switching assemblies, superposing panes. Replies come back as one JSON object
 carrying prose plus a list of actions; each action is re-validated against live
 state before it runs, so a wrong chain id becomes a stated rejection rather than
-a silent no-op. Twenty action types cover loading, layout, components, colour,
-assemblies, focus, lighting, background, hydrogen bonds, measurement,
-interfaces, nucleotide styles, camera views, superposition, overlay and
-ensembles. Every one
+a silent no-op. Thirty action types cover loading and layout; components, colour and
+palette; assemblies, ensembles, overlay and superposition; camera views,
+focus, spin, clipping, lighting and background; measurement, hydrogen bonds,
+interfaces, ligand contacts and pockets; density maps, real-space fit and
+surfaces; validation and UniProt annotations; similarity search and predicted
+structures; and nucleotide styles. Every one
 is a reversible local view change, so they run without a confirmation step.
 **Clear** discards the rolling history as well as the visible transcript, and
 aborts a request in flight.
@@ -685,7 +687,8 @@ src/
                parser, wwPDB validation summary, density maps
   mol/         Structure model, element data, bond perception, colour schemes,
                selections, components, measurements, alignment, chain contacts,
-               loading worker
+               chain discontinuities, ligand contacts, pockets, density fit,
+               space groups, loading worker
   gfx/         WebGPU engine, camera, geometry generation, WGSL shaders, text,
                first-view orientation, marching-cubes isosurfaces
   ai/          Action vocabulary and executor, prompt, OpenRouter client,
@@ -769,7 +772,9 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
   counts the same as the 57% one everywhere it is used, including the density
   correlation. Atoms deposited at zero occupancy are dropped outright, which is
   why 1KX5's histone tails read as unmodelled: the coordinates are there and
-  the occupancies are 0.00.
+  the occupancies are 0.00. The assistant is told which conformers an entry
+  carries and which is drawn, so it will not describe one as the whole story,
+  but there is no action for switching: that is a control, not a conversation.
 - A chain discontinuity is classified from numbering and geometry together, and
   the classification can be wrong in one direction. A component inside a
   polymer chain that is not in the recognised residue lists — a fused
