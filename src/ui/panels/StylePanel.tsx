@@ -115,6 +115,11 @@ export function StylePanel() {
   ];
   const activeAssembly = structure.assemblies.find((a) => a.id === slot.assemblyId);
 
+  let altResidueCount = 0;
+  for (let r = 0; r < structure.residueCount; r++) {
+    if (structure.resAltCount[r] > 0) altResidueCount++;
+  }
+
   return (
     <>
       {structure.assemblies.length > 0 && (
@@ -186,6 +191,26 @@ export function StylePanel() {
                 + 'of them and the spread between them is visible directly.'
               : 'NMR depositions contain several models of the same molecule. The '
                 + 'camera stays put as you step through them.'}
+          </p>
+        </div>
+      )}
+
+      {structure.altLocs.length > 1 && (
+        <div className="panel-section">
+          <div className="section-label"><span>Conformations</span></div>
+          <Field label="Alternate" value={`${altResidueCount} residues`}>
+            <Segmented
+              value={structure.altLoc}
+              options={structure.altLocs.map((a) => ({ value: a, label: a }))}
+              onChange={(v) => void viewer.setAltLoc(activeSlot, v)}
+            />
+          </Field>
+          <p style={{ fontSize: 10.5, color: 'var(--text-faint)', lineHeight: 1.5, marginTop: 7 }}>
+            {altResidueCount} residue{altResidueCount === 1 ? ' was' : 's were'} modelled
+            in more than one position, because the density supported more than one.
+            Only one is drawn at a time; they are underlined on the sequence track.
+            A residue with no copy of {structure.altLoc} keeps its own first
+            conformer rather than disappearing.
           </p>
         </div>
       )}

@@ -60,6 +60,8 @@ export interface LoadOptions {
   file?: { buffer: ArrayBuffer; name: string };
   modelNum?: number;
   allModels?: boolean;
+  /** Which alternate conformation to build; defaults to the file's first. */
+  altLoc?: string;
   /** Fetch from here rather than from the PDB, as AlphaFold models do. */
   sourceUrl?: string;
 }

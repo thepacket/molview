@@ -11,6 +11,7 @@ import { ACTION_REFERENCE } from './actionTypes';
 import { responseSchemaForPrompt, structuredOutputsActive } from './openrouter';
 import { COLOR_SCHEME_LABELS } from '../mol/coloring';
 import { validationForPrompt } from '../rcsb/validation';
+import { findChainGaps, unmodelledResidueCount } from '../mol/gaps';
 import { MolKind } from '../mol/structure';
 import { SELECTION_KEYWORDS } from '../mol/selection';
 import { LAYOUT_SLOT_COUNT, useStore } from '../state/store';
@@ -109,6 +110,8 @@ export function sceneContext(): string {
       }
     }
 
+    const unmodelled = unmodelledResidueCount(findChainGaps(structure));
+
     panes.push({
       pane: i + 1,
       active: i === state.activeSlot,
@@ -128,6 +131,14 @@ export function sceneContext(): string {
       assembliesAvailable: structure.assemblies.map((a) => `${a.id} (${a.totalCopies}x)`),
       models: structure.modelCount,
       showingAllModels: structure.modelNum === 0,
+      // Absence, stated. Without these the model reasons from the sequence it
+      // can see and answers "residue 65 is Ser" about a residue nobody
+      // observed, or describes a side chain as though one conformation were
+      // the whole story.
+      unmodelledResidues: unmodelled > 0 ? unmodelled : undefined,
+      alternateConformations: structure.altLocs.length > 1
+        ? `${structure.altLocs.join('/')}, showing ${structure.altLoc}`
+        : undefined,
       components: state.slots[i].components.map((c) => `${c.name}="${c.selection}"`),
       colorScheme: slot.colorScheme,
       measurements: slot.measurements.map((m) => `${m.kind} ${m.label}`),

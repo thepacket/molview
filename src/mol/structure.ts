@@ -54,6 +54,12 @@ export interface Structure {
   readonly resAtomStart: Uint32Array;
   /** Backbone anchor (CA for protein, C4' for nucleic), or -1. */
   readonly resAnchor: Int32Array;
+  /**
+   * Alternate conformations this residue carries *beyond* the one built. Zero
+   * for the ordinary case. A non-zero entry is the model saying it could not
+   * decide, which is worth showing rather than resolving silently.
+   */
+  readonly resAltCount: Uint8Array;
   /** Carbonyl O (protein) or C1' (nucleic) used to orient the ribbon, or -1. */
   readonly resOrient: Int32Array;
 
@@ -86,6 +92,13 @@ export interface Structure {
   /** Model actually built, and how many the file contains (NMR ensembles). */
   readonly modelNum: number;
   readonly modelCount: number;
+  /**
+   * Alternate conformation ids the file carries, sorted. Empty for the great
+   * majority of entries, which model one conformation and say nothing.
+   */
+  readonly altLocs: string[];
+  /** Which alternate was built; empty when the file offers no choice. */
+  readonly altLoc: string;
 }
 
 export interface CrystalInfo {
@@ -227,6 +240,12 @@ export interface BuildOptions {
   /** Keep every model, as separate chains, for ensemble overlays. */
   allModels?: boolean;
   includeWater?: boolean;
+  /**
+   * Which alternate conformation to build. Defaults to the first id in the
+   * file. A residue that does not carry the requested one falls back to its
+   * own first alternate rather than vanishing.
+   */
+  altLoc?: string;
 }
 
 export function buildStructure(
@@ -270,11 +289,106 @@ export function buildStructure(
   }
   if (models.length === 0) models.push(1);
 
+  let altLocList: string[] = [];
+  let builtAlt = '';
   const allModels = options.allModels ?? false;
   const requested = options.modelNum;
   const targetModel = requested !== undefined && models.includes(requested)
     ? requested
     : models[0];
+
+  // -------------------------------------------------------------------------
+  // Alternate conformations
+  //
+  // Resolved before the main pass because the choice is per residue, not per
+  // file. Taking altloc A globally looks right until a residue is modelled as
+  // B and C only — crambin at 0.54 A does exactly this at Ser22 and Ile25 —
+  // and then every atom of it is filtered out and the residue disappears from
+  // the model with nothing said.
+  //
+  // Grouping is by chain and sequence position rather than by residue name,
+  // because a residue can be modelled as two different components (one
+  // conformer SER, the other ALA), and those still have to resolve to one
+  // choice.
+  // -------------------------------------------------------------------------
+  const altIds = new Set<string>();
+  const isRealAlt = (i: number): boolean => {
+    if (!fAltLoc.isDefined || fAltLoc.isNull(i)) return false;
+    const a = fAltLoc.str(i);
+    return a !== '' && a !== '.' && a !== '?';
+  };
+
+  // Most entries have none, and a Map keyed by string over half a million
+  // atoms is not free, so establish that first and skip the rest when we can.
+  let anyAlt = false;
+  if (fAltLoc.isDefined) {
+    for (let i = 0; i < n; i++) {
+      if (isRealAlt(i)) { anyAlt = true; break; }
+    }
+  }
+
+  /** Residue key -> the conformer that residue will contribute. */
+  const effectiveAlt = new Map<string, string>();
+  /** Residue key -> conformers *not* built, so the UI can mark the residue. */
+  const altCountFor = new Map<string, number>();
+  /**
+   * Residue key -> the component name the chosen conformer uses, but only
+   * where the conformers disagree about it.
+   *
+   * They can. Crambin crystallises as a mixture of two natural isoforms, so
+   * 1EJG position 22 is PRO in conformer A and SER in B and C, sharing one
+   * backbone N that carries no altloc at all. Residue identity includes the
+   * component name, so without this the shared atom keeps the name of the
+   * conformer that is not being drawn and splits off as a one-atom residue of
+   * its own.
+   */
+  const compFor = new Map<string, string>();
+  if (anyAlt) {
+    const perResidue = new Map<string, Set<string>>();
+    /** Residue key -> conformer -> component name, to spot disagreement. */
+    const perResidueComp = new Map<string, Map<string, string>>();
+    for (let i = 0; i < n; i++) {
+      const rowModel = fModel.isDefined ? fModel.num(i) : 1;
+      if (!allModels && fModel.isDefined && rowModel !== targetModel) continue;
+      if (!isRealAlt(i)) continue;
+      const alt = fAltLoc.str(i);
+      altIds.add(alt);
+
+      const authAsym = fAuthAsym.isDefined ? fAuthAsym.str(i) : fLabelAsym.str(i);
+      const labelAsym = fLabelAsym.isDefined ? fLabelAsym.str(i) : authAsym;
+      const seq = fAuthSeq.isDefined && !fAuthSeq.isNull(i) ? fAuthSeq.num(i) : fLabelSeq.num(i);
+      const ins = fInsCode.isDefined && !fInsCode.isNull(i) ? fInsCode.str(i) : '';
+      const key = allModels
+        ? `${rowModel}|${labelAsym}|${authAsym}|${seq}|${ins}`
+        : `${labelAsym}|${authAsym}|${seq}|${ins}`;
+
+      let set = perResidue.get(key);
+      if (!set) { set = new Set(); perResidue.set(key, set); }
+      set.add(alt);
+
+      let comps = perResidueComp.get(key);
+      if (!comps) { comps = new Map(); perResidueComp.set(key, comps); }
+      comps.set(alt, (fCompId.isDefined ? fCompId.str(i) : fAuthComp.str(i)).toUpperCase());
+    }
+
+    const sorted = [...altIds].sort();
+    const wanted = options.altLoc && sorted.includes(options.altLoc)
+      ? options.altLoc
+      : sorted[0];
+    for (const [key, set] of perResidue) {
+      const chosen = set.has(wanted) ? wanted : [...set].sort()[0];
+      effectiveAlt.set(key, chosen);
+      altCountFor.set(key, set.size - 1);
+
+      const comps = perResidueComp.get(key);
+      if (comps && new Set(comps.values()).size > 1) {
+        const chosenComp = comps.get(chosen);
+        if (chosenComp) compFor.set(key, chosenComp);
+      }
+    }
+    altLocList = sorted;
+    builtAlt = wanted;
+  }
 
   const names = new NameTable();
   const ax = new F32(), ay = new F32(), az = new F32();
@@ -289,6 +403,7 @@ export function buildStructure(
   const resAtomStart: number[] = [];
   const resAnchor: number[] = [];
   const resOrient: number[] = [];
+  const resAltCount: number[] = [];
 
   const chainAuthId: string[] = [];
   const chainLabelId: string[] = [];
@@ -317,20 +432,33 @@ export function buildStructure(
     const rowModel = fModel.isDefined ? fModel.num(i) : 1;
     if (!allModels && fModel.isDefined && rowModel !== targetModel) continue;
 
-    // Keep only the dominant alternate conformation.
-    if (fAltLoc.isDefined && !fAltLoc.isNull(i)) {
-      const alt = fAltLoc.str(i);
-      if (alt !== '' && alt !== '.' && alt !== 'A' && alt !== '1') continue;
-    }
     if (fOccupancy.isDefined && fOccupancy.num(i) === 0) continue;
 
-    const comp = (fCompId.isDefined ? fCompId.str(i) : fAuthComp.str(i)).toUpperCase();
+    let comp = (fCompId.isDefined ? fCompId.str(i) : fAuthComp.str(i)).toUpperCase();
     if (!includeWater && isWater(comp)) continue;
 
     const authAsym = fAuthAsym.isDefined ? fAuthAsym.str(i) : fLabelAsym.str(i);
     const labelAsym = fLabelAsym.isDefined ? fLabelAsym.str(i) : authAsym;
     const seq = fAuthSeq.isDefined && !fAuthSeq.isNull(i) ? fAuthSeq.num(i) : fLabelSeq.num(i);
     const ins = fInsCode.isDefined && !fInsCode.isNull(i) ? fInsCode.str(i) : '';
+
+    // Atoms with no altloc are the part every conformer shares — usually the
+    // backbone — so they are always kept. The rest have to match the choice
+    // made for this particular residue.
+    let altHere = 0;
+    if (anyAlt) {
+      const altKey = allModels
+        ? `${rowModel}|${labelAsym}|${authAsym}|${seq}|${ins}`
+        : `${labelAsym}|${authAsym}|${seq}|${ins}`;
+      if (isRealAlt(i)) {
+        const chosen = effectiveAlt.get(altKey);
+        if (chosen !== undefined && fAltLoc.str(i) !== chosen) continue;
+        altHere = altCountFor.get(altKey) ?? 0;
+      }
+      // Only set where the conformers disagree about the component, so an
+      // ordinary alternate side chain never has its name rewritten.
+      comp = compFor.get(altKey) ?? comp;
+    }
 
     // With the whole ensemble loaded the model is part of chain identity, so
     // a ribbon never runs from one model into the next.
@@ -362,9 +490,14 @@ export function buildStructure(
       resAtomStart.push(aRes.length);
       resAnchor.push(-1);
       resOrient.push(-1);
+      resAltCount.push(0);
       pendingNames = new Set();
       pendingStart = aRes.length;
     }
+    // Taken as a maximum rather than assigned: the first atom of the residue
+    // is usually shared backbone carrying no altloc at all, so assigning here
+    // would record zero for every residue that has alternates.
+    if (altHere > resAltCount[resIdx]) resAltCount[resIdx] = altHere;
 
     const name = fAtomId.str(i).replace(/"/g, '');
     const px = fX.num(i), py = fY.num(i), pz = fZ.num(i);
@@ -437,6 +570,7 @@ export function buildStructure(
     resAtomStart: Uint32Array.from(resAtomStart),
     resAnchor: Int32Array.from(resAnchor),
     resOrient: Int32Array.from(resOrient),
+    resAltCount: Uint8Array.from(resAltCount),
     chainCount,
     chainAuthId,
     chainLabelId,
@@ -452,6 +586,8 @@ export function buildStructure(
     crystal: parseCrystal(block),
     modelNum: allModels ? 0 : targetModel,
     modelCount: models.length,
+    altLocs: altLocList,
+    altLoc: builtAlt,
   };
 
   assignSecondaryStructure(block, structure);

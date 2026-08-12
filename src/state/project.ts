@@ -53,6 +53,11 @@ interface PaneDocument {
   fromFile?: boolean;
   assemblyId: string;
   modelNum?: number;
+  /**
+   * Only written when the entry offers a choice, so an ordinary project stays
+   * free of a field that would mean nothing on reload.
+   */
+  altLoc?: string;
   components: Omit<Component, 'id'>[];
   representation: {
     showHydrogens: boolean;
@@ -175,6 +180,7 @@ export function serialiseProject(_options: SerialiseOptions = {}): ProjectDocume
       modelNum: structure?.modelCount && structure.modelCount > 1
         ? structure.modelNum
         : undefined,
+      altLoc: structure && structure.altLocs.length > 1 ? structure.altLoc : undefined,
       components: slot.components.map(({ id: _id, ...rest }) => rest),
       representation: {
         showHydrogens: slot.representation.showHydrogens,
@@ -342,10 +348,12 @@ export async function restoreProject(doc: ProjectDocument): Promise<RestoreRepor
         await viewer.load(
           i, pane.entryId,
           new File([bytes as BlobPart], pane.file.name),
-          pane.modelNum,
+          pane.modelNum, undefined, undefined, pane.altLoc,
         );
       } else {
-        await viewer.load(i, pane.entryId, undefined, pane.modelNum);
+        await viewer.load(
+          i, pane.entryId, undefined, pane.modelNum, undefined, undefined, pane.altLoc,
+        );
       }
     } catch (err) {
       report.failures.push(

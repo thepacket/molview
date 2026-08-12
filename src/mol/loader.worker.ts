@@ -29,6 +29,8 @@ export interface LoadRequest {
   modelNum?: number;
   /** Build every model at once, for an ensemble overlay. */
   allModels?: boolean;
+  /** Which alternate conformation to build; defaults to the file's first. */
+  altLoc?: string;
 }
 
 export interface CancelRequest {
@@ -55,7 +57,7 @@ function transferablesOf(s: Structure, bonds: BondList): Transferable[] {
     s.x.buffer, s.y.buffer, s.z.buffer, s.element.buffer, s.bFactor.buffer,
     s.atomNameId.buffer, s.atomResidue.buffer, s.resNameId.buffer, s.resSeq.buffer,
     s.resChain.buffer, s.resSS.buffer, s.resKind.buffer, s.resAtomStart.buffer,
-    s.resAnchor.buffer, s.resOrient.buffer, s.chainKind.buffer,
+    s.resAnchor.buffer, s.resOrient.buffer, s.resAltCount.buffer, s.chainKind.buffer,
     s.chainResStart.buffer, s.chainModel.buffer, s.center.buffer, bonds.indices.buffer,
   ] as Transferable[];
 }
@@ -110,6 +112,7 @@ async function handleLoad(req: LoadRequest): Promise<void> {
     const structure = buildStructure(block, req.entryId.toUpperCase(), title, {
       modelNum: req.modelNum,
       allModels: req.allModels,
+      altLoc: req.altLoc,
     });
 
     if (controller.signal.aborted) return;

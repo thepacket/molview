@@ -300,14 +300,17 @@ export class ViewerController {
 
   async load(
     slot: number, entryId: string, file?: File, modelNum?: number,
-    allModels?: boolean, sourceUrl?: string,
+    allModels?: boolean, sourceUrl?: string, altLoc?: string,
   ): Promise<void> {
     const store = useStore.getState();
     const id = entryId.trim().toUpperCase();
     if (!id && !file) return;
 
     this.data[slot].loadHandle?.cancel();
-    const keepCamera = (modelNum !== undefined || allModels !== undefined)
+    // Switching conformer or model is a rebuild of the same molecule, so the
+    // camera stays where it was. Flying back to a default view would lose the
+    // active site the switch was made to look at.
+    const keepCamera = (modelNum !== undefined || allModels !== undefined || altLoc !== undefined)
       && store.slots[slot].entryId === entryId.trim().toUpperCase();
     // A map belongs to the structure it was fetched for. Leaving it up would
     // draw one entry's density around another's model, which is the single
@@ -374,7 +377,7 @@ export class ViewerController {
         progressLoaded: p.loaded,
         progressTotal: p.total,
       });
-    }, { file: fileData, modelNum, allModels, sourceUrl });
+    }, { file: fileData, modelNum, allModels, sourceUrl, altLoc });
 
     this.data[slot].loadHandle = handle;
 
@@ -1814,6 +1817,28 @@ export class ViewerController {
     const entryId = useStore.getState().slots[slot].entryId;
     if (!entryId) return;
     await this.load(slot, entryId, undefined, modelNum);
+  }
+
+  /**
+   * Rebuilds a pane showing a different alternate conformation. A refetch
+   * rather than a filter over what is already in memory, because the discarded
+   * conformer's atoms were never loaded — which is the same reason switching
+   * NMR models goes back to the file.
+   */
+  async setAltLoc(slot: number, altLoc: string): Promise<void> {
+    const state = useStore.getState().slots[slot];
+    const entryId = state.entryId;
+    if (!entryId) return;
+    const structure = this.getStructure(slot);
+    await this.load(
+      slot, entryId, undefined,
+      // Carry the current model through, or switching conformer would silently
+      // drop an ensemble back to model 1.
+      structure && structure.modelCount > 1 && structure.modelNum !== 0
+        ? structure.modelNum : undefined,
+      structure?.modelNum === 0 ? true : undefined,
+      undefined, altLoc,
+    );
   }
 
   /**

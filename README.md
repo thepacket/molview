@@ -396,13 +396,39 @@ double-clicking to fly the camera in leaves you looking at something marked
 rather than at an anonymous part of the structure — which matters most on
 nucleic acids, where adjacent base slabs are identical. A single-atom
 residue, an ion or a water, gets a small cross instead of a cage.
-The sequence track is built from the loaded coordinates, so gaps in the model
-appear as gaps and every residue you click actually exists in the scene. Where
-a depositor left residues unmodelled the ribbon stops and a dashed Catmull-Rom
-curve carries on to the next observed residue — the chain is continuous there,
-the coordinates are not, and neither a solid ribbon nor a bare hole says that.
-The disordered histone tails of `1KX5` are the case to look at. Chains
-can be hidden or focused individually.
+The sequence track is built from the loaded coordinates, so every residue you
+click actually exists in the scene. Chains can be hidden or focused
+individually.
+
+**Absence, drawn rather than skipped over.** Where a depositor left residues
+unmodelled the ribbon stops and a dashed Catmull-Rom curve carries on to the
+next observed residue — the chain is continuous there, the coordinates are not,
+and neither a solid ribbon nor a bare hole says that. The same break is marked
+on the sequence track with the number of residues missing, and the chain header
+counts them, because a track that simply runs 34, 37, 69 reads as a continuous
+chain. The disordered histone tails of `1KX5` are the case to look at.
+
+Which breaks are real is decided from numbering and geometry together, and
+neither alone would do. Author numbering is a convention that sometimes skips:
+trypsin is numbered by chymotrypsinogen alignment and jumps 34→37, 67→69,
+125→127, 130→132, 204→209 and 217→219 with nothing missing at any of them, each
+across a flat 3.8 Å — so `3PTB` used to be drawn with six dashed gaps that do
+not exist. The threshold separating the two comes from the files: across 49,852
+consecutively numbered residues the CA–CA distance has median 3.80 Å and
+maximum 4.27 Å, so a numbering jump across less than 4.2 Å is a renumbering and
+gets a hairline on the track rather than a gap marker. A jump across more than
+that is a hole. Geometry alone catches the opposite case, a file whose
+numbering is consecutive across ends that cannot be bonded.
+
+**Alternate conformations.** A residue modelled in two or three positions
+because the density supported more than one is underlined on the sequence
+track, and the pane can be switched between the conformers the file carries.
+Crambin at 0.54 Å (`1EJG`) is the case to look at: it is a mixture of two
+natural isoforms, so position 22 is Pro in conformer A and Ser in B and C, and
+25 is Leu against Ile — switching changes the sequence, not just a side chain.
+A residue with no copy of the selected conformer keeps its own first one rather
+than disappearing, which is not a nicety: only 3 of that entry's 17 alternate
+positions have a C at all.
 
 **Figures that explain themselves.** A colour key for the pane's scheme, drawn
 over the canvas *and* painted into screenshots and recordings — a legend that
@@ -736,9 +762,20 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
 - Secondary structure comes from the file's `struct_conf` / `struct_sheet_range`
   records. When a file carries none, a Cα-geometry heuristic stands in; it is
   not DSSP and will differ at the edges of helices and strands.
-- Only the dominant alternate conformation is read; altloc B and beyond are
-  discarded. Occupancy is not carried on the model either, so a half-occupied
-  atom counts whole everywhere it is used, including the density correlation.
+- One alternate conformation is drawn at a time, and which one is a per-pane
+  choice rather than a per-residue one — there is no way to show conformer A of
+  one residue beside B of its neighbour, and no way to draw both at once.
+  Occupancy is not carried on the model either, so the 21%-occupied conformer
+  counts the same as the 57% one everywhere it is used, including the density
+  correlation. Atoms deposited at zero occupancy are dropped outright, which is
+  why 1KX5's histone tails read as unmodelled: the coordinates are there and
+  the occupancies are 0.00.
+- A chain discontinuity is classified from numbering and geometry together, and
+  the classification can be wrong in one direction. A component inside a
+  polymer chain that is not in the recognised residue lists — a fused
+  chromophore like GFP's CRO, an unusual modified residue — ends the run rather
+  than being counted across, so a real gap adjacent to one is not reported.
+  That is deliberate: nothing is claimed where nothing can be known.
 - The computed real-space correlation is not on wwPDB's scale and must not be
   read against published thresholds. It agrees with their per-residue RSCC at
   r = 0.62 and runs about 0.2 lower, for reasons given where the feature is
