@@ -344,6 +344,16 @@ textarea {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  /*
+   * Reserve the scrollbar's width whether or not it is showing. Without this
+   * the panel's content width depends on its content height, which is a loop
+   * waiting for something to close it: the Ramachandran plot is sized as a
+   * percentage of the width and made square by aspect-ratio, so a caption that
+   * grew or shrank by one line toggled the scrollbar, changed the width by
+   * nine pixels, changed the plot's height by nine pixels, and toggled the
+   * scrollbar back. It bounced.
+   */
+  scrollbar-gutter: stable;
 }
 
 .panel-section {
@@ -2350,6 +2360,9 @@ textarea {
   margin: 8px 0 6px;
   display: flex;
   justify-content: center;
+  /* Not stretch: a flex item with height:auto and an aspect-ratio should take
+     its height from its width, not from whatever the row happens to be. */
+  align-items: flex-start;
 }
 
 /*
@@ -2388,7 +2401,26 @@ textarea {
   color: var(--text-faint);
   line-height: 1.5;
   margin-top: 6px;
-  min-height: 2.4em;
+}
+
+/*
+ * The hover readout is one line, always, whether or not anything is under the
+ * pointer. Swapping it with the caption below made the section change height
+ * on every hover, which is how the bouncing started.
+ */
+.rama-readout {
+  height: 16px;
+  line-height: 16px;
+  font-size: 10.5px;
+  font-family: var(--mono);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rama-readout[data-empty='true'] {
+  color: var(--text-faint);
 }
 
 .rama-outlier-head {

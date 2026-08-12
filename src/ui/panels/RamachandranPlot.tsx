@@ -228,11 +228,13 @@ export function RamachandranPlot({ slot }: { slot: number }) {
         <span className="rama-axis rama-axis-y">ψ</span>
       </div>
 
+      <p className="rama-readout" data-empty={hover ? undefined : 'true'}>
+        {hover ? describe(hover) : 'Hover a point for its residue and angles'}
+      </p>
+
       <p className="rama-note">
-        {hover
-          ? describe(hover)
-          : 'Contours enclose 98% and 99.95% of a reference set measured from '
-            + '900 structures at 1.5 Å or better. Click a point to select its residue.'}
+        Contours enclose 98% and 99.95% of a reference set measured from 900
+        structures at 1.5 Å or better. Click a point to select its residue.
       </p>
 
       {outliers.length > 0 && (
