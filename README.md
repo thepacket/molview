@@ -1019,6 +1019,8 @@ is genuinely useful and gets read.
 
 ## Licence
 
+Copyright (c) 2026 Andre Paquette
+
 [MIT](LICENSE). The dependencies are all permissive too — MIT, ISC, and
 DOMPurify under your choice of MPL-2.0 or Apache-2.0 — so a fork carries no
 copyleft obligation. Structures come from the RCSB PDB, whose data is in the
