@@ -90,6 +90,23 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 
 ## Done
 
+- **Dragging a listed structure into a pane** (`9403325`) — a click loads into
+  the active pane, so filling the second one was click, retarget, click, and
+  the retarget is the step people forget. A drag names the pane in the same
+  gesture. The shape and sequence hits gain most from it: a match is worth
+  having beside the structure it resembles rather than on top of it.
+
+  The entry travels as a private MIME type rather than as `text/plain` alone,
+  so a pane can tell one of our rows from a stray selection, and the payload is
+  shape-checked on arrival rather than trusted — any page can start a drag. The
+  pane also stopped accepting every drag that crosses the stage, which it had
+  been doing since the file drop was written.
+
+  Verified through dispatched drag events, which covers the handlers but not
+  Chrome's decision to start a drag from a `<button draggable>` — CDP's
+  synthetic mouse input will not initiate HTML5 drag-and-drop. Safari needs
+  `-webkit-user-drag: element` to arm a form control at all, and has that.
+
 - **Real-space correlation per residue** (`b45a650`) — density calculated from
   the model, correlated against the map over each residue's own envelope. It
   exists because MolView holds map and model in the same client, and it answers
