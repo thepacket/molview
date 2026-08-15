@@ -669,6 +669,14 @@ textarea {
   background: var(--bg-hover);
 }
 
+/* A result is a button and a drag source at once. Safari will not start a drag
+   on a form control from the `draggable` attribute alone — this is the WebKit
+   property that arms it — and Chrome, where the attribute is enough already,
+   sees no difference. */
+.result[draggable='true'] {
+  -webkit-user-drag: element;
+}
+
 .result[data-loaded='true'] {
   background: rgba(72, 214, 255, 0.06);
   box-shadow: inset 2px 0 0 var(--accent);

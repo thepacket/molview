@@ -71,6 +71,12 @@ quad layouts. Each pane has an independent camera, representation, colour
 scheme and shading, or you can link the cameras so rotating one rotates all of
 them — the usual way to compare two structures.
 
+Clicking a search result loads it into the active pane; dragging one onto a
+pane loads it there and makes that pane active. The drag is the shorter way to
+fill the second pane, which is the whole of setting up a comparison — and the
+list of shape and sequence matches is where it earns most, since a hit belongs
+beside the structure it resembles rather than on top of it.
+
 **Macromolecules.** Coordinates arrive as BinaryCIF, decoded in a worker so the
 interface never blocks. The 2.44M-atom HIV-1 capsid (PDB `3J3Q`, a 113 MB
 download) loads and renders in about ten seconds.
@@ -844,6 +850,7 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
 | Zoom | wheel |
 | Focus a residue | double-click |
 | Select | click |
+| Load a listed structure into a chosen pane | drag the row onto it |
 | Command palette | ⌘K |
 | Search | ⌘F |
 | Panes 1–4 | `1` `2` `3` `4` |

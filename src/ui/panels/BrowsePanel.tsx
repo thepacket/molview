@@ -9,6 +9,7 @@ import { validationBadge } from '../../rcsb/validation';
 import { useStore, visibleSlotCount } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Chip, Field, Select, Slider, Tip } from '../controls';
+import { entryDragProps } from '../dragEntry';
 import { PredictedSearch } from './PredictedSearch';
 import { SimilarSection } from './SimilarSection';
 
@@ -334,7 +335,9 @@ export function BrowsePanel() {
                 type="button"
                 className="result"
                 data-loaded={loadedIds.has(f.id)}
+                title={`Click to load into pane ${activeSlot + 1}, or drag onto any pane`}
                 onClick={() => openEntry(f.id)}
+                {...entryDragProps({ kind: 'pdb', id: f.id })}
               >
                 <div className="result-top">
                   <span className="pdb-id">{f.id}</span>
@@ -361,6 +364,7 @@ export function BrowsePanel() {
                 key={e.id}
                 entry={e}
                 loaded={loadedIds.has(e.id)}
+                activeSlot={activeSlot}
                 onOpen={() => openEntry(e.id)}
               />
             ))}
@@ -391,14 +395,22 @@ export function BrowsePanel() {
   );
 }
 
-function ResultRow({ entry, loaded, onOpen }: {
+function ResultRow({ entry, loaded, activeSlot, onOpen }: {
   entry: EntrySummary;
   loaded: boolean;
+  activeSlot: number;
   onOpen: () => void;
 }) {
   const badge = validationBadge(entry.validation, entry.method);
   return (
-    <button type="button" className="result" data-loaded={loaded} onClick={onOpen}>
+    <button
+      type="button"
+      className="result"
+      data-loaded={loaded}
+      title={`Click to load into pane ${activeSlot + 1}, or drag onto any pane`}
+      onClick={onOpen}
+      {...entryDragProps({ kind: 'pdb', id: entry.id })}
+    >
       <div className="result-top">
         <span className="pdb-id">{entry.id}</span>
         {entry.releaseDate && (

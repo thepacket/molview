@@ -13,6 +13,9 @@ import { LAYOUT_SLOT_COUNT, useStore, type SlotState } from '../state/store';
 import { viewer } from '../viewer/ViewerController';
 import { Tip } from './controls';
 import { ColorKeyOverlay } from './ColorKeyOverlay';
+import {
+  draggingEntry, hasEntryDrag, hasFileDrag, loadDraggedEntry, readEntryDrag, type DragEntry,
+} from './dragEntry';
 
 export function ViewportGrid() {
   const layout = useStore((s) => s.layout);
@@ -20,7 +23,7 @@ export function ViewportGrid() {
   const activeSlot = useStore((s) => s.activeSlot);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [dropTarget, setDropTarget] = useState<number | null>(null);
+  const [drop, setDrop] = useState<{ slot: number; entry: DragEntry | null } | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
 
   const count = LAYOUT_SLOT_COUNT[layout];
@@ -83,6 +86,19 @@ export function ViewportGrid() {
     };
   }, []);
 
+  // A drag cancelled with Escape, or dropped somewhere else entirely, leaves
+  // no dragleave behind on the pane it was last over — so the highlight is
+  // cleared from the one event that always arrives.
+  useEffect(() => {
+    const clear = () => setDrop(null);
+    window.addEventListener('dragend', clear);
+    window.addEventListener('drop', clear);
+    return () => {
+      window.removeEventListener('dragend', clear);
+      window.removeEventListener('drop', clear);
+    };
+  }, []);
+
   // Representation, colour and shading edits are reconciled once per change.
   useEffect(() => useStore.subscribe(() => viewer.syncSettings()), []);
 
@@ -109,8 +125,8 @@ export function ViewportGrid() {
             index={i}
             slot={slots[i]}
             active={i === activeSlot}
-            dropping={dropTarget === i}
-            onDropTarget={setDropTarget}
+            dropping={drop?.slot === i ? drop : null}
+            onDropTarget={setDrop}
           />
         ))}
       </div>
@@ -122,8 +138,8 @@ function Pane({ index, slot, active, dropping, onDropTarget }: {
   index: number;
   slot: SlotState;
   active: boolean;
-  dropping: boolean;
-  onDropTarget: (slot: number | null) => void;
+  dropping: { entry: DragEntry | null } | null;
+  onDropTarget: (target: { slot: number; entry: DragEntry | null } | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const patchSlot = useStore((s) => s.patchSlot);
@@ -157,15 +173,26 @@ function Pane({ index, slot, active, dropping, onDropTarget }: {
           className="pane"
           data-active={active}
           onPointerDown={() => setActiveSlot(index)}
-          onDragOver={(e) => { e.preventDefault(); onDropTarget(index); }}
+          onDragOver={(e) => {
+            // Anything else dragged over the stage — a text selection, an
+            // image, a link — is left to the browser, which is what declining
+            // to preventDefault means.
+            if (!hasFileDrag(e.dataTransfer) && !hasEntryDrag(e.dataTransfer)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            onDropTarget({ slot: index, entry: draggingEntry() });
+          }}
           onDragLeave={() => onDropTarget(null)}
           onDrop={(e) => {
+            const file = e.dataTransfer.files?.[0];
+            const entry = readEntryDrag(e.dataTransfer);
+            if (!file && !entry) return;
             e.preventDefault();
             onDropTarget(null);
-            const file = e.dataTransfer.files?.[0];
-            if (file) {
-              void viewer.load(index, file.name.replace(/\.[^.]+$/, ''), file);
-            }
+            // The pane you just filled is the one you meant to work in.
+            setActiveSlot(index);
+            if (file) void viewer.load(index, file.name.replace(/\.[^.]+$/, ''), file);
+            else if (entry) loadDraggedEntry(index, entry);
           }}
         >
           <div className="pane-header">
@@ -228,8 +255,9 @@ function Pane({ index, slot, active, dropping, onDropTarget }: {
             <div className="pane-empty">
               <Crosshair size={22} opacity={0.35} />
               <div className="pane-empty-hint">
-                Pane {index + 1} is empty. Pick a structure from the browser, or
-                drop a structure file here.
+                Pane {index + 1} is empty. Click a structure in the browser to
+                load it into the active pane, drag one here to choose the pane,
+                or drop a structure file.
               </div>
             </div>
           )}
@@ -292,7 +320,9 @@ function Pane({ index, slot, active, dropping, onDropTarget }: {
           {dropping && (
             <div className="drop-overlay">
               <Upload size={20} />
-              Drop mmCIF, BinaryCIF or PDB to load into pane {index + 1}
+              {dropping.entry
+                ? `Load ${dropping.entry.id} into pane ${index + 1}`
+                : `Drop mmCIF, BinaryCIF or PDB to load into pane ${index + 1}`}
             </div>
           )}
         </div>

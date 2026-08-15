@@ -21,6 +21,7 @@ import {
 import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Chip } from '../controls';
+import { entryDragProps } from '../dragEntry';
 
 const ROWS = 15;
 
@@ -136,7 +137,11 @@ export function SimilarSection() {
                   key={hit.entryId}
                   type="button"
                   className="result"
+                  // Dragging is the useful gesture here: a hit belongs in the
+                  // pane beside the structure it resembles, not on top of it.
+                  title={`Click to load into pane ${activeSlot + 1}, or drag onto any pane`}
                   onClick={() => void viewer.load(activeSlot, hit.entryId)}
+                  {...entryDragProps({ kind: 'pdb', id: hit.entryId })}
                 >
                   <div className="result-top">
                     <span className="pdb-id">{hit.entryId}</span>

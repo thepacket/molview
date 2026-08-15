@@ -19,8 +19,10 @@ import { isMgnifyAccession } from '../../rcsb/esmatlas';
 import { useStore } from '../../state/store';
 import { viewer } from '../../viewer/ViewerController';
 import { Chip } from '../controls';
+import { entryDragProps } from '../dragEntry';
 
 export function PredictedSearch() {
+  const activeSlot = useStore((s) => s.activeSlot);
   const [draft, setDraft] = useState('');
   const [hits, setHits] = useState<UniProtHit[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -113,7 +115,9 @@ export function PredictedSearch() {
           type="button"
           className="result"
           style={{ width: '100%', textAlign: 'left' }}
+          title={`Click to load into pane ${activeSlot + 1}, or drag onto any pane`}
           onClick={() => open(hit.accession)}
+          {...entryDragProps({ kind: 'prediction', id: hit.accession })}
         >
           <div className="result-top">
             <span className="pdb-id">{hit.accession}</span>
