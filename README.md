@@ -1016,12 +1016,11 @@ the token cost of the assistant is the only cost that scales.
 
 ## Contributions
 
-**Pull requests are closed automatically.** MolView is a personal project, so
-this is not a judgement on any particular change — nothing gets merged, and a PR
-left open would only waste the time of whoever wrote it. Fork it and take it
-where you like.
+Pull requests are welcome. Keep one focused on a single change and say how you
+checked it; a structure that renders differently before and after is the ideal
+evidence. Forking is welcome too, if you would rather take it where you like.
 
-Issues are a different matter: a bug report, or a structure that renders wrong,
+Issues are welcome as well: a bug report, or a structure that renders wrong,
 is genuinely useful and gets read.
 
 ## Licence
