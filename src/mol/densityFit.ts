@@ -1,33 +1,12 @@
 /**
- * How well each residue is supported by the density it was built into.
- *
- * MolView already fetches the map and holds the model in the same client, which
- * is the whole reason this can exist without a server. The number is the
- * real-space correlation coefficient: density calculated from the model,
- * correlated against density observed in the map, over the residue's own
- * envelope.
- *
- * It answers the question that decides whether a picture means anything —
- * *is this atom supported by the data, or by what the modeller hoped?* — and it
- * covers the case wwPDB's RSRZ does not. RSRZ is computed for polymer residues
- * only, so the ligand, which is the part anyone actually doubts, is exactly the
- * part with no published score.
- *
- * What this is not: a replacement for a refinement program's own statistics,
- * and the numbers are not on wwPDB's scale. Measured against wwPDB's own
- * per-residue RSCC across four entries, this agrees at r = 0.62 and runs about
- * 0.20 lower in absolute value — 0.70 where the report says 0.90. Three causes,
- * none fixable in a browser: the calculated density is one isotropic Gaussian
- * per atom rather than real scattering factors, occupancy is not yet carried on
- * the model so a half-occupied atom counts whole, and the map is what the
- * volume server sampled rather than one computed from structure factors to
- * match the model.
- *
- * So read it as a ranking within one structure, not against a published
- * threshold. "Which parts of this model are least supported" it answers well;
- * "is 0.75 good" it does not, because 0.75 here is not 0.75 there. The envelope
- * radius was chosen by sweeping it against wwPDB agreement, which peaked at
- * 1.8 Å (r = 0.62, against 0.57 at 2.5 Å and 0.51 at 3.0 Å).
+ * Approximate per-residue correlation of Gaussian model density with the loaded
+ * sampled map. Occupancy weights each atom; unknown occupancy is treated as one.
+ * The 2026-09-06 public-data benchmark retains a 1.8 Å envelope: mean entry r
+ * against deposited RSCC is 0.624 on four calibration entries and 0.426 on
+ * five additional entries, including the weak 1AKE result (r=0.094).
+ * This is not refinement RSCC or a universal quality threshold. Inspect the
+ * map and other evidence even when using the score to rank residues.
+ * Reproduction, per-entry results and limitations: docs/density-calibration.md.
  */
 
 import { gridIndexOf, gridReach, type VolumeGrid } from '../rcsb/volume';
@@ -39,8 +18,8 @@ export interface ResidueFit {
    * Pearson correlation between observed and calculated density, -1 to 1.
    *
    * Compare it to the other residues of the same structure, not to a published
-   * threshold — see the note at the top of this file. Negative is the one
-   * absolute statement worth making: the density is somewhere the model is not.
+   * threshold — see the note at the top of this file. A negative correlation describes disagreement in this sampled envelope;
+   * it does not identify its cause.
    */
   rscc: number;
   /** Mean observed density over the envelope, in sigma. */
@@ -153,7 +132,7 @@ export function residueDensityFit(
     for (let n = 0; n < atoms.length; n++) {
       const a = atoms[n];
       // The element index is the atomic number, so it is the electron count.
-      weight[n] = s.element[a];
+      weight[n] = s.element[a] * (Number.isFinite(s.occupancy[a]) ? s.occupancy[a] : 1);
       const w = atomSigma(s.bFactor[a], resolution);
       inv2SigmaSq[n] = 1 / (2 * w * w);
     }

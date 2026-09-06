@@ -72,7 +72,7 @@ export function TitleBar() {
       <ProjectTitle />
 
       <div className="titlebar-right">
-      <button type="button" className="tool-btn" onClick={() => setPaletteOpen(true)}>
+      <button type="button" className="tool-btn" aria-label="Commands" onClick={() => setPaletteOpen(true)}>
         <Command size={13} />
         <span style={{ fontSize: 11 }}>Commands</span>
         <span className="kbd">⌘K</span>

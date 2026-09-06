@@ -1,7 +1,7 @@
 /**
  * The molecular surface for the active pane.
  *
- * Generating one is seconds of blocking work on a large structure, so the
+ * Generating one can take seconds in a worker on a large structure, so the
  * panel is honest about that rather than pretending it is a toggle: the button
  * says what it will do, the controls that force a rebuild are separated from
  * the ones that only change how it looks, and the readout afterwards reports
@@ -49,8 +49,7 @@ export function SurfaceSection() {
         <>
           <p className="panel-note">
             The envelope the molecule presents to the solvent, as a Gaussian
-            surface over the atoms currently drawn. Building it blocks for a
-            moment — longer on a large structure.
+            surface over the atoms currently drawn. Built in the background; you can keep inspecting the molecule.
           </p>
           <button
             type="button"
@@ -58,8 +57,9 @@ export function SurfaceSection() {
             style={{ width: '100%' }}
             onClick={() => viewer.showSurface(activeSlot)}
           >
-            <Blend size={12} /> Build surface
+            <Blend size={12} /> {s.status==='building'?'Restart surface build':'Build surface'}
           </button>
+          {s.status==='building' && <button className="btn" onClick={()=>viewer.hideSurface(activeSlot)}>Cancel build</button>}
           {s.status === 'error' && s.error && (
             <p style={{ fontSize: 10.5, color: 'var(--error)', marginTop: 7, lineHeight: 1.5 }}>
               {s.error}

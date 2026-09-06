@@ -254,7 +254,7 @@ function emptySlot(): SlotState {
   };
 }
 
-export type PanelId =
+export type PanelId = 'investigate'
   | 'browse' | 'entry' | 'style' | 'sequence' | 'measure' | 'scene' | 'project'
   | 'settings';
 

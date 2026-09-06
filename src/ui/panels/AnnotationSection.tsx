@@ -141,7 +141,7 @@ export function AnnotationSection() {
                 </div>
               )}
               <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text-faint)' }}>
-                {annotation.residues.slice(0, 8).map((r) => `${r.chain}${r.seq}`).join(' ')}
+                {annotation.residues.slice(0, 8).map((r) => `${r.chain}${r.seq}${r.insertionCode}`).join(' ')}
                 {annotation.residues.length > 8 && ' …'}
               </div>
             </div>

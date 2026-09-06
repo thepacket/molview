@@ -37,6 +37,8 @@ export interface Structure {
   readonly z: Float32Array;
   readonly element: Uint8Array;
   readonly bFactor: Float32Array;
+  /** Deposited occupancy; NaN means unspecified. */
+  readonly occupancy: Float32Array;
   /** Index into `nameTable`; interned so the model stays transferable. */
   readonly atomNameId: Uint16Array;
   readonly atomResidue: Uint32Array;
@@ -47,6 +49,10 @@ export interface Structure {
   /** Shared string table for atom and residue names. */
   readonly nameTable: string[];
   readonly resSeq: Int32Array;
+  readonly resInsCode: string[];
+  readonly resLabelSeq: Int32Array;
+  /** Actual selected alternate for each residue. */
+  readonly resAltLoc: string[];
   readonly resChain: Uint32Array;
   readonly resSS: Uint8Array;
   readonly resKind: Uint8Array;
@@ -97,7 +103,7 @@ export interface Structure {
    * majority of entries, which model one conformation and say nothing.
    */
   readonly altLocs: string[];
-  /** Which alternate was built; empty when the file offers no choice. */
+  /** Explicit alternate override; empty means highest mean occupancy per residue. */
   readonly altLoc: string;
 }
 
@@ -243,7 +249,7 @@ export interface BuildOptions {
   /**
    * Which alternate conformation to build. Defaults to the first id in the
    * file. A residue that does not carry the requested one falls back to its
-   * own first alternate rather than vanishing.
+   * own highest-occupancy alternate rather than vanishing.
    */
   altLoc?: string;
 }
@@ -345,6 +351,7 @@ export function buildStructure(
   const compFor = new Map<string, string>();
   if (anyAlt) {
     const perResidue = new Map<string, Set<string>>();
+    const occupancies = new Map<string, Map<string, { sum: number; count: number }>>();
     /** Residue key -> conformer -> component name, to spot disagreement. */
     const perResidueComp = new Map<string, Map<string, string>>();
     for (let i = 0; i < n; i++) {
@@ -365,6 +372,15 @@ export function buildStructure(
       let set = perResidue.get(key);
       if (!set) { set = new Set(); perResidue.set(key, set); }
       set.add(alt);
+      if (fOccupancy.isDefined && !fOccupancy.isNull(i)) {
+        const value = fOccupancy.num(i);
+        if (Number.isFinite(value)) {
+          const row = occupancies.get(key) ?? new Map();
+          const total = row.get(alt) ?? { sum: 0, count: 0 };
+          total.sum += value; total.count++;
+          row.set(alt, total); occupancies.set(key, row);
+        }
+      }
 
       let comps = perResidueComp.get(key);
       if (!comps) { comps = new Map(); perResidueComp.set(key, comps); }
@@ -374,9 +390,14 @@ export function buildStructure(
     const sorted = [...altIds].sort();
     const wanted = options.altLoc && sorted.includes(options.altLoc)
       ? options.altLoc
-      : sorted[0];
+      : '';
     for (const [key, set] of perResidue) {
-      const chosen = set.has(wanted) ? wanted : [...set].sort()[0];
+      const preferred = [...set].sort((a, b) => {
+        const oa = occupancies.get(key)?.get(a), ob = occupancies.get(key)?.get(b);
+        const av = oa ? oa.sum / oa.count : -1, bv = ob ? ob.sum / ob.count : -1;
+        return bv - av || a.localeCompare(b);
+      })[0];
+      const chosen = wanted && set.has(wanted) ? wanted : preferred;
       effectiveAlt.set(key, chosen);
       altCountFor.set(key, set.size - 1);
 
@@ -394,10 +415,14 @@ export function buildStructure(
   const ax = new F32(), ay = new F32(), az = new F32();
   const aElem = new U8(), aBf = new F32(), aRes = new U32();
   const aName = new U16();
+  const aOccupancy = new F32();
 
   const resName: string[] = [];
   const resNameId = new U16();
   const resSeq: number[] = [];
+  const resInsCode: string[] = [];
+  const resLabelSeq: number[] = [];
+  const resAltLoc: string[] = [];
   const resChain: number[] = [];
   const resKind: number[] = [];
   const resAtomStart: number[] = [];
@@ -432,7 +457,7 @@ export function buildStructure(
     const rowModel = fModel.isDefined ? fModel.num(i) : 1;
     if (!allModels && fModel.isDefined && rowModel !== targetModel) continue;
 
-    if (fOccupancy.isDefined && fOccupancy.num(i) === 0) continue;
+    if (fOccupancy.isDefined && !fOccupancy.isNull(i) && fOccupancy.num(i) === 0) continue;
 
     let comp = (fCompId.isDefined ? fCompId.str(i) : fAuthComp.str(i)).toUpperCase();
     if (!includeWater && isWater(comp)) continue;
@@ -446,10 +471,12 @@ export function buildStructure(
     // backbone — so they are always kept. The rest have to match the choice
     // made for this particular residue.
     let altHere = 0;
+    let chosenAlt = '';
     if (anyAlt) {
       const altKey = allModels
         ? `${rowModel}|${labelAsym}|${authAsym}|${seq}|${ins}`
         : `${labelAsym}|${authAsym}|${seq}|${ins}`;
+      chosenAlt = effectiveAlt.get(altKey) ?? '';
       if (isRealAlt(i)) {
         const chosen = effectiveAlt.get(altKey);
         if (chosen !== undefined && fAltLoc.str(i) !== chosen) continue;
@@ -485,6 +512,9 @@ export function buildStructure(
       resName.push(comp);
       resNameId.push(names.intern(comp));
       resSeq.push(Number.isFinite(seq) ? seq : 0);
+      resInsCode.push(ins);
+      resLabelSeq.push(fLabelSeq.isDefined && !fLabelSeq.isNull(i) ? fLabelSeq.num(i) : 0);
+      resAltLoc.push(chosenAlt);
       resChain.push(chainIdx);
       resKind.push(MolKind.Ligand);
       resAtomStart.push(aRes.length);
@@ -508,6 +538,8 @@ export function buildStructure(
     aElem.push(elementIndex(fSymbol.isDefined ? fSymbol.str(i) : name.charAt(0)));
     const bf = fBFactor.isDefined ? fBFactor.num(i) : 0;
     aBf.push(Number.isFinite(bf) ? bf : 0);
+    const occ = fOccupancy.isDefined && !fOccupancy.isNull(i) ? fOccupancy.num(i) : Number.NaN;
+    aOccupancy.push(Number.isFinite(occ) ? occ : Number.NaN);
     aRes.push(resIdx);
     aName.push(names.intern(name));
     pendingNames.add(name);
@@ -558,12 +590,14 @@ export function buildStructure(
     x: ax.trim(), y: ay.trim(), z: az.trim(),
     element: aElem.trim(),
     bFactor: aBf.trim(),
+    occupancy: aOccupancy.trim(),
     atomNameId: aName.trim(),
     atomResidue: aRes.trim(),
     residueCount,
     resNameId: resNameId.trim(),
     nameTable: names.strings,
     resSeq: Int32Array.from(resSeq),
+    resInsCode, resAltLoc, resLabelSeq: Int32Array.from(resLabelSeq),
     resChain: Uint32Array.from(resChain),
     resSS: new Uint8Array(residueCount),
     resKind: Uint8Array.from(resKind),

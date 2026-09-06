@@ -1,3 +1,4 @@
+import { residueMetrics } from '../rcsb/residueValidation';
 /** Colour schemes. Each returns packed 0xRRGGBB for an atom or a residue. */
 
 import {
@@ -322,17 +323,12 @@ export function makeColorProvider(s: Structure, options: ColorOptions): ColorPro
   };
 }
 
-/**
- * The report's row for a residue, keyed the way a user names it. Insertion
- * codes are not part of the key: RCSB reports against the entity sequence, and
- * the auth mapping it publishes carries the number without the code.
- */
+/** Resolve by archive instance and entity position, preserving insertion codes. */
 function metricsFor(
   s: Structure, residue: number, validation: ResidueValidation | null | undefined,
 ) {
   if (!validation) return null;
-  const chain = s.chainAuthId[s.resChain[residue]];
-  return validation.byResidue.get(`${chain}:${s.resSeq[residue]}`) ?? null;
+  return residueMetrics(validation, s, residue);
 }
 
 export { unpackColor };

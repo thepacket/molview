@@ -1,6 +1,8 @@
+import { usePreferences } from '../state/preferences';
 import { useStore, visibleSlotCount } from '../state/store';
 
 export function StatusBar() {
+  const diagnostics=usePreferences(s=>s.diagnostics);
   const gpuName = useStore((s) => s.gpuName);
   const gpuError = useStore((s) => s.gpuError);
   const frameMs = useStore((s) => s.frameMs);
@@ -20,7 +22,7 @@ export function StatusBar() {
         {gpuError ? 'GPU unavailable' : gpuName || 'Initialising WebGPU…'}
       </span>
 
-      {frameMs > 0 && (
+      {diagnostics && frameMs > 0 && (
         <span className="status-item" title="CPU time spent encoding a frame">
           {frameMs.toFixed(2)} ms/frame
         </span>

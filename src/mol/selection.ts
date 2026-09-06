@@ -119,6 +119,8 @@ export type SelectionNode =
   | { type: 'kind'; kinds: number[] }
   | { type: 'ss'; values: number[] }
   | { type: 'chain'; values: string[] }
+  | { type: 'labelchain'; values: string[] }
+  | { type: 'labelseq'; values: string[] }
   | { type: 'residue'; values: string[] }
   | { type: 'atom'; values: string[] }
   | { type: 'element'; values: string[] }
@@ -131,7 +133,9 @@ export type SelectionNode =
 type Node = SelectionNode;
 
 /** Keywords taking an argument, e.g. `chain A`, `element Fe`. */
-const ARGUMENT_KEYWORDS: Record<string, 'chain' | 'residue' | 'atom' | 'element' | 'model'> = {
+const ARGUMENT_KEYWORDS: Record<string, 'labelchain' | 'labelseq' | 'chain' | 'residue' | 'atom' | 'element' | 'model'> = {
+  labelchain: 'labelchain',
+  labelseq: 'labelseq',
   model: 'model',
   chain: 'chain',
   resname: 'residue',
@@ -405,6 +409,12 @@ function evaluate(node: Node, s: Structure, out: Uint8Array): Uint8Array {
           case 'ss':
             hit = s.resKind[r] === MolKind.Protein && node.values.includes(s.resSS[r]);
             break;
+          case 'labelchain':
+            hit = node.values.includes(s.chainLabelId[s.resChain[r]]);
+            break;
+          case 'labelseq':
+            hit = s.resLabelSeq[r] > 0 && node.values.some(v => matchesRange(v, s.resLabelSeq[r], ''));
+            break;
           case 'chain': {
             const auth = s.chainAuthId[s.resChain[r]];
             hit = node.values.includes(auth)
@@ -442,7 +452,7 @@ export function countSelected(mask: Uint8Array): number {
 export const SELECTION_KEYWORDS = [
   'all', 'protein', 'nucleic', 'polymer', 'ligand', 'ion', 'water', 'hetero',
   'helix', 'sheet', 'coil', 'backbone', 'sidechain', 'hydrogen', 'heavy',
-  'model', 'and', 'or', 'not',
+  'model', 'labelchain', 'labelseq', 'and', 'or', 'not',
 ];
 
 export const SELECTION_EXAMPLES: { label: string; value: string }[] = [

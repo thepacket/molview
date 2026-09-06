@@ -1,3 +1,5 @@
+import { usePreferences } from '../../state/preferences';
+import { useStore } from '../../state/store';
 /**
  * Settings. Currently just the assistant's OpenRouter credentials and model.
  *
@@ -19,6 +21,7 @@ import { viewer } from '../../viewer/ViewerController';
 import { Field, Toggle } from '../controls';
 
 export function SettingsPanel() {
+  const preferences=usePreferences();
   const [key, setKey] = useState(getApiKey());
   const [saved, setSaved] = useState(false);
   const [models, setModels] = useState<OpenRouterModel[]>([]);
@@ -63,6 +66,18 @@ export function SettingsPanel() {
 
   return (
     <>
+      <div className="panel-section investigation"><h3>Interface</h3>
+        <label>Theme<select className="text-input" value={preferences.theme} onChange={e=>preferences.update({theme:e.target.value as 'light'|'dark'})}><option value="dark">Dark</option><option value="light">Light</option></select></label>
+        <label>Panel text<select className="text-input" value={preferences.textSize} onChange={e=>preferences.update({textSize:+e.target.value})}><option value={12}>Compact</option><option value={14}>14 px</option><option value={16}>16 px</option></select></label>
+        <label>Left panel width: {preferences.panelWidth}px<input type="range" min="280" max="500" step="10" value={preferences.panelWidth} onChange={e=>preferences.update({panelWidth:+e.target.value})}/></label>
+        <label>Inspector width: {preferences.inspectorWidth}px<input type="range" min="280" max="500" step="10" value={preferences.inspectorWidth} onChange={e=>preferences.update({inspectorWidth:+e.target.value})}/></label>
+        <Toggle label="Rendering diagnostics" checked={preferences.diagnostics} onChange={v=>preferences.update({diagnostics:v})}/>
+        <button className="btn" onClick={()=>{
+          const s=useStore.getState();s.slots.forEach((_,i)=>s.updateVisual(i,{background:preferences.theme==='light'?[0.94,0.96,0.98]:[0.043,0.051,0.071]}));
+          if(viewer.isReady)viewer.syncSettings();
+        }}>Apply theme background to all panes</button>
+        <p className="panel-note">Canvas backgrounds belong to the scene and are saved with projects. Fog follows the background; label backdrops retain their contrast.</p>
+      </div>
       <div className="panel-section">
         <div className="section-label"><span>OpenRouter</span></div>
 

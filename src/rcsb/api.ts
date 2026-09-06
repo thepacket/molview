@@ -468,7 +468,8 @@ export async function searchBySequence(
   identityCutoff: number,
   rows: number,
   signal?: AbortSignal,
-): Promise<{ total: number; hits: SimilarHit[] }> {
+  start = 0,
+): Promise<{ total: number; hits: SimilarHit[]; nextStart: number }> {
   const json = await runSearch({
     query: {
       type: 'terminal',
@@ -482,7 +483,7 @@ export async function searchBySequence(
     },
     return_type: 'polymer_entity',
     request_options: {
-      paginate: { start: 0, rows },
+      paginate: { start, rows },
       results_verbosity: 'verbose',
     },
   }, signal);
@@ -506,7 +507,7 @@ export async function searchBySequence(
     });
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
-  return { total: (json.total_count as number) ?? 0, hits };
+  return { total: (json.total_count as number) ?? 0, hits, nextStart: start + rowsOut.length };
 }
 
 // ---------------------------------------------------------------------------

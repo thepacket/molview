@@ -32,6 +32,8 @@ interface AtomRef {
   seq: number;
   residue: string;
   atom: string;
+  insertionCode?: string;
+  model?: number;
 }
 
 interface MeasurementDocument {
@@ -80,6 +82,7 @@ interface PaneDocument {
   superposedOnto?: number | null;
   superposeRmsd?: number | null;
   superposePairs?: number | null;
+  alignmentChains?: {mobile:string;reference:string};
   measurements: MeasurementDocument[];
   showHydrogenBonds: boolean;
   showLabels: boolean;
@@ -138,6 +141,7 @@ function atomRef(s: Structure, atom: number): AtomRef {
     seq: s.resSeq[r],
     residue: resNameOf(s, r),
     atom: atomNameOf(s, atom),
+    insertionCode:s.resInsCode[r],model:s.chainModel[s.resChain[r]],
   };
 }
 
@@ -206,6 +210,7 @@ export function serialiseProject(_options: SerialiseOptions = {}): ProjectDocume
       superposedOnto: slot.superposedOnto,
       superposeRmsd: slot.superposeRmsd,
       superposePairs: slot.superposePairs,
+      alignmentChains: viewer.getAlignment(i) ? {mobile:viewer.getAlignment(i)!.mobileChain,reference:viewer.getAlignment(i)!.referenceChain}:undefined,
       measurements: structure
         ? slot.measurements.map((m) => ({
             kind: m.kind,
@@ -289,6 +294,8 @@ export function parseProject(text: string): ProjectDocument {
 function resolveAtom(s: Structure, ref: AtomRef): number {
   for (let r = 0; r < s.residueCount; r++) {
     if (s.resSeq[r] !== ref.seq) continue;
+    if(s.resInsCode[r] !== (ref.insertionCode??''))continue;
+    if(ref.model!==undefined&&s.chainModel[s.resChain[r]]!==ref.model)continue;
     if (s.chainAuthId[s.resChain[r]] !== ref.chain) continue;
     if (resNameOf(s, r) !== ref.residue) continue;
     for (let a = s.resAtomStart[r], e = s.resAtomStart[r + 1]; a < e; a++) {
@@ -439,6 +446,11 @@ export async function restoreProject(doc: ProjectDocument): Promise<RestoreRepor
     report.panesRestored++;
   }
 
+  for(let i=0;i<doc.panes.length;i++) {
+    const p=doc.panes[i];
+    if(p.alignmentChains && p.superposedOnto!==null && p.superposedOnto!==undefined)
+      viewer.restoreAlignmentEvidence(i,p.superposedOnto,p.alignmentChains.mobile,p.alignmentChains.reference);
+  }
   useStore.getState().setActiveSlot(
     Math.min(doc.session?.activeSlot ?? 0, LAYOUT_SLOT_COUNT[layout] - 1),
   );

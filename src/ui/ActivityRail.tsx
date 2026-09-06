@@ -1,5 +1,5 @@
 import {
-  AlignLeft, FolderOpen, LayoutGrid, Palette, Ruler, Search, SlidersHorizontal,
+  Microscope, AlignLeft, FolderOpen, LayoutGrid, Palette, Ruler, Search, SlidersHorizontal,
 } from 'lucide-react';
 import { useStore, type PanelId } from '../state/store';
 import { Tip } from './controls';
@@ -7,6 +7,7 @@ import { Tip } from './controls';
 // The entry definition lives in the right-hand inspector, so it is not a rail
 // destination — everything here is a left-panel tool.
 const ITEMS: { id: PanelId; icon: React.ReactNode; label: string; shortcut: string }[] = [
+  {id:'investigate',icon:<Microscope size={16}/>,label:'Scientific investigations',shortcut:''},
   { id: 'browse', icon: <Search size={16} />, label: 'Browse the PDB', shortcut: '⌘F' },
   { id: 'style', icon: <Palette size={16} />, label: 'Representation', shortcut: '' },
   { id: 'sequence', icon: <AlignLeft size={16} />, label: 'Sequence', shortcut: '' },
@@ -42,6 +43,7 @@ export function ActivityRail() {
 }
 
 export const PANEL_TITLES: Record<PanelId, string> = {
+  investigate: 'Investigate',
   browse: 'Browse',
   entry: 'Definition',
   style: 'Representation',

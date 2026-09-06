@@ -1,3 +1,4 @@
+import { parseAuthorPosition, type MappedResidue } from './residueMapping';
 /**
  * What the residues are for: UniProt's functional annotations, landed on the
  * residues of the loaded structure.
@@ -12,8 +13,8 @@
  *
  *   UniProt position
  *     → entity sequence position, via `rcsb_polymer_entity_align`
- *     → auth_seq_id, via `auth_to_entity_poly_seq_mapping`
- *     → a residue in the pane
+ *     → label_asym_id + entity position
+ *     → a residue in the pane (author numbering is display metadata)
  *
  * Skipping the first step is the classic error and it is silent: 1CBS is
  * offset by one, so an active site drawn without it lands on the neighbour.
@@ -31,7 +32,7 @@ export interface Annotation {
   /** The feature's own name or description; often empty for binding sites. */
   detail: string;
   /** Residues in the loaded structure, ordered. */
-  residues: { chain: string; seq: number }[];
+  residues: MappedResidue[];
   /** Ready to pass to a component or focus action. */
   selection: string;
   /** The UniProt entry the annotation came from. */
@@ -82,6 +83,7 @@ const QUERY = `query Annotations($id: String!) {
       }
       polymer_entity_instances {
         rcsb_polymer_entity_instance_container_identifiers {
+          asym_id
           auth_asym_id
           auth_to_entity_poly_seq_mapping
         }
@@ -107,7 +109,10 @@ export async function fetchAnnotations(
   const res = await fetch(GRAPHQL_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: QUERY, variables: { id: entryId.toUpperCase() } }),
+    body: JSON.stringify({
+      query: QUERY,
+      variables: { id: entryId.toUpperCase() },
+    }),
     signal,
   });
   if (!res.ok) throw new Error(`RCSB GraphQL ${res.status} ${res.statusText}`);
@@ -116,40 +121,55 @@ export async function fetchAnnotations(
     throw new Error(json.errors.map((e: any) => e.message).join('; '));
   }
 
+  return parseAnnotations(json);
+}
+
+export function parseAnnotations(json: any): Annotation[] {
   // Merged across chains and entities: a binding site on a homodimer is one
   // annotation covering both copies, not two rows saying the same thing.
   const merged = new Map<string, Annotation>();
 
   for (const entity of json.data?.entry?.polymer_entities ?? []) {
-    const align = (entity.rcsb_polymer_entity_align ?? [])
-      .find((a: any) => a.reference_database_name === 'UniProt');
-    if (!align) continue;
-
-    /** UniProt position to entity sequence position, or null outside coverage. */
-    const toEntity = (ref: number): number | null => {
-      for (const region of align.aligned_regions ?? []) {
-        const offset = ref - region.ref_beg_seq_id;
-        if (offset >= 0 && offset < region.length) return region.entity_beg_seq_id + offset;
-      }
-      return null;
-    };
-
-    const chains: { chain: string; mapping: string[] }[] = [];
+    const chains: { chain: string; labelChain: string; mapping: string[] }[] =
+      [];
     for (const instance of entity.polymer_entity_instances ?? []) {
-      const ids = instance.rcsb_polymer_entity_instance_container_identifiers ?? {};
+      const ids =
+        instance.rcsb_polymer_entity_instance_container_identifiers ?? {};
       if (ids.auth_asym_id && ids.auth_to_entity_poly_seq_mapping) {
-        chains.push({ chain: ids.auth_asym_id, mapping: ids.auth_to_entity_poly_seq_mapping });
+        chains.push({
+          chain: ids.auth_asym_id,
+          labelChain: ids.asym_id,
+          mapping: ids.auth_to_entity_poly_seq_mapping,
+        });
       }
     }
     if (chains.length === 0) continue;
 
     for (const uniprot of entity.uniprots ?? []) {
+      const aligns = (entity.rcsb_polymer_entity_align ?? []).filter(
+        (a: any) =>
+          a.reference_database_name === 'UniProt' &&
+          a.reference_database_accession === uniprot.rcsb_id,
+      );
+      if (!aligns.length) continue;
+      const toEntity = (ref: number): number[] => [
+        ...new Set<number>(
+          aligns.flatMap((a: any) =>
+            (a.aligned_regions ?? []).flatMap((region: any) => {
+              const offset = ref - region.ref_beg_seq_id;
+              return offset >= 0 && offset < region.length
+                ? [region.entity_beg_seq_id + offset]
+                : [];
+            }),
+          ),
+        ),
+      ];
       for (const feature of uniprot.rcsb_uniprot_feature ?? []) {
         const label = TYPE_LABELS[feature.type];
         if (!label) continue;
 
         const detail = (feature.name || feature.description || '').trim();
-        const key = `${feature.type}|${detail}`;
+        const key = `${uniprot.rcsb_id}|${feature.type}|${detail}`;
         let entry = merged.get(key);
         if (!entry) {
           entry = {
@@ -158,7 +178,7 @@ export async function fetchAnnotations(
             detail,
             residues: [],
             selection: '',
-            accession: uniprot.rcsb_id ?? align.reference_database_accession,
+            accession: uniprot.rcsb_id,
           };
           merged.set(key, entry);
         }
@@ -168,12 +188,20 @@ export async function fetchAnnotations(
           const end = position.end_seq_id ?? begin;
           if (!Number.isFinite(begin)) continue;
           for (let ref = begin; ref <= end; ref++) {
-            const entitySeq = toEntity(ref);
-            if (entitySeq === null) continue;
-            for (const { chain, mapping } of chains) {
-              const auth = mapping[entitySeq - 1];
-              if (auth === undefined || auth === '?' || auth === '.') continue;
-              entry.residues.push({ chain, seq: Number(auth) });
+            for (const entitySeq of toEntity(ref)) {
+              for (const { chain, labelChain, mapping } of chains) {
+                const auth = mapping[entitySeq - 1];
+                if (auth === undefined || auth === '?' || auth === '.')
+                  continue;
+                const author = parseAuthorPosition(auth);
+                if (!author || !labelChain) continue;
+                entry.residues.push({
+                  chain,
+                  ...author,
+                  labelChain,
+                  labelSeq: entitySeq,
+                });
+              }
             }
           }
         }
@@ -187,7 +215,7 @@ export async function fetchAnnotations(
     const seen = new Set<string>();
     entry.residues = entry.residues
       .filter((r) => {
-        const key = `${r.chain}:${r.seq}`;
+        const key = `${r.labelChain}:${r.labelSeq}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -209,12 +237,14 @@ export async function fetchAnnotations(
 export function annotationSelection(annotation: Annotation): string {
   const byChain = new Map<string, number[]>();
   for (const r of annotation.residues) {
-    const list = byChain.get(r.chain);
-    if (list) list.push(r.seq);
-    else byChain.set(r.chain, [r.seq]);
+    const list = byChain.get(r.labelChain);
+    if (list) list.push(r.labelSeq);
+    else byChain.set(r.labelChain, [r.labelSeq]);
   }
   return [...byChain]
-    .map(([chain, seqs]) => `(/${chain}:${collapse(seqs)})`)
+    .map(
+      ([chain, seqs]) => `(labelchain ${chain} and labelseq ${collapse(seqs)})`,
+    )
     .join(' or ');
 }
 
@@ -226,7 +256,10 @@ function collapse(values: number[]): string {
   let previous = sorted[0];
   for (let i = 1; i <= sorted.length; i++) {
     const value = sorted[i];
-    if (value === previous + 1) { previous = value; continue; }
+    if (value === previous + 1) {
+      previous = value;
+      continue;
+    }
     parts.push(start === previous ? `${start}` : `${start}-${previous}`);
     start = value;
     previous = value;

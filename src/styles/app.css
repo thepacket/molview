@@ -119,6 +119,7 @@ textarea {
   position: fixed;
   inset: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--titlebar) minmax(0, 1fr) var(--statusbar);
   background: var(--bg-void);
 }
@@ -2479,3 +2480,48 @@ textarea {
   border-color: var(--accent);
   color: var(--text);
 }
+
+/* Scientific workflows share the existing panel vocabulary. */
+.workspace-tools { display:flex; gap:6px; padding:6px 10px; flex-wrap:wrap; background:var(--bg-chrome); border-bottom:1px solid var(--line); }
+.investigation-tabs { display:flex; flex-wrap:wrap; gap:5px; padding:10px; border-bottom:1px solid var(--line); }
+.investigation-tabs [aria-selected=true] { border-color:var(--accent); color:var(--accent); }
+.investigation { line-height:1.55; }
+.investigation h3 { font-size:15px; margin-bottom:10px; }
+.investigation h4 { font-size:12px; margin:14px 0 6px; }
+.investigation p { margin:8px 0; color:var(--text-dim); font-size:12px; overflow-wrap:anywhere; }
+.investigation label { display:block; margin:10px 0; font-size:12px; }
+.investigation label input[type=range] { display:block; width:100%; }
+.investigation select { width:100%; margin:5px 0; }
+.investigation .btn { margin:4px 4px 4px 0; white-space:normal; height:auto; min-height:28px; }
+.investigation .evidence-row { display:block; width:100%; text-align:left; }
+.investigation li { margin:8px 0 8px 20px; font-size:12px; }
+.investigation details { margin:8px 0; }
+.investigation summary { cursor:pointer; }
+.candidate { border:1px solid var(--line); border-radius:6px; padding:10px; margin:12px 0; background:var(--bg-raised); }
+[data-large-text=true] .panel-body :is(p,span,button,input,select,label,dt,dd,summary,li) { font-size:var(--reading-size) !important; }
+:root[data-theme=light] {
+  --bg-void:#f1f5f9; --bg-chrome:#eaf0f6; --bg-panel:#f8fafc; --bg-raised:#fff;
+  --bg-input:#fff; --bg-hover:#e3edf5; --bg-active:#d9e9f7; --line:#c9d4df; --line-strong:#a2b4c5;
+  --text:#152b40; --text-dim:#29445b; --text-faint:#40596d;
+  --accent:#00658a; --accent-dim:#007ba5; --warn:#805000; --error:#a42532; --ok:#186241;
+  color-scheme:light;
+}
+[data-theme=light] .titlebar { background:var(--bg-chrome); }
+/* Canvas readouts retain the contrast of the scene, independently of chrome. */
+[data-theme=light] .pane-footer { color:#d5deea; text-shadow:0 1px 3px #000; }
+@media(max-width:1100px) { .panel { max-width:32vw; } .panel.right { max-width:30vw; } }
+[data-theme=light] .pane-header, [data-theme=light] .pane-footer {
+  --text:#eef3fa; --text-dim:#d5deea; --text-faint:#b9c7db; --accent:#48d6ff;
+  color:#eef3fa; background:rgba(7,9,12,.76);
+}
+
+@media(max-width:800px) {
+  .titlebar { grid-template-columns:auto minmax(0,1fr) auto; padding:0 6px; }
+  .titlebar .brand { padding-right:6px; margin-right:0; }
+  .titlebar .brand-name, .titlebar-right .tool-btn > span { display:none; }
+  .titlebar-center { padding:0 4px; }
+  .panel { min-width:0; }
+}
+
+[data-theme=light] .pane-empty { color:#b6c3d5; background:#080a0e; }
+@media(max-width:800px) { .assistant-header { gap:4px; padding:0 5px; overflow:hidden; } .assistant-header .assistant-model { display:none; } }

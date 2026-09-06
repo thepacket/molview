@@ -15,8 +15,8 @@
  */
 
 import { Style, type Component } from '../mol/components';
-import { parseSelection, selectionError, type SelectionNode } from '../mol/selection';
-import { MolKind } from '../mol/structure';
+import { parseSelection, evaluateSelection, selectionError, type SelectionNode } from '../mol/selection';
+import { MolKind, atomNameOf } from '../mol/structure';
 import { useStore, type SlotState } from './store';
 import { viewer } from '../viewer/ViewerController';
 
@@ -143,8 +143,8 @@ function residueTerm(
   numeric: (list: string[]) => string,
   named: (list: string[]) => string,
 ): string {
-  const numbers = values.filter((v) => /^-?\d+(--?\d+)?$/.test(v));
-  const names = values.filter((v) => !/^-?\d+(--?\d+)?$/.test(v));
+  const numbers = values.filter((v) => /^-?\d+[A-Za-z]*(--?\d+)?$/.test(v));
+  const names = values.filter((v) => !/^-?\d+[A-Za-z]*(--?\d+)?$/.test(v));
   const parts: string[] = [];
   if (numbers.length) parts.push(numeric(numbers));
   if (names.length) parts.push(named(names));
@@ -169,6 +169,7 @@ function translate(node: SelectionNode, d: Dialect): string {
       const terms = new Set(node.values.map((v) => (v === 1 ? d.helix : v === 2 ? d.sheet : d.coil)));
       return terms.size === 1 ? [...terms][0] : `(${[...terms].join(` ${d.or} `)})`;
     }
+    case 'labelchain': case 'labelseq': return 'none'; // Resolved from coordinates before translation.
     case 'chain': return d.chain(node.values);
     case 'residue': return d.residue(node.values);
     case 'atom': return d.atom(node.values);
@@ -234,7 +235,27 @@ export function paneScript(slot: number, target: ScriptTarget): string {
       note(`skipped "${component.name}": ${problem}`);
       continue;
     }
-    const selection = translate(parseSelection(component.selection).node, d);
+    const parsed = parseSelection(component.selection);
+    let selection: string;
+    if (/\blabel(chain|seq)\b/i.test(component.selection)) {
+      const structure=viewer.getStructure(slot);
+      if(!structure){note(`skipped "${component.name}": coordinates unavailable for archive-position mapping`);continue;}
+      const mask=evaluateSelection(parsed,structure);
+      const terms=new Set<string>();
+      const targetMasks=new Map<string,Set<number>>();
+      for(let a=0;a<structure.atomCount;a++) {
+        const r=structure.atomResidue[a],chain=structure.chainAuthId[structure.resChain[r]];
+        const position=`${structure.resSeq[r]}${structure.resInsCode[r]}`;
+        const term=`(${d.chain([chain])} ${d.and} ${d.residue([position])} ${d.and} ${d.atom([atomNameOf(structure,a)])})`;
+        const values=targetMasks.get(term)??new Set<number>();values.add(mask[a]);targetMasks.set(term,values);
+        if(mask[a])terms.add(term);
+      }
+      if([...terms].some(t=>targetMasks.get(t)!.size>1)) {
+        note(`skipped "${component.name}": author identifiers in the export target cannot distinguish the selected archive instance or model`);continue;
+      }
+      selection=terms.size?`(${[...terms].join(` ${d.or} `)})`:'none';
+      note('Archive positions were resolved to author numbering using the loaded coordinates.');
+    } else selection = translate(parsed.node, d);
     lines.push('');
     note(`${component.name} — MolView selection: ${component.selection}`);
     const show = d.show(component.style, selection);

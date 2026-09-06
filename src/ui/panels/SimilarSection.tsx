@@ -13,7 +13,7 @@
  * other is usually the interesting one.
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Dna, Loader2, Shapes } from 'lucide-react';
 import {
   fetchSummaries, searchByShape, searchBySequence, type EntrySummary, type SimilarHit,
@@ -30,6 +30,7 @@ type Mode = 'shape' | 'sequence';
 export function SimilarSection() {
   const activeSlot = useStore((s) => s.activeSlot);
   const slot = useStore((s) => s.slots[s.activeSlot]);
+  const [entityId,setEntityId]=useState('');
   const [mode, setMode] = useState<Mode | null>(null);
   const [hits, setHits] = useState<SimilarHit[] | null>(null);
   const [summaries, setSummaries] = useState<Map<string, EntrySummary>>(new Map());
@@ -38,12 +39,15 @@ export function SimilarSection() {
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  useEffect(()=>{abortRef.current?.abort();setHits(null);setBusy(false);setEntityId('');return()=>abortRef.current?.abort();},[slot.entryId]);
+
   if (slot.status !== 'ready' || !slot.entryId) return null;
   // A prediction has no PDB entry to search from, and its sequence is better
   // searched from UniProt than from here.
   if (slot.prediction) return null;
 
-  const longestChain = slot.detail?.polymerEntities
+  const entities=slot.detail?.polymerEntities.filter(e=>e.sequence)??[];
+  const longestChain = entities.find(e=>e.id===entityId) ?? slot.detail?.polymerEntities
     .filter((e) => e.sequence)
     .sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0))[0];
 
@@ -80,6 +84,7 @@ export function SimilarSection() {
     <div className="panel-section">
       <div className="section-label"><span>Structures like {slot.entryId}</span></div>
 
+      <label className="panel-note">Sequence entity<select className="text-input" value={longestChain?.id??''} onChange={e=>{abortRef.current?.abort();setBusy(false);setHits(null);setEntityId(e.target.value);}}>{entities.map(e=><option key={e.id} value={e.id}>{e.description} · {e.chains.join(', ')}</option>)}</select></label>
       <div className="similar-buttons">
         <button
           type="button"

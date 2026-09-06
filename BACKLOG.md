@@ -54,21 +54,6 @@ worth showing.
 The failure mode to avoid is the one already avoided for interfaces: a badge
 saying "dimer" is believed further than the evidence goes.
 
-### A light theme
-
-Asked for and scoped but not built. The chrome is one hard-coded `:root` block
-in `styles/app.css` ending in `color-scheme: dark`, with no media query and no
-second palette — every colour already resolves through those variables, so
-swapping them reskins the whole UI. That half is nearly free.
-
-The canvas is the real work. Its background is a `VisualSettings` default that
-nothing in the UI or in project persistence ever writes, and it is not a CSS
-variable: it goes into the uniform buffer and the fog reads it, so depth cueing
-currently fades geometry *towards* black. On a light canvas that inverts, and
-the label backdrops (a dark plate behind bright text) and the hemispheric
-ambient were all chosen against near-black. Two commits: the CSS palette split,
-then the canvas with the fog and ambient re-checked rather than assumed.
-
 ### Blocked for now
 
 - **Conservation colouring.** ConSurf-DB has precomputed profiles for most PDB
@@ -89,6 +74,25 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 ---
 
 ## Done
+
+- **Density recalibration and deeper comparisons** — reproducible cached public-data
+  benchmark; archive-position annotation/validation mapping; paginated candidates;
+  explicit interface-side correspondence. See docs/density-calibration.md for the
+  measured limitations, including the unresolved weak 1AKE result.
+
+- **Scientific investigation workflows** — Choose, Compare, Evidence and Guides
+  connect public structure selection, coordinate coverage, alignment evidence,
+  residue context, ligand contacts and assembly interfaces. Authored public-data
+  examples need no AI key. Numerical reports export separately from shareable scenes.
+- **Light theme and reading controls** — local chrome theme, explicit persisted
+  canvas background, panel text sizes and widths, and optional diagnostics.
+- **Occupancy and identity** — per-atom occupancy, actual per-residue alternate,
+  insertion codes and entity sequence positions are retained. Default alternate
+  selection uses mean occupancy; density weights occupancy. Project measurement
+  references include insertion code and model number.
+- **Cancellable background analysis** — surface/density mesh generation and
+  investigation contact queries use workers; stale results are discarded.
+
 
 - **Dragging a listed structure into a pane** (`9403325`) — a click loads into
   the active pane, so filling the second one was click, retarget, click, and
@@ -115,7 +119,7 @@ minimize), markers, and the map tab's analysis tools — see "Not planned".
 
   Calibrated rather than assumed. The envelope radius was swept against wwPDB's
   own per-residue RSCC across 1UBQ, 1CBS, 3PTB and 2HHB: agreement peaks at
-  1.8 Å (r = 0.62). That is also the honest ceiling — it runs about 0.2 below
+  1.8 Å (r = 0.62). The newer benchmark in docs/density-calibration.md adds occupancy weighting and additional structures, with weaker transfer. The original result — it runs about 0.2 below
   their absolute values, because the calculated density is one isotropic
   Gaussian per atom rather than real scattering factors. So it is presented as
   a ranking within one structure and says so in three places. Ubiquitin's three

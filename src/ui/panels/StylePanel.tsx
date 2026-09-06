@@ -201,7 +201,7 @@ export function StylePanel() {
           <Field label="Alternate" value={`${altResidueCount} residues`}>
             <Segmented
               value={structure.altLoc}
-              options={structure.altLocs.map((a) => ({ value: a, label: a }))}
+              options={[{value:'',label:'Occupancy'},...structure.altLocs.map((a) => ({ value: a, label: a }))]}
               onChange={(v) => void viewer.setAltLoc(activeSlot, v)}
             />
           </Field>
@@ -209,8 +209,8 @@ export function StylePanel() {
             {altResidueCount} residue{altResidueCount === 1 ? ' was' : 's were'} modelled
             in more than one position, because the density supported more than one.
             Only one is drawn at a time; they are underlined on the sequence track.
-            A residue with no copy of {structure.altLoc} keeps its own first
-            conformer rather than disappearing.
+            Occupancy selects the alternate with the highest mean known occupancy per residue.
+            An explicit alternate falls back to that choice where it is absent; ties use alphabetical order.
           </p>
         </div>
       )}

@@ -83,8 +83,8 @@ function post(message: WorkerResponse, transfer: Transferable[] = []): void {
 /** Every typed array in the model, so the main thread receives it zero-copy. */
 function transferablesOf(s: Structure, bonds: BondList): Transferable[] {
   return [
-    s.x.buffer, s.y.buffer, s.z.buffer, s.element.buffer, s.bFactor.buffer,
-    s.atomNameId.buffer, s.atomResidue.buffer, s.resNameId.buffer, s.resSeq.buffer,
+    s.x.buffer, s.y.buffer, s.z.buffer, s.element.buffer, s.bFactor.buffer, s.occupancy.buffer,
+    s.atomNameId.buffer, s.atomResidue.buffer, s.resNameId.buffer, s.resSeq.buffer, s.resLabelSeq.buffer,
     s.resChain.buffer, s.resSS.buffer, s.resKind.buffer, s.resAtomStart.buffer,
     s.resAnchor.buffer, s.resOrient.buffer, s.resAltCount.buffer, s.chainKind.buffer,
     s.chainResStart.buffer, s.chainModel.buffer, s.center.buffer, bonds.indices.buffer,

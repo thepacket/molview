@@ -1,3 +1,7 @@
+import { InvestigatePanel } from './ui/panels/InvestigatePanel';
+import { ResidueEvidence } from './ui/panels/ResidueEvidence';
+import { WorkspaceTools } from './ui/WorkspaceTools';
+import { usePreferences } from './state/preferences';
 import { useEffect } from 'react';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { ActivityRail, PANEL_TITLES } from './ui/ActivityRail';
@@ -23,6 +27,14 @@ import { viewer } from './viewer/ViewerController';
 
 export default function App() {
   useGlobalShortcuts();
+  const preferences=usePreferences();
+  useEffect(()=>{
+    document.documentElement.dataset.theme=preferences.theme;
+    document.documentElement.dataset.largeText=String(preferences.textSize>12);
+    document.documentElement.style.setProperty('--reading-size',`${preferences.textSize}px`);
+    document.documentElement.style.setProperty('--panel-w',`${preferences.panelWidth}px`);
+    document.documentElement.style.setProperty('--inspector-w',`${preferences.inspectorWidth}px`);
+  },[preferences.theme,preferences.textSize,preferences.panelWidth,preferences.inspectorWidth]);
   useSharedProject();
 
   const panel = useStore((s) => s.panel);
@@ -45,6 +57,7 @@ export default function App() {
                 <span className="panel-title">{PANEL_TITLES[panel]}</span>
               </div>
               <div className="panel-body">
+                {panel === 'investigate' && <InvestigatePanel />}
                 {panel === 'browse' && <BrowsePanel />}
                 {panel === 'style' && <StylePanel />}
                 {panel === 'sequence' && <SequencePanel />}
@@ -61,6 +74,7 @@ export default function App() {
               shell: the side panels run to the status bar, and only the stage
               gives up height to it. */}
           <div className="canvas-column">
+            <WorkspaceTools />
             <ViewportGrid />
             <AssistantPanel />
           </div>
@@ -74,6 +88,7 @@ export default function App() {
                 </span>
               </div>
               <div className="panel-body">
+                <ResidueEvidence />
                 <EntryPanel />
               </div>
             </aside>

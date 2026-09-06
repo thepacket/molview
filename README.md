@@ -46,6 +46,45 @@ npm run dev
 
 ## What it does
 
+**Scientific investigations.** The microscope rail button opens Choose, Compare,
+Evidence and Guides. Choose searches from an explicit polymer entity, retrieves
+paginated close sequence matches (24/48/96 entity hits per page) and shows deposited method, resolution,
+clashscore, ligands/ions, organisms and construct sequences. A ligand-component
+filter narrows that shortlist. Coverage and author-residue lookup operate on the
+loaded coordinates: coverage means deposited-construct positions with modelled
+atoms, not full UniProt coverage. Unknown coverage is not a completeness claim.
+
+Compare selects reference/mobile panes and chains. Its report keeps fitted RMSD,
+matched and excluded pairs, anchor coverage, sequence differences and the largest
+displacements together. Clicking a pair focuses both panes. On-demand worker jobs
+compare ligand contacts and the selected assemblies' interfaces. Alignment and
+contact evidence export as JSON; explicit interface-side pairing compares aligned
+contacting positions and exports the correspondence with identifiers, criteria and limitations.
+Projects retain the chain choices needed to regenerate alignment evidence.
+
+Evidence combines the selected residue's actual alternate, occupancy range,
+UniProt features, wwPDB metrics, prediction confidence and nearby residues. Missing
+scores remain unavailable. Archive chain identifiers and entity sequence positions
+resolve insertion codes and duplicated author numbers without guessing. Geometry is labelled as calculated;
+annotations and deposited values are identified separately.
+
+Five authored guides cover a bound ligand, two conformations, model support,
+assemblies, and experiment versus AlphaFold prediction. Each example loads free
+public data and works without an AI key. Example loading names the pane it replaces.
+
+**Interface preferences.** Explore, Investigate, Inspect evidence and Make a figure
+arrange the existing panels. Settings offers a light theme, larger panel text,
+panel widths and optional rendering diagnostics. Canvas background is an explicit
+scene change and remains in saved projects; fog follows it and readout backdrops
+retain contrast. Interface preferences remain local to the browser.
+
+**Background analysis.** Surface and density meshes, residue-neighbour searches
+and comparison contact reports run in cancellable workers. Changing structures or
+cancelling a job prevents its result from being applied later. Model arrays are
+copied into analysis workers; meshes are transferred back, so large tasks still
+need additional memory. Existing rendering and numerical criteria are retained.
+
+
 **Browse and search.** Full-text search across the PDB with filters for
 experimental method, resolution, polymer content, source organism and release
 date. Results are ranked by relevance, recency or resolution. Typing a
@@ -291,14 +330,12 @@ the worst-fitting residues are Glu103 and Glu46, surface glutamates in solvent.
 Ubiquitin's worst three are Arg74, Gly75 and Gly76 — its flexible C-terminal
 tail, which is the answer a crystallographer would predict.
 
-Read it within one structure rather than against a published threshold. Measured
-against wwPDB's own per-residue RSCC on four entries it agrees at r = 0.62 and
-runs about 0.2 lower: the calculated density is one isotropic Gaussian per atom
-rather than real scattering factors, occupancy is not yet carried on the model,
-and the map is what the volume server sampled rather than one computed to match.
-The envelope radius was swept against that agreement rather than assumed, and
-peaks at 1.8 Å. Negative correlation is the one absolute statement — the density
-is somewhere the model is not. A 137-residue entry takes about 100 ms.
+The occupancy-weighted score was rechecked against public wwPDB RSCC. Mean
+per-entry agreement is r = 0.624 on the original four structures and 0.426 on
+five additional structures, with one weak case at 0.094. The 1.8 Å envelope is
+retained, but a ranking still needs inspection of the map and other evidence.
+See [the reproducible benchmark](docs/density-calibration.md) for the full sweep,
+missing data, coordinate controls and limitations.
 
 **Morphing between conformations.** With two structures superposed, the mobile
 pane can be slid or played between its own conformation and the reference's,
@@ -589,7 +626,7 @@ thousand colour commands.
 can phrase; two more services answer one you can only point at. **By shape**
 compares the assembly on screen against every assembly in the archive — 4HHB
 returns 1COH and 2HHB at the top, which is the right answer. **By sequence**
-takes the longest chain and reports the identity of each hit, so 1CBS finds its
+takes the selected polymer entity (initially the longest) and reports the identity of each hit, so 1CBS finds its
 own family of retinoic-acid-binding proteins, including versions solved at
 better resolution. The two disagree usefully: a hit in one and not the other is
 generally the interesting one.
@@ -865,16 +902,13 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
 - Secondary structure comes from the file's `struct_conf` / `struct_sheet_range`
   records. When a file carries none, a Cα-geometry heuristic stands in; it is
   not DSSP and will differ at the edges of helices and strands.
-- One alternate conformation is drawn at a time, and which one is a per-pane
-  choice rather than a per-residue one — there is no way to show conformer A of
-  one residue beside B of its neighbour, and no way to draw both at once.
-  Occupancy is not carried on the model either, so the 21%-occupied conformer
-  counts the same as the 57% one everywhere it is used, including the density
-  correlation. Atoms deposited at zero occupancy are dropped outright, which is
-  why 1KX5's histone tails read as unmodelled: the coordinates are there and
-  the occupancies are 0.00. The assistant is told which conformers an entry
-  carries and which is drawn, so it will not describe one as the whole story,
-  but there is no action for switching: that is a control, not a conversation.
+- One alternate conformation is drawn per residue. The default chooses the
+  highest mean known occupancy, with alphabetical tie-breaking; an explicit
+  pane-wide alternate falls back to that choice when absent at a residue.
+  Mixed manual per-residue choices and simultaneous alternates are not supported.
+  Atom occupancy is retained and weights the calculated density. Unspecified
+  occupancy is reported as unknown and treated as one in that calculation.
+  Atoms explicitly deposited at zero occupancy are still excluded.
 - A chain discontinuity is classified from numbering and geometry together, and
   the classification can be wrong in one direction. A component inside a
   polymer chain that is not in the recognised residue lists — a fused
@@ -889,10 +923,10 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
   from wwPDB's wherever an entry deposits backbone at zero occupancy, since
   those atoms are dropped here and validated there — 1KX5 reads 3.98% against
   wwPDB's 7.62% for that reason alone, and 7.41% with them restored.
-- The computed real-space correlation is not on wwPDB's scale and must not be
-  read against published thresholds. It agrees with their per-residue RSCC at
-  r = 0.62 and runs about 0.2 lower, for reasons given where the feature is
-  described. Rank residues within one structure with it; do not quote it.
+- Computed density correlation is approximate. The recalibration supports the
+  existing envelope radius but shows weaker transfer to additional structures.
+  See [density recalibration](docs/density-calibration.md); do not apply published
+  RSCC thresholds or assume the within-entry ranking is reliable without map inspection.
 - Ligand contacts are found only within the deposited coordinates. A ligand
   sitting at a crystal contact has partners in a symmetry copy that are not
   reported, and charge is assigned to the protein or nucleic side only — an
@@ -937,9 +971,9 @@ links are defanged. The whole renderer is dynamically imported, keeping KaTeX's
 - Dragged label positions last for the session. A saved project restores its
   measurements by atom reference and gives them new ids, so the offsets have
   nothing to reattach to.
-- Surfaces and density contours are generated on the CPU, so building one costs
-  a stall — a fifth of a second for a small protein, a couple of seconds for a
-  nucleosome — and it blocks the frame while it runs.
+- Surfaces and density contours are generated on the CPU in workers. Grid
+  creation can still take seconds; jobs can be cancelled. Structured-clone inputs
+  and GPU upload still have a cost on the main thread.
 - A density map's opening contour is chosen against a triangle budget rather
   than fixed, so a map never arrives half-drawn; the level it settles on is the
   one the panel reports, and it is never lower than the one asked for.
@@ -1031,3 +1065,14 @@ Copyright (c) 2026 Andre Paquette
 DOMPurify under your choice of MPL-2.0 or Apache-2.0 — so a fork carries no
 copyleft obligation. Structures come from the RCSB PDB, whose data is in the
 public domain; MolView neither redistributes nor caches it.
+
+## Verification
+
+`npm test` runs offline scientific regressions using a public 1CBS mmCIF fixture
+and small synthetic edge cases. It covers deposited counts, ligand neighbours,
+occupancy selection and weighting, insertion codes, ensemble isolation, rigid
+superposition, retained pruned pairs, mesh equivalence and worker cancellation.
+`npm run build` checks the production CSP host list, action documentation,
+TypeScript and the Vite production bundle.
+
+See `docs/investigations.md` for the implemented scope and its scientific limits.

@@ -160,6 +160,11 @@ export function AssistantPanel() {
   const [collapsed, setCollapsed] = useState(() => {
     try { return sessionStorage.getItem(COLLAPSED_KEY) === '1'; } catch { return false; }
   });
+  useEffect(()=>{
+    const collapse=(event:Event)=>setCollapsed(Boolean((event as CustomEvent).detail));
+    window.addEventListener('molview:collapse-assistant',collapse);
+    return()=>window.removeEventListener('molview:collapse-assistant',collapse);
+  },[]);
   const [height, setHeight] = useState(() => readNumber(HEIGHT_KEY, DEFAULT_HEIGHT));
   /** Actions waiting on approval, when confirmation mode is on. */
   const [pending, setPending] = useState<PendingApproval | null>(null);

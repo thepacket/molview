@@ -56,7 +56,7 @@ export function DensitySection() {
           )}
         </>
       ) : d.status === 'loading' ? (
-        <p className="panel-note">Fetching density…</p>
+        <><p className="panel-note">Fetching or contouring density…</p><button className="btn" onClick={()=>viewer.hideDensity(activeSlot)}>Cancel</button></>
       ) : (
         <>
           <div className="density-source">

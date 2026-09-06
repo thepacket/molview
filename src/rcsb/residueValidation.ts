@@ -1,3 +1,5 @@
+import { archiveResidueKey } from './residueMapping';
+import type { Structure } from '../mol/structure';
 /**
  * Per-residue wwPDB validation.
  *
@@ -16,10 +18,9 @@
  * - **Discrete faults** (clashes, bond and angle outliers, symmetry clashes)
  *   arrive as one position per affected residue.
  *
- * Both are numbered in *entity* sequence, which is not what a viewer or a user
- * says. `auth_to_entity_poly_seq_mapping` converts, and without it the colours
- * land on the wrong residues wherever a chain does not start at 1 — which is
- * most of the archive.
+ * Both use entity sequence positions. The primary index preserves label_asym_id
+ * and that position; author numbering is retained only as a compatibility view.
+ * Duplicate author keys are removed from that view rather than silently merged.
  */
 
 const GRAPHQL_ENDPOINT = 'https://data.rcsb.org/graphql';
@@ -38,6 +39,8 @@ export interface ResidueMetrics {
 export interface ResidueValidation {
   /** Keyed `${authAsymId}:${authSeqId}`. */
   byResidue: Map<string, ResidueMetrics>;
+  /** Lossless label chain + entity position index. */
+  byPosition: Map<string, ResidueMetrics>;
   /** Whether each metric exists anywhere in the entry. */
   hasDensityFit: boolean;
   hasGeometry: boolean;
@@ -50,9 +53,16 @@ export interface ResidueValidation {
  * question.
  */
 const FAULT_TYPES = new Set([
-  'CLASHES', 'SYMM_CLASHES', 'BOND_OUTLIERS', 'ANGLE_OUTLIERS',
-  'STEREO_OUTLIERS', 'RSRZ_OUTLIERS', 'ROTAMER_OUTLIERS',
-  'RAMACHANDRAN_OUTLIERS', 'MOGUL_BOND_OUTLIERS', 'MOGUL_ANGLE_OUTLIERS',
+  'CLASHES',
+  'SYMM_CLASHES',
+  'BOND_OUTLIERS',
+  'ANGLE_OUTLIERS',
+  'STEREO_OUTLIERS',
+  'RSRZ_OUTLIERS',
+  'ROTAMER_OUTLIERS',
+  'RAMACHANDRAN_OUTLIERS',
+  'MOGUL_BOND_OUTLIERS',
+  'MOGUL_ANGLE_OUTLIERS',
 ]);
 
 const QUERY = `query ResidueValidation($id: String!) {
@@ -60,6 +70,7 @@ const QUERY = `query ResidueValidation($id: String!) {
     polymer_entities {
       polymer_entity_instances {
         rcsb_polymer_entity_instance_container_identifiers {
+          asym_id
           auth_asym_id
           auth_to_entity_poly_seq_mapping
         }
@@ -80,7 +91,10 @@ export async function fetchResidueValidation(
   const res = await fetch(GRAPHQL_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: QUERY, variables: { id: entryId.toUpperCase() } }),
+    body: JSON.stringify({
+      query: QUERY,
+      variables: { id: entryId.toUpperCase() },
+    }),
     signal,
   });
   if (!res.ok) throw new Error(`RCSB GraphQL ${res.status} ${res.statusText}`);
@@ -89,16 +103,24 @@ export async function fetchResidueValidation(
     throw new Error(json.errors.map((e: any) => e.message).join('; '));
   }
 
+  return parseResidueValidation(json);
+}
+
+export function parseResidueValidation(json: any): ResidueValidation {
   const byResidue = new Map<string, ResidueMetrics>();
+  const byPosition = new Map<string, ResidueMetrics>();
+  const duplicates = new Set<string>();
   let hasDensityFit = false;
   let hasGeometry = false;
 
   for (const entity of json.data?.entry?.polymer_entities ?? []) {
     for (const instance of entity.polymer_entity_instances ?? []) {
-      const ids = instance.rcsb_polymer_entity_instance_container_identifiers ?? {};
+      const ids =
+        instance.rcsb_polymer_entity_instance_container_identifiers ?? {};
       const chain: string = ids.auth_asym_id;
+      const labelChain: string = ids.asym_id;
       const mapping: string[] = ids.auth_to_entity_poly_seq_mapping ?? [];
-      if (!chain || mapping.length === 0) continue;
+      if (!chain || !labelChain || mapping.length === 0) continue;
 
       /** Entity sequence position (1-based) to the key a residue is known by. */
       const keyAt = (seqId: number): string | null => {
@@ -106,7 +128,7 @@ export async function fetchResidueValidation(
         // A dot marks a sequence position with no modelled residue behind it.
         return auth === undefined || auth === '?' || auth === '.'
           ? null
-          : `${chain}:${auth}`;
+          : archiveResidueKey(labelChain, seqId);
       };
       // Every residue the report covers gets a row up front, even a clean one.
       // Filling the map only from features would leave a residue with nothing
@@ -114,13 +136,19 @@ export async function fetchResidueValidation(
       // a well-refined structure that is almost all of them.
       for (let seq = 1; seq <= mapping.length; seq++) {
         const key = keyAt(seq);
-        if (key) byResidue.set(key, { rsrz: null, rscc: null, owab: null, outliers: 0 });
+        if (key) {
+          const metric = { rsrz: null, rscc: null, owab: null, outliers: 0 };
+          byPosition.set(key, metric);
+          const legacy = `${chain}:${mapping[seq - 1]}`;
+          if (byResidue.has(legacy)) duplicates.add(legacy);
+          byResidue.set(legacy, metric);
+        }
       }
       const slot = (key: string): ResidueMetrics => {
-        let m = byResidue.get(key);
+        let m = byPosition.get(key);
         if (!m) {
           m = { rsrz: null, rscc: null, owab: null, outliers: 0 };
-          byResidue.set(key, m);
+          byPosition.set(key, m);
         }
         return m;
       };
@@ -137,8 +165,13 @@ export async function fetchResidueValidation(
               const key = keyAt(start + i);
               if (!key) continue;
               const m = slot(key);
-              if (type === 'RSRZ') { m.rsrz = values[i]; hasDensityFit = true; } else if (type === 'RSCC') m.rscc = values[i];
-              else m.owab = values[i];
+              if (type === 'RSRZ') {
+                m.rsrz = values[i];
+                hasDensityFit = true;
+              } else if (type === 'RSCC') {
+                m.rscc = values[i];
+                hasDensityFit = true;
+              } else m.owab = values[i];
             }
           }
           continue;
@@ -163,7 +196,8 @@ export async function fetchResidueValidation(
     }
   }
 
-  return { byResidue, hasDensityFit, hasGeometry };
+  for (const key of duplicates) byResidue.delete(key);
+  return { byResidue, byPosition, hasDensityFit, hasGeometry };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -181,4 +215,44 @@ export function worstResidues(
   }
   rows.sort((a, b) => b.value - a.value);
   return rows.slice(0, limit);
+}
+
+/** Instance features are shared across NMR models; they are not model-specific scores. */
+export function residueMetrics(
+  validation: ResidueValidation | null | undefined,
+  s: Structure,
+  r: number,
+): ResidueMetrics | null {
+  if (!validation || s.resLabelSeq[r] <= 0) return null;
+  return (
+    validation.byPosition.get(
+      archiveResidueKey(s.chainLabelId[s.resChain[r]], s.resLabelSeq[r]),
+    ) ?? null
+  );
+}
+
+export function worstMappedResidues(
+  validation: ResidueValidation,
+  s: Structure,
+  metric: 'rsrz' | 'outliers',
+  limit = 10,
+) {
+  return Array.from({ length: s.residueCount }, (_, residue) => {
+    const m = residueMetrics(validation, s, residue),
+      c = s.resChain[residue];
+    return {
+      residue,
+      chain: s.chainAuthId[c],
+      seq: s.resSeq[residue],
+      insertionCode: s.resInsCode[residue],
+      selection: `(labelchain ${s.chainLabelId[c]} and labelseq ${s.resLabelSeq[residue]} and model ${s.chainModel[c]})`,
+      value: m ? (metric === 'rsrz' ? m.rsrz : m.outliers) : null,
+    };
+  })
+    .filter(
+      (r): r is typeof r & { value: number } =>
+        r.value !== null && Number.isFinite(r.value) && r.value > 0,
+    )
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit);
 }

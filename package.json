@@ -11,7 +11,10 @@
     "typecheck": "tsc -b",
     "check:csp": "node scripts/check-csp.mjs",
     "check:actions": "node scripts/check-actions.mjs",
-    "build:rama": "esbuild scripts/build-ramachandran.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/build-ramachandran.mjs --log-level=error && node node_modules/.cache/build-ramachandran.mjs"
+    "build:rama": "esbuild scripts/build-ramachandran.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/build-ramachandran.mjs --log-level=error && node node_modules/.cache/build-ramachandran.mjs",
+    "test": "node scripts/test-science.mjs",
+    "calibrate:density": "esbuild scripts/calibrate-density.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/calibrate-density.mjs --log-level=error && node node_modules/.cache/calibrate-density.mjs",
+    "check:public-mapping": "esbuild scripts/verify-public-mapping.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/verify-public-mapping.mjs --log-level=error && node node_modules/.cache/verify-public-mapping.mjs"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.2.6",

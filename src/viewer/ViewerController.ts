@@ -28,13 +28,8 @@ import {
 import { evaluateSelection, parseSelection, selectionError } from '../mol/selection';
 import { fetchEntryDetail } from '../rcsb/api';
 import { orientationFor } from '../gfx/orient';
-import {
-  isosurface, levelWithinBudget, nearMask, type IsoMesh,
-} from '../gfx/isosurface';
-import {
-  DEFAULT_SURFACE_OPTIONS, chargesOf, colorSurfaceByPotential, gaussianSurface,
-} from '../gfx/surface';
-import { VDW_RADII } from '../mol/elements';
+import type { IsoMesh } from '../gfx/isosurface';
+import { runAnalysis } from '../mol/analysis';
 import type { VolumeStyle } from '../gfx/engine';
 import { recordTurntable } from './recorder';
 import {
@@ -49,11 +44,11 @@ import { checkEsmAccession, esmPrediction, fetchEsmPae, isMgnifyAccession } from
 import { paintColorKey } from '../ui/colorKeyPainter';
 import { QUANTITATIVE_SCHEMES, VALIDATION_SCHEMES, type ColorScheme } from '../mol/coloring';
 import {
-  fetchResidueValidation, worstResidues, type ResidueValidation,
+  fetchResidueValidation, worstMappedResidues, type ResidueValidation,
 } from '../rcsb/residueValidation';
 import {
   NoVolumeError, fetchVolumes, sampleSigma,
-  type Box, type MapKind, type VolumeGrid, type VolumeSet,
+  type Box, type MapKind, type VolumeSet,
 } from '../rcsb/volume';
 import { useStore, visibleSlotCount, type SlotState } from '../state/store';
 
@@ -128,10 +123,6 @@ const EM_DETAIL = 3;
 
 const DEFAULT_LEVEL: Record<MapKind, number> = { 'x-ray': 1.5, em: 4 };
 
-const MAIN_COLOR: [number, number, number] = [0.42, 0.62, 0.95];
-const EM_COLOR: [number, number, number] = [0.62, 0.70, 0.82];
-const DIFFERENCE_POSITIVE: [number, number, number] = [0.30, 0.82, 0.45];
-const DIFFERENCE_NEGATIVE: [number, number, number] = [0.95, 0.35, 0.35];
 
 /** Cartesian bounds of a structure, padded, as the box query wants it. */
 function paddedBox(s: Structure, pad: number): Box {
@@ -293,6 +284,14 @@ export class ViewerController {
     this.invalidate();
   }
 
+  private surfaceJobs = new Map<number, ReturnType<typeof runAnalysis>>();
+  private densityJobs = new Map<number, ReturnType<typeof runAnalysis>>();
+  private densityMeshes = new Map<number, { mesh: IsoMesh; style: VolumeStyle }[]>();
+  private cancelAnalyses(slot: number): void {
+    this.surfaceJobs.get(slot)?.cancel(); this.surfaceJobs.delete(slot);
+    this.densityJobs.get(slot)?.cancel(); this.densityJobs.delete(slot);
+  }
+
   getStructure(slot: number): Structure | null {
     return this.data[slot].structure;
   }
@@ -318,6 +317,13 @@ export class ViewerController {
     const id = entryId.trim().toUpperCase();
     if (!id && !file) return;
 
+    this.cancelAnalyses(slot);
+    for(let i=0;i<MAX_SLOTS;i++) {
+      if(this.data[i].alignment?.referenceSlot===slot || i===slot) {
+        this.data[i].alignment=null;
+        useStore.getState().patchSlot(i,{superposedOnto:null,superposeRmsd:null,superposePairs:null});
+      }
+    }
     this.data[slot].loadHandle?.cancel();
     // Switching conformer or model is a rebuild of the same molecule, so the
     // camera stays where it was. Flying back to a default view would lose the
@@ -327,10 +333,9 @@ export class ViewerController {
     // A map belongs to the structure it was fetched for. Leaving it up would
     // draw one entry's density around another's model, which is the single
     // most misleading thing this feature could do.
-    if (!keepCamera) {
-      this.hideDensity(slot);
-      this.hideSurface(slot);
-    }
+    const previous=store.slots[slot];
+    this.hideDensity(slot);
+    this.hideSurface(slot);
 
     store.patchSlot(slot, {
       entryId: id,
@@ -339,7 +344,7 @@ export class ViewerController {
       progressStage: 'Fetching',
       progressLoaded: 0,
       progressTotal: 0,
-      detail: null,
+      detail: keepCamera ? previous.detail : null,
       stats: null,
       selectedResidue: null,
       selectionLabel: null,
@@ -395,7 +400,7 @@ export class ViewerController {
 
     try {
       const result = await handle.promise;
-      if (useStore.getState().slots[slot].entryId !== id) return;
+      if (this.data[slot].loadHandle !== handle) return;
 
       this.data[slot] = {
         ...emptySlotData(),
@@ -435,15 +440,17 @@ export class ViewerController {
       // Orienting also frames, against the pane's aspect; fall back to the
       // bounding-sphere fit when the shape has no axes worth using.
       if (!keepCamera && !this.orientSlot(slot)) this.frameSlot(slot);
+      if(keepCamera && ['ready','loading'].includes(previous.density.status)) void this.showDensity(slot);
+      if(keepCamera && ['ready','building'].includes(previous.surface.status)) this.showSurface(slot);
     } catch (err) {
-      if (useStore.getState().slots[slot].entryId !== id) return;
+      if (this.data[slot].loadHandle !== handle) return;
       useStore.getState().patchSlot(slot, {
         status: 'error',
         error: err instanceof Error ? err.message : String(err),
         progressStage: '',
       });
     } finally {
-      this.data[slot].loadHandle = null;
+      if(this.data[slot].loadHandle===handle)this.data[slot].loadHandle = null;
     }
   }
 
@@ -681,6 +688,9 @@ export class ViewerController {
    */
   newProject(name: string): void {
     for (let i = 0; i < MAX_SLOTS; i++) {
+      this.cancelAnalyses(i);
+      this.data[i].volumeRequest?.abort();
+      this.densityMeshes.delete(i);
       this.data[i].loadHandle?.cancel();
       this.data[i] = emptySlotData();
       this.engine.setStructure(i, null);
@@ -701,8 +711,16 @@ export class ViewerController {
       const sources = useStore.getState().slots[i].overlaySlots;
       if (sources.includes(slot)) this.setOverlaySlots(i, sources.filter((s) => s !== slot));
     }
+    this.cancelAnalyses(slot);
+    for(let i=0;i<MAX_SLOTS;i++) {
+      if(this.data[i].alignment?.referenceSlot===slot || i===slot) {
+        this.data[i].alignment=null;
+        useStore.getState().patchSlot(i,{superposedOnto:null,superposeRmsd:null,superposePairs:null});
+      }
+    }
     this.data[slot].loadHandle?.cancel();
     this.data[slot].volumeRequest?.abort();
+    this.densityMeshes.delete(slot);
     this.data[slot] = emptySlotData();
     this.engine.setStructure(slot, null);
     this.engine.setGeometry(slot, null);
@@ -983,6 +1001,17 @@ export class ViewerController {
       .finally(() => { this.data[slot].residueValidationRequest = null; });
   }
 
+  restoreAlignmentEvidence(mobileSlot:number,referenceSlot:number,mobileChain:string,referenceChain:string):void {
+    const mobile=this.getStructure(mobileSlot),reference=this.getStructure(referenceSlot);
+    if(!mobile||!reference)return;
+    const mc=alignableChains(mobile).find(c=>c.authId===mobileChain),rc=alignableChains(reference).find(c=>c.authId===referenceChain);
+    if(!mc||!rc)return;
+    try {const result=superposeChains(reference,rc,mobile,mc);
+      this.data[mobileSlot].alignment={pairs:result.alignment,referenceSlot,mobileChain,referenceChain};
+      useStore.getState().patchSlot(mobileSlot,{superposedOnto:referenceSlot,superposeRmsd:result.rmsd,superposePairs:result.pairsUsed});
+    } catch {this.data[mobileSlot].alignment=null;}
+  }
+
   /** The last superposition of this pane, residue by residue. */
   getAlignment(slot: number) {
     return this.data[slot].alignment;
@@ -1201,13 +1230,10 @@ export class ViewerController {
    */
   worstResidues(
     slot: number, metric: 'rsrz' | 'outliers', limit = 10,
-  ): { chain: string; seq: number; value: number }[] {
-    const validation = this.data[slot].residueValidation;
-    if (!validation) return [];
-    return worstResidues(validation, metric, limit).map(({ key, value }) => {
-      const [chain, seq] = key.split(':');
-      return { chain, seq: Number(seq), value };
-    });
+  ) {
+    const validation = this.data[slot].residueValidation, structure=this.getStructure(slot);
+    if (!validation || !structure) return [];
+    return worstMappedResidues(validation,structure,metric,limit);
   }
 
   /**
@@ -1319,19 +1345,7 @@ export class ViewerController {
       this.data[slot].volumes = set;
       store.updateDensity(slot, { status: 'ready', bytes: set.bytes, error: null });
 
-      // How much surface a level buys varies enormously between maps, so the
-      // opening contour is checked against the budget before it is drawn. A
-      // fixed default lands on a clean surface for one entry and a truncated
-      // one for the next.
-      const main = set.maps.find((m) => !/^fo-fc$/i.test(m.name));
-      const wanted = useStore.getState().slots[slot].density;
-      if (main) {
-        const points = wanted.radius > 0 ? this.drawnAtomPositions(slot) : null;
-        const mask = points ? nearMask(main, points, wanted.radius) : null;
-        const level = levelWithinBudget(main, wanted.level, mask);
-        if (level !== wanted.level) store.updateDensity(slot, { level });
-      }
-      this.rebuildDensity(slot);
+      this.rebuildDensity(slot, true);
     } catch (err) {
       if (controller.signal.aborted) return;
       store.updateDensity(slot, {
@@ -1348,14 +1362,16 @@ export class ViewerController {
   }
 
   hideDensity(slot: number): void {
+    this.densityJobs.get(slot)?.cancel(); this.densityJobs.delete(slot);
+    this.densityMeshes.delete(slot);
     this.data[slot].volumeRequest?.abort();
     this.data[slot].volumeRequest = null;
     this.data[slot].volumes = null;
-    this.engine.setVolumes(slot, []);
+
     useStore.getState().updateDensity(slot, {
       status: 'off', error: null, triangles: 0, bytes: 0, truncated: false,
     });
-    this.invalidate();
+    this.pushVolumes(slot, []);
   }
 
   /**
@@ -1363,61 +1379,29 @@ export class ViewerController {
    * radius comes through here, so moving the contour is local work rather than
    * another few megabytes over the wire.
    */
-  rebuildDensity(slot: number): void {
+  rebuildDensity(slot: number, autoLevel = false): void {
+    this.densityJobs.get(slot)?.cancel();
+    this.densityJobs.delete(slot);
     const set = this.data[slot].volumes;
     const structure = this.data[slot].structure;
-    if (!set || !structure) {
-      this.pushVolumes(slot, []);
-      return;
-    }
-
+    if (!set || !structure) { this.densityMeshes.delete(slot); this.pushVolumes(slot, []); return; }
     const d = useStore.getState().slots[slot].density;
-    const points = d.radius > 0 ? this.drawnAtomPositions(slot) : null;
-
-    const entries: { mesh: IsoMesh; style: VolumeStyle }[] = [];
-    let triangles = 0;
-    let truncated = false;
-
-    // The difference map is contoured twice, at +level and -level, over the
-    // same grid; rasterising the mask once for it rather than twice is most of
-    // the cost of turning the difference map on.
-    const masks = new Map<VolumeGrid, Uint8Array | null>();
-    const maskFor = (grid: VolumeGrid) => {
-      if (!masks.has(grid)) {
-        masks.set(grid, points ? nearMask(grid, points, d.radius) : null);
-      }
-      return masks.get(grid) ?? null;
-    };
-
-    const contour = (grid: VolumeGrid, sigma: number, color: [number, number, number]) => {
-      const mesh = isosurface(grid, { sigma, mask: maskFor(grid) });
-      triangles += mesh.triangleCount;
-      truncated = truncated || mesh.truncated;
-      entries.push({
-        mesh,
-        style: {
-          color, opacity: d.opacity, wireframe: d.wireframe,
-          silhouette: 1, followsPalette: false,
-        },
-      });
-    };
-
-    for (const grid of set.maps) {
-      const isDifference = /^fo-fc$/i.test(grid.name);
-      if (isDifference) {
-        if (!d.showDifference) continue;
-        // Both lobes: green where the data want atoms the model does not have,
-        // red where the model has atoms the data do not support. Showing only
-        // the positive half is the commonest way to misread a difference map.
-        contour(grid, d.diffLevel, DIFFERENCE_POSITIVE);
-        contour(grid, -d.diffLevel, DIFFERENCE_NEGATIVE);
-      } else {
-        contour(grid, d.level, set.kind === 'em' ? EM_COLOR : MAIN_COLOR);
-      }
-    }
-
-    useStore.getState().updateDensity(slot, { triangles, truncated });
-    this.pushVolumes(slot, entries);
+    const job = runAnalysis({kind:'density',set,settings:d,
+      points:d.radius>0?this.drawnAtomPositions(slot):null,autoLevel});
+    this.densityJobs.set(slot,job);
+    useStore.getState().updateDensity(slot,{status:'loading',error:null});
+    void job.promise.then(result=>{
+      if(this.densityJobs.get(slot)!==job || this.data[slot].structure!==structure || result.kind!=='density')return;
+      const current=useStore.getState().slots[slot].density;
+      const entries=result.entries.map(({mesh,color})=>({mesh,style:{color,opacity:current.opacity,
+        wireframe:current.wireframe,silhouette:1,followsPalette:false}}));
+      this.densityMeshes.set(slot,entries);
+      useStore.getState().updateDensity(slot,{status:'ready',level:result.level,triangles:result.triangles,truncated:result.truncated});
+      this.pushVolumes(slot,entries);
+    }).catch(error=>{
+      if(this.densityJobs.get(slot)!==job)return;
+      useStore.getState().updateDensity(slot,{status:'error',error:error instanceof Error?error.message:String(error)});
+    }).finally(()=>{if(this.densityJobs.get(slot)===job)this.densityJobs.delete(slot);});
   }
 
   /**
@@ -1468,10 +1452,10 @@ export class ViewerController {
 
   /**
    * Builds the pane's molecular surface, or reuses the cached mesh when only
-   * its appearance changed. Synchronous and therefore a visible stall on a
-   * large structure — the panel says so before you press the button.
+   * its appearance changed. Mesh generation runs in a cancellable worker.
    */
   showSurface(slot: number): void {
+    this.surfaceJobs.get(slot)?.cancel(); this.surfaceJobs.delete(slot);
     const structure = this.data[slot].structure;
     const store = useStore.getState();
     if (!structure) return;
@@ -1512,46 +1496,25 @@ export class ViewerController {
       return;
     }
 
-    const radii = new Float32Array(structure.atomCount);
-    for (let a = 0; a < structure.atomCount; a++) {
-      radii[a] = VDW_RADII[structure.element[a]];
-    }
-
-    const field = gaussianSurface(
-      structure.x, structure.y, structure.z, radii, atoms,
-      {
-        ...DEFAULT_SURFACE_OPTIONS,
-        probeRadius: s.probeRadius,
-        resolution: s.resolution,
-        atomColors: s.coloring === 'atom' ? resolved?.atomColor ?? null : null,
-      },
-    );
-
-    const mesh = isosurface(field.grid, {
-      sigma: field.level,
-      owner: field.owner,
-      colors: field.colors,
-    });
-
-    // Potential is evaluated per vertex rather than per grid point: a surface
-    // has a few hundred thousand vertices and the grid a few million points,
-    // and only the ones on the surface are ever looked at.
-    if (s.coloring === 'coulombic') {
-      colorSurfaceByPotential(mesh.vertices, chargesOf(structure, atoms));
-    }
-
-    this.data[slot].surfaceMesh = mesh;
-    this.data[slot].surfaceSignature = signature;
-    store.updateSurface(slot, {
-      status: 'ready',
-      error: null,
-      triangles: mesh.triangleCount,
-      actualResolution: field.resolution,
-    });
-    this.pushVolumesFor(slot);
+    this.surfaceJobs.get(slot)?.cancel();
+    const job=runAnalysis({kind:'surface',structure,atoms,settings:s,
+      colors:s.coloring==='atom'?resolved?.atomColor??null:null});
+    this.surfaceJobs.set(slot,job);
+    store.updateSurface(slot,{status:'building',error:null});
+    void job.promise.then(result=>{
+      if(this.surfaceJobs.get(slot)!==job || this.data[slot].structure!==structure || result.kind!=='surface')return;
+      this.data[slot].surfaceMesh=result.mesh;
+      this.data[slot].surfaceSignature=signature;
+      store.updateSurface(slot,{status:'ready',error:null,triangles:result.mesh.triangleCount,actualResolution:result.resolution});
+      this.pushVolumesFor(slot);
+    }).catch(error=>{
+      if(this.surfaceJobs.get(slot)!==job)return;
+      store.updateSurface(slot,{status:'error',error:error instanceof Error?error.message:String(error)});
+    }).finally(()=>{if(this.surfaceJobs.get(slot)===job)this.surfaceJobs.delete(slot);});
   }
 
   hideSurface(slot: number): void {
+    this.surfaceJobs.get(slot)?.cancel(); this.surfaceJobs.delete(slot);
     this.data[slot].surfaceMesh = null;
     this.data[slot].surfaceSignature = '';
     useStore.getState().updateSurface(slot, { status: 'off', error: null, triangles: 0 });
@@ -1560,8 +1523,7 @@ export class ViewerController {
 
   /** Re-presents both volume features after either one changed. */
   private pushVolumesFor(slot: number): void {
-    if (this.data[slot].volumes) this.rebuildDensity(slot);
-    else this.pushVolumes(slot, []);
+    this.pushVolumes(slot, this.densityMeshes.get(slot) ?? []);
   }
 
   /** Re-applies surface appearance without regenerating the mesh. */
@@ -2783,6 +2745,7 @@ export class ViewerController {
   }
 
   dispose(): void {
+    for(let i=0;i<MAX_SLOTS;i++) this.cancelAnalyses(i);
     this.stop();
     for (const d of this.data) d.loadHandle?.cancel();
     this.engine.destroy();

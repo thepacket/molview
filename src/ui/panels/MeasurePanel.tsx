@@ -480,9 +480,7 @@ function DensityFitSection({ slot }: { slot: number }) {
             Density calculated from the model, correlated against the map, over
             each residue's own envelope. Compare residues within this structure
             rather than against a published threshold: the calculation is
-            approximate and reads about 0.2 lower than wwPDB's, which it agrees
-            with at r = 0.62. Negative is the one absolute statement — the
-            density is somewhere the model is not.
+            approximate. A public-data benchmark found mean agreement with deposited RSCC of r = 0.62 on four calibration entries and 0.43 on five additional entries, including a weak case at 0.09. Inspect the map and other evidence before interpreting a ranking.
           </p>
         </>
       ) : (

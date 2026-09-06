@@ -76,13 +76,13 @@ export function ValidationLegend({ scheme, slot }: { scheme: ColorScheme; slot: 
           <div className="section-label" style={{ marginTop: 9 }}><span>Worst residues</span></div>
           {worst.map((r) => (
             <button
-              key={`${r.chain}:${r.seq}`}
+              key={r.residue}
               type="button"
               className="chain-toggle"
               style={{ width: '100%', textAlign: 'left' }}
-              onClick={() => viewer.focusSelection(slot, `/${r.chain} and :${r.seq}`)}
+              onClick={() => viewer.focusSelection(slot, r.selection)}
             >
-              <span className="chain-name">{r.chain} {r.seq}</span>
+              <span className="chain-name">{r.chain} {r.seq}{r.insertionCode}</span>
               <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10 }}>
                 {metric === 'rsrz' ? `${r.value.toFixed(1)} σ` : `${r.value} faults`}
               </span>

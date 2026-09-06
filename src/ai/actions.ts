@@ -549,14 +549,14 @@ export async function applyAction(action: Action): Promise<string> {
           : 'The report lists no geometry outliers in this entry.';
       }
 
-      const lines = worst.map((r) => `${r.chain} ${r.seq}: ${
+      const lines = worst.map((r) => `${r.chain} ${r.seq}${r.insertionCode}: ${
         metric === 'rsrz'
           ? `RSRZ ${r.value.toFixed(1)}`
           : `${r.value} outlier${r.value === 1 ? '' : 's'}`}`);
       // The same shape the interfaces action returns: a ranked list and one
       // string that can be handed straight to a component or focus action.
       const selection = worst
-        .map((r) => `(/${r.chain} and :${r.seq})`)
+        .map((r) => r.selection)
         .join(' or ');
 
       return `Worst residues by ${metric === 'rsrz' ? 'fit to density' : 'geometry'}:\n`

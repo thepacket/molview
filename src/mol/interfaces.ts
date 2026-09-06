@@ -47,6 +47,9 @@ export interface ChainInterface {
   /** Residues involved on each side, as sequence numbers. */
   residuesA: number[];
   residuesB: number[];
+  /** Coordinate residue indices, retaining insertion codes and both copy sides. */
+  residueIndicesA: number[];
+  residueIndicesB: number[];
   /** Hydrogen-bond-range contacts, a crude polar/apolar hint. */
   polar: number;
   /**
@@ -135,6 +138,8 @@ export function findInterfaces(
     polar: number;
     residuesA: Set<number>;
     residuesB: Set<number>;
+    indicesA: Set<number>;
+    indicesB: Set<number>;
   }
   const pairs = new Map<string, Pending>();
   const maxSq = cutoff * cutoff;
@@ -154,7 +159,7 @@ export function findInterfaces(
           for (const b of bucket) {
             if (b <= a) continue;
             const chainBIdx = s.resChain[s.atomResidue[b]];
-            if (chainAIdx === chainBIdx) continue;
+            if (chainAIdx === chainBIdx || s.chainModel[chainAIdx] !== s.chainModel[chainBIdx]) continue;
 
             const idA = s.chainAuthId[chainAIdx];
             const idB = s.chainAuthId[chainBIdx];
@@ -174,7 +179,7 @@ export function findInterfaces(
             const pairKey = `${first}|${second}`;
             let entry = pairs.get(pairKey);
             if (!entry) {
-              entry = { contacts: 0, polar: 0, residuesA: new Set(), residuesB: new Set() };
+              entry = { contacts: 0, polar: 0, residuesA: new Set(), residuesB: new Set(), indicesA: new Set(), indicesB: new Set() };
               pairs.set(pairKey, entry);
             }
             entry.contacts++;
@@ -184,6 +189,8 @@ export function findInterfaces(
               const polarB = elB === 7 || elB === 8 || elB === 16;
               if (polarA && polarB) entry.polar++;
             }
+            entry.indicesA.add(s.atomResidue[flip ? b : a]);
+            entry.indicesB.add(s.atomResidue[flip ? a : b]);
             const resA = s.resSeq[s.atomResidue[a]];
             const resB = s.resSeq[s.atomResidue[b]];
             if (flip) {
@@ -208,6 +215,8 @@ export function findInterfaces(
       chainB,
       contacts: entry.contacts,
       polar: entry.polar,
+      residueIndicesA: [...entry.indicesA].sort((a,b)=>a-b),
+      residueIndicesB: [...entry.indicesB].sort((a,b)=>a-b),
       residuesA: [...entry.residuesA].sort((x, y) => x - y),
       residuesB: [...entry.residuesB].sort((x, y) => x - y),
     });
@@ -284,7 +293,7 @@ function copyContacts(
   const polarSq = 3.5 * 3.5;
   const reach = 2 * radius + cutoff;
   const found = new Map<string, {
-    contacts: number; polar: number; residuesA: Set<number>; copy: number;
+    contacts: number; polar: number; residuesA: Set<number>; indicesA: Set<number>; indicesB: Set<number>; copy: number;
     chainA: string; chainB: string; transform: Float32Array; lattice: boolean;
   }>();
 
@@ -301,7 +310,7 @@ function copyContacts(
       const tz = m[o + 2] * cx + m[o + 6] * cy + m[o + 10] * cz + m[o + 14];
       const shift = Math.hypot(tx - cx, ty - cy, tz - cz);
       // The identity operator reproduces the deposited chains, already done.
-      if (shift < 1e-3) continue;
+      if (Array.from(m).every((v,i)=>Math.abs(v-(i%5===0?1:0))<1e-6)) continue;
       if (shift > reach) continue;
 
       for (const b of candidates) {
@@ -321,6 +330,7 @@ function copyContacts(
               const bucket = buckets.get(key(gx + dx, gy + dy, gz + dz));
               if (!bucket) continue;
               for (const a of bucket) {
+                if (s.chainModel[s.resChain[s.atomResidue[a]]] !== s.chainModel[chainB]) continue;
                 const ddx = s.x[a] - bx, ddy = s.y[a] - by, ddz = s.z[a] - bz;
                 const d2 = ddx * ddx + ddy * ddy + ddz * ddz;
                 if (d2 > maxSq) continue;
@@ -331,7 +341,7 @@ function copyContacts(
                 let entry = found.get(k);
                 if (!entry) {
                   entry = {
-                    contacts: 0, polar: 0, residuesA: new Set(), copy: t,
+                    contacts: 0, polar: 0, residuesA: new Set(), indicesA: new Set(), indicesB: new Set(), copy: t,
                     chainA, chainB: partner,
                     transform: m, lattice: copy.lattice,
                   };
@@ -339,6 +349,8 @@ function copyContacts(
                 }
                 entry.contacts++;
                 entry.residuesA.add(s.resSeq[s.atomResidue[a]]);
+                entry.indicesA.add(s.atomResidue[a]);
+                entry.indicesB.add(s.atomResidue[b]);
                 if (d2 <= polarSq) {
                   const elA = s.element[a], elB = s.element[b];
                   if ((elA === 7 || elA === 8 || elA === 16)
@@ -373,6 +385,8 @@ function copyContacts(
       contacts: entry.contacts,
       polar: entry.polar,
       residuesA: residues,
+      residueIndicesA: [...entry.indicesA].sort((a,b)=>a-b),
+      residueIndicesB: [...entry.indicesB].sort((a,b)=>a-b),
       // The far side lives in a copy that is not in the file, so there are no
       // residues of it to select. Reporting the near side is the honest half.
       residuesB: [],

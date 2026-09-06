@@ -1,0 +1,217 @@
+{
+  "entry": "1IGT",
+  "checkedAt": "2026-09-06T19:00:16.724Z",
+  "coordinateSource": "https://files.rcsb.org/download/1IGT.cif",
+  "evidenceSource": "https://data.rcsb.org/graphql",
+  "annotationSelectionsChecked": 4,
+  "insertedResidues": [
+    {
+      "chain": "B",
+      "author": 52,
+      "insertion": "A",
+      "labelChain": "B",
+      "labelSeq": 53,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 0
+      }
+    },
+    {
+      "chain": "B",
+      "author": 82,
+      "insertion": "A",
+      "labelChain": "B",
+      "labelSeq": 84,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 0
+      }
+    },
+    {
+      "chain": "B",
+      "author": 82,
+      "insertion": "B",
+      "labelChain": "B",
+      "labelSeq": 85,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 0
+      }
+    },
+    {
+      "chain": "B",
+      "author": 82,
+      "insertion": "C",
+      "labelChain": "B",
+      "labelSeq": 86,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 1
+      }
+    },
+    {
+      "chain": "B",
+      "author": 100,
+      "insertion": "H",
+      "labelChain": "B",
+      "labelSeq": 102,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 0
+      }
+    },
+    {
+      "chain": "B",
+      "author": 100,
+      "insertion": "I",
+      "labelChain": "B",
+      "labelSeq": 103,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 1
+      }
+    },
+    {
+      "chain": "B",
+      "author": 100,
+      "insertion": "J",
+      "labelChain": "B",
+      "labelSeq": 104,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 0
+      }
+    },
+    {
+      "chain": "B",
+      "author": 100,
+      "insertion": "K",
+      "labelChain": "B",
+      "labelSeq": 105,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 1
+      }
+    },
+    {
+      "chain": "D",
+      "author": 52,
+      "insertion": "A",
+      "labelChain": "D",
+      "labelSeq": 53,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 1
+      }
+    },
+    {
+      "chain": "D",
+      "author": 82,
+      "insertion": "A",
+      "labelChain": "D",
+      "labelSeq": 84,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 0
+      }
+    },
+    {
+      "chain": "D",
+      "author": 82,
+      "insertion": "B",
+      "labelChain": "D",
+      "labelSeq": 85,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 2
+      }
+    },
+    {
+      "chain": "D",
+      "author": 82,
+      "insertion": "C",
+      "labelChain": "D",
+      "labelSeq": 86,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 0
+      }
+    },
+    {
+      "chain": "D",
+      "author": 100,
+      "insertion": "H",
+      "labelChain": "D",
+      "labelSeq": 102,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 0
+      }
+    },
+    {
+      "chain": "D",
+      "author": 100,
+      "insertion": "I",
+      "labelChain": "D",
+      "labelSeq": 103,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 2
+      }
+    },
+    {
+      "chain": "D",
+      "author": 100,
+      "insertion": "J",
+      "labelChain": "D",
+      "labelSeq": 104,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 0
+      }
+    },
+    {
+      "chain": "D",
+      "author": 100,
+      "insertion": "K",
+      "labelChain": "D",
+      "labelSeq": 105,
+      "metrics": {
+        "rsrz": null,
+        "rscc": null,
+        "owab": null,
+        "outliers": 2
+      }
+    }
+  ]
+}

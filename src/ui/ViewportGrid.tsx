@@ -1,3 +1,4 @@
+import { usePreferences } from '../state/preferences';
 /**
  * The stage: one WebGPU canvas underneath, one HTML overlay pane per viewport
  * on top. The canvas never moves or resizes per pane — the engine just scissors
@@ -141,6 +142,7 @@ function Pane({ index, slot, active, dropping, onDropTarget }: {
   dropping: { entry: DragEntry | null } | null;
   onDropTarget: (target: { slot: number; entry: DragEntry | null } | null) => void;
 }) {
+  const diagnostics=usePreferences(s=>s.diagnostics);
   const ref = useRef<HTMLDivElement>(null);
   const patchSlot = useStore((s) => s.patchSlot);
   const setActiveSlot = useStore((s) => s.setActiveSlot);
@@ -306,7 +308,7 @@ function Pane({ index, slot, active, dropping, onDropTarget }: {
             {slot.stats && (
               <div style={{ textAlign: 'right' }}>
                 <div>{slot.stats.atoms.toLocaleString()} atoms · {slot.stats.chains} chains</div>
-                <div style={{ opacity: 0.7 }}>
+                <div hidden={!diagnostics} style={{ opacity: 0.7 }}>
                   {slot.stats.instances > 0
                     && `${slot.stats.instances.toLocaleString()} impostors`}
                   {slot.stats.instances > 0 && slot.stats.triangles > 0 && ' · '}
